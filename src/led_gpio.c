@@ -3,21 +3,8 @@
 
 #include <stdint.h>
 
-// Вспомогательный макрос для получения номера пина из маски
-#define PIN_NUM(pin_mask) (__builtin_ctz(pin_mask))
-
-// Универсальная функция настройки пина СПЕЦИАЛЬНО ДЛЯ CH32V003
-static inline void GPIO_PinConfig(GPIO_TypeDef* port, uint16_t pin_mask, uint8_t cfg) {
-    uint8_t pin = PIN_NUM(pin_mask);
-    uint32_t shift = pin * 4;          // Сдвиг (0, 4, 8, 12, 16, 20, 24, 28)
-    uint32_t mask = ~(0xF << shift);   // Маска для очистки этих 4 бит
-    
-    // В CH32V003 только один регистр конфигурации на порт
-    port->CFGLR = (port->CFGLR & mask) | ((uint32_t)cfg << shift);
-}
-
 /*********************************************************************
- * LED PC4, PC7 - выход. PS6 - вход
+ * LED PC4, PC7 - выход. PC6 - вход
  *********************************************************************/
 void led_init(void)
 {
