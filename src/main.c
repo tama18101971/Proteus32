@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "led_gpio.h"
+#include "i2c.h"
+#include "dac.h"
 
 typedef enum
 {
@@ -92,16 +94,6 @@ void Button_Init(void)
 
     NVIC_Init(&NVIC_InitStructure);
 }
-/*********************************************************************
- * AWU initialization
- *********************************************************************/
-void AWU_Init(void)
-{
-    RCC_APB1PeriphClockCmd(RCC_APB1Periph_PWR, ENABLE);
-    RCC_LSICmd(ENABLE);
-
-    while (RCC_GetFlagStatus(RCC_FLAG_LSIRDY) == RESET);
-}
 
 /*********************************************************************
  * Sleep ~480 ms
@@ -168,7 +160,11 @@ int main(void)
 
     led_init();
     Button_Init();
-    AWU_Init();
+    AWU_init();
+
+    I2C1_Init(I2C_SPEED_400K);
+    DAC7571_Set100K();
+    DAC7571_SetValue(1024);
 
     while (1)
     {

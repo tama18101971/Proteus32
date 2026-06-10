@@ -1,7 +1,7 @@
 #ifndef LED_GPIO_H
 #define LED_GPIO_H
 
-#include "ch32v_gpio.h"
+#include "ch32v003_gpio.h"
 
 #define REDH_PORT	GPIOC
 #define REDH_PIN	GPIO_Pin_7
@@ -31,3 +31,4 @@ void on_grn_l(void);
 void off_grn(void);
 
 #endif // LED_GPIO_H
+

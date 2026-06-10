@@ -18,6 +18,7 @@ typedef enum {
 	AUX_5M
 } awu_tick_t;
 
+void AWU_init(void);
 void awu_set_delay(awu_tick_t time_aux);
 
 #endif // AWU_H

@@ -70,3 +70,14 @@ void awu_set_delay(awu_tick_t awu_tick)
         PWR_AWU_SetWindowValue(WindowValue);
     }
 }
+
+/*********************************************************************
+ * AWU initialization
+ *********************************************************************/
+void AWU_init(void)
+{
+    RCC_APB1PeriphClockCmd(RCC_APB1Periph_PWR, ENABLE);
+    RCC_LSICmd(ENABLE);
+
+    while (RCC_GetFlagStatus(RCC_FLAG_LSIRDY) == RESET);
+}

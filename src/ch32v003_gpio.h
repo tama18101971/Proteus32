@@ -1,5 +1,5 @@
-#ifndef CH32V_GPIO_H
-#define CH32V_GPIO_H
+#ifndef CH32V003_GPIO_H
+#define CH32V003_GPIO_H
 
 #include "ch32v00x.h"
 
@@ -24,4 +24,4 @@ static inline void GPIO_PinConfig(GPIO_TypeDef* port, uint16_t pin_mask, uint8_t
     port->CFGLR = (port->CFGLR & mask) | ((uint32_t)cfg << shift);
 }
 
-#endif // CH32V_GPIO_H
+#endif // CH32V003_GPIO_H
