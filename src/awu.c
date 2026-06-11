@@ -72,6 +72,24 @@ void awu_set_delay(awu_tick_t awu_tick)
 }
 
 /*********************************************************************
+ * EXTI initialization
+ *********************************************************************/
+void EXTI_INT_INIT(void)
+{
+    EXTI_InitTypeDef EXTI_InitStructure = {0};
+
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_AFIO, ENABLE);
+
+    EXTI_InitStructure.EXTI_Line = EXTI_Line9;
+    EXTI_InitStructure.EXTI_Mode = EXTI_Mode_Event;
+    EXTI_InitStructure.EXTI_Trigger = EXTI_Trigger_Falling;
+    EXTI_InitStructure.EXTI_LineCmd = ENABLE;
+
+    EXTI_Init(&EXTI_InitStructure);
+    
+}
+
+/*********************************************************************
  * AWU initialization
  *********************************************************************/
 void AWU_init(void)
@@ -79,5 +97,6 @@ void AWU_init(void)
     RCC_APB1PeriphClockCmd(RCC_APB1Periph_PWR, ENABLE);
     RCC_LSICmd(ENABLE);
 
-    while (RCC_GetFlagStatus(RCC_FLAG_LSIRDY) == RESET);
+    while (RCC_GetFlagStatus(RCC_FLAG_LSIRDY) == RESET)
+        ;
 }
