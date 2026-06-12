@@ -15,6 +15,8 @@ volatile driver_mode_t mode = MODE_BEACON;
 
  led_state_t led_state = LED_OFF_STATE;
 
+//union AUX_Cmd_u *p_red;
+//union AUX_Cmd_u *p_grn;
 
 /*********************************************************************
  * Sleep ~480 ms
@@ -29,6 +31,8 @@ void Sleep500ms(void)
     PWR_EnterSTANDBYMode(PWR_STANDBYEntry_WFE);
 
     PWR_AutoWakeUpCmd(DISABLE);
+
+    SystemInit();
 
     SystemCoreClockUpdate();
     Delay_Init();
@@ -51,6 +55,8 @@ void Sleep150ms(void)
     PWR_EnterSTANDBYMode(PWR_STANDBYEntry_WFE);
 
     PWR_AutoWakeUpCmd(DISABLE);
+
+    SystemInit();
 
     SystemCoreClockUpdate();
     Delay_Init();
@@ -86,34 +92,30 @@ int main(void)
     DAC7571_Set100K();
     DAC7571_SetValue(1024);
 
+    if (read_ee() == FAILED) {
+        init_ee();
+        }
+
+    awu_set_delay(AUX_15MS);
+
+    // здесь дописать усыпание
+
+    test_aux_beacon();
+
+    p_red = &aux_cmd_red;
+	p_grn = &aux_cmd_grn;
+
+	aux_ctl_red.enable = true;
+	aux_ctl_grn.enable = true;
+
     while (1)
     {
         if (mode == MODE_BEACON)
         {
-            if (led_state == LED_OFF_STATE)
-            {
-                on_grn_l();
-                on_red_l();
+     		handle_aux();
 
-                led_state = LED_ON_STATE;
-
-                EE_PRINTF("Sleep 150ms\r\n");
-                Delay_Ms(1);
-                Sleep150ms();
-                //Delay_Ms(1250);
-            }
-            else
-            {
-                off_grn();
-                off_red();
-
-                led_state = LED_OFF_STATE;
-
-                EE_PRINTF("Sleep 500ms\r\n");
-                Delay_Ms(1);
-                Sleep500ms();
-                //Delay_Ms(1500);
-            }
+            //Sleep500ms();
+            Delay_Ms(15);
         }
         else
         {

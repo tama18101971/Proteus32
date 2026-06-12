@@ -38,6 +38,7 @@ union AUX_Cmd_u *p_grn;
 
 union AUX_Cmd_u aux_cmd_red;
 union AUX_Cmd_u aux_cmd_grn;
+
 AUX_Ctr_t aux_ctl_red;
 AUX_Ctr_t aux_ctl_grn;
 

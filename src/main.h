@@ -2,7 +2,7 @@
 #define MAIN_H
 
 // Uncomment the line below to enable debug logs via UART
-#define WL_FLASH_DEBUG 
+//#define WL_FLASH_DEBUG 
 
 #ifdef WL_FLASH_DEBUG
     #include <stdio.h>

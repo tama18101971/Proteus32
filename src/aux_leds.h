@@ -49,33 +49,35 @@ typedef enum {
 } Array_Cmd_t;
 
 union AUX_Cmd_u {
-	struct {
-		unsigned int device :3;			// биты 0-2 - определяют, чем управляем.
-		unsigned int cycle :1;			// бит 3	- зациклено или нет
-		unsigned int count :4;			// биты 4-7	- к-во повторов при зацикливании
-		unsigned int duration0 :9;		// 8-16  байт длительности в 1/60. Первые 9 байт для первого периода, вторые 9 байт для второго
-		unsigned int duration1 :9;		// 17-25 байт длительности в 1/60. Первые 9 байт для первого периода, вторые 9 байт для второго
-		unsigned int brightness0 :3;	// 26-28 яркость первого периода. In MODES.
-		unsigned int brightness1 :3;	// 29-31 яркость второго периода. In MODES.
-	} aux;
-	struct {
-		unsigned int command :2;		// команда 0 - стоп, 1 - вечный цикл с начала, 2 - вечный цикл с back_steps шагов назад
-		unsigned int steps : 3;			// на какую от начала позицию зацикливаться
-		unsigned int is_cmd : 27;		// если эти 24 бита = 0 то это комманда обработчику массива, если нет - обработчику AUX
-	} cmd;
-	uint32_t aux_cmd;
+    struct __attribute__((packed)) {
+        uint32_t device      : 3;  // биты 0..2   - чем управляем
+        uint32_t cycle       : 1;  // бит 3       - зациклено (1) или нет (0)
+        uint32_t count       : 4;  // биты 4..7   - кол-во повторов
+        uint32_t duration0   : 9;  // биты 8..16  - длительность 1-го периода
+        uint32_t duration1   : 9;  // биты 17..25 - длительность 2-го периода
+        uint32_t brightness0 : 3;  // биты 26..28 - яркость 1-го периода
+        uint32_t brightness1 : 3;  // биты 29..31 - яркость 2-го периода
+    } aux;
+
+    struct __attribute__((packed)) {
+        uint32_t command  : 2;   // биты 0..1  - системная команда (0..3)
+        uint32_t steps    : 3;   // биты 2..4  - шаг зацикливания (0..7)
+        uint32_t is_cmd  : 27;  // биты 5..31 - флаг команды (если эти 27 бит == 0, то это системная команда)
+    } cmd;
+
+    uint32_t aux_cmd; // Полноценное 32-битное слово для Flash
 };
 
 typedef struct {
-	unsigned int enable :1;				// бит 0		- активно или нет
-	unsigned int period :3;				// бит 1..3		- 0 - инициализация, 1 - первый период, 2 - второй период, 3 - малый цикл завершен
-	unsigned int current_brightness: 3;	// биты 4..6 	- яркость для внутренних нужд
-	unsigned int work_duration :9;		// биты 7..15 	- длительность
-	unsigned int idmode :2;				// биты 16..17	- режим индикации, работающей в данный момент
-	unsigned int arr_index :4;			// биты 18..21  - индекс в массиве AUX команд
-	unsigned int work_count : 4;
-	unsigned int reserved :6;
-} AUX_Ctr_t;
+    uint32_t enable             : 1;  // бит 0      - активно или нет
+    uint32_t period             : 3;  // биты 1..3  - 0: инит, 1: первый период, 2: второй период, 3: малый цикл завершен
+    uint32_t current_brightness : 3;  // биты 4..6  - яркость для внутренних нужд
+    uint32_t work_duration      : 9;  // биты 7..15 - длительность
+    uint32_t idmode             : 2;  // биты 16..17- режим индикации, работающей в данный момент
+    uint32_t arr_index          : 4;  // биты 18..21- индекс в массиве AUX команд
+    uint32_t work_count         : 4;  // биты 22..25- количество повторов/оставшаяся работа
+    uint32_t reserved           : 6;  // биты 26..31- резерв до полного 32-битного слова
+} __attribute__((packed, aligned(4))) AUX_Ctr_t;
 
 typedef enum {
 	BCON_1S	= 0U,

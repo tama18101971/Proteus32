@@ -42,7 +42,7 @@ void (*main_op[])(void) =
 	/*26*/	0, //on_xmode_ui1,
 	/*27*/	0, //on_rumpup_ui1,
 	/*28*/	0, //on_rumpdown_ui1,
-	/*29*/	8, //on_turbo_ui1,
+	/*29*/	0, //on_turbo_ui1,
 	/*30*/	0, // calibration,
 	/*31*/	0, // enter_rs_mode,
 	/*32*/	0, // enter_ml_mode,

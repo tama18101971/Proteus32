@@ -3,6 +3,7 @@
 #include <string.h>
 #include "aux_leds.h"
 #include "array.h"
+#include "main.h"
 
 struct ee_data ee;
 static uint32_t ResAddress; 
@@ -123,7 +124,7 @@ int read_ee(void) {
     }
 
     struct ee_data temp_ee;
-    uint32_t *dest_ptr = (uint32_t*)&temp_ee;
+    uint32_t *dest_ptr = (uint32_t*)(void*)&temp_ee;
     volatile uint32_t *src_ptr = (volatile uint32_t*)last_data_address;
     
     for (size_t i = 0; i < struct_size / DATAWIDTH; i++) {
@@ -162,7 +163,7 @@ int write_ee(void) {
     FLASH_Unlock();
     flash_clear_flags();
 
-    uint32_t *pBuffer = (uint32_t*)&ee;
+    uint32_t *pBuffer = (uint32_t*)(void*)&ee;
     int success = 1;
 
     for (uint32_t i = 0; i < struct_size / DATAWIDTH; i++) {

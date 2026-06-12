@@ -4,15 +4,11 @@
 #include <stdint.h>
 #include <stddef.h>
 
-// Uncomment the line below to enable debug logs via UART
-#define WL_FLASH_DEBUG 
-
-#ifdef WL_FLASH_DEBUG
-    #include <stdio.h>
-    #define EE_PRINTF(...) printf(__VA_ARGS__)
-#else
-    #define EE_PRINTF(...) ((void)0)
-#endif
+typedef enum
+{
+    FAILED = 0,
+    PASSED = !FAILED
+} TestStatus_t;
 
 #define PAGE_WRITE_START_ADDR  ((uint32_t)0x08003F80)
 #define PAGE_WRITE_END_ADDR    ((uint32_t)0x08004000) 
@@ -31,12 +27,18 @@ struct __attribute__((packed)) aux_flags {
 };
 
 // Занимает ровно 3 байта (5 + 7 + 7 + 5 = 24 бита)
+// Отключаем навязчивое уведомление о старых версиях GCC
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpacked-bitfield-compat"
+
 struct __attribute__((packed)) eng_flags {
-    uint8_t min_level : 5;  // 5 бит без знака (0..31)
-    int8_t  vc        : 7;  // 7 бит со знаком (-63..+63)
-    int8_t  tc        : 7;  // 7 бит со знаком (-63..+63)
-    uint8_t reserved  : 5;  // 5 бит резерва в остатке
+    uint8_t min_level : 5;  
+    int8_t  vc        : 7;  
+    int8_t  tc        : 7;  
+    uint8_t reserved  : 5;  
 };
+
+#pragma GCC diagnostic pop // Возвращаем настройки компилятора обратно
 
 // Занимает ровно 1 байт (сумма 6 бит, 2 бита свободны)
 struct __attribute__((packed)) usr_flags {
@@ -55,7 +57,7 @@ struct __attribute__((packed)) ui_flags {
 };
 
 // Главная структура
-struct __attribute__((packed)) ee_data {
+struct __attribute__((packed, aligned(4))) ee_data {
     uint32_t counter;           // 4 байта (ставим 32-битные поля первыми)
     
     uint16_t defauil_ui1;       // 2 байта
