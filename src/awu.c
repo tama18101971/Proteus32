@@ -91,6 +91,5 @@ void AWU_init(void)
     RCC_APB1PeriphClockCmd(RCC_APB1Periph_PWR, ENABLE);
     RCC_LSICmd(ENABLE);
 
-    while (RCC_GetFlagStatus(RCC_FLAG_LSIRDY) == RESET)
-        ;
+    while (RCC_GetFlagStatus(RCC_FLAG_LSIRDY) == RESET);
 }

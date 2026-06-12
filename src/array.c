@@ -1,0 +1,96 @@
+/*
+ * array.c
+ *
+ *  Created on: Dec 24, 2022
+ *      Author: tamag
+ */
+
+#include "button.h"
+
+/************************************************************************/
+/*                                                                      */
+/************************************************************************/
+
+void (*main_op[])(void) =
+{
+	/*00*/	0, // exit_magic_mode,
+	/*01*/	0, // slot_empty,
+	/*02*/	0, // slot_batt_ind,
+	/*03*/	0, // slot_strobe,
+	/*04*/	0, // slot_block_beacon,
+	/*05*/	0, // slot_block,
+	/*06*/	0, // slot_tactical,
+	/*07*/	0, // slot_backlight,
+	/*08*/	0, // slot_beacon,
+	/*09*/	0, // slot_eauxmode,
+	/*10*/	0, // slot_ipsmode,
+	/*11*/	0, // slot_memory,
+	/*12*/	0,
+	/*13*/	0,
+	/*14*/	0,
+	/*15*/	0,
+	/*16*/	0,
+	/*17*/	0,
+	/*18*/	0,
+	/*19*/	0,
+	/*20*/	0,
+	/*21*/	0, // up_strobe,
+	/*22*/	0, // back_strobe,
+	/*23*/	0, // off_strobe,
+	/*24*/	0, // unblock_drv,
+	/*25*/	0, //off_driver_false,
+	/*26*/	0, //on_xmode_ui1,
+	/*27*/	0, //on_rumpup_ui1,
+	/*28*/	0, //on_rumpdown_ui1,
+	/*29*/	8, //on_turbo_ui1,
+	/*30*/	0, // calibration,
+	/*31*/	0, // enter_rs_mode,
+	/*32*/	0, // enter_ml_mode,
+	/*33*/	0, // enter_pt_mode,
+	/*34*/	0, // save_def_ui1,
+	/*35*/	0, // save_def_ui2,
+	/*36*/	0, // rs_clickX,
+	/*37*/	0, // ml_clickX,
+	/*38*/	0, // pt_clickX,
+	/*39*/	0, // menu_exit,
+	/*40*/	0, // enter_chtk_mode,
+	/*41*/	0, // chtk_clickX,
+	/*42*/	0, // enter_bm_mode,
+	/*43*/	0, // bm_clickX,
+	/*44*/	0, // enter_bt_mode,
+	/*45*/	0, // bt_clickX,
+	/*46*/	0, // enter_bl_mode,
+	/*47*/	0, // bl_clickX,
+	/*48*/	0, // enter_magic_mode,
+	/*49*/	0, // select_slot01,
+	/*50*/	0, // slot1_clickX,
+	/*51*/	0, // select_slot02,
+	/*52*/	0, // slot2_clickX,
+	/*53*/	0, // select_slot03,
+	/*54*/	0, // slot3_clickX,
+	/*55*/	0, // select_slot04,
+	/*56*/	0, // slot4_clickX,
+	/*57*/	0, // select_slot05,
+	/*58*/	0, // slot5_clickX,
+	/*59*/	0, // select_slot06,
+	/*60*/	0, // slot6_clickX,
+	/*61*/	0, // select_slot07,
+	/*62*/	0, // slot7_clickX,
+	/*63*/	0, // select_slot08,
+	/*64*/	0, // slot8_clickX,
+	/*65*/	0, // select_slot09,
+	/*66*/	0, // slot9_clickX,
+	/*67*/	0, // select_slot10,
+	/*68*/	0, // slot10_clickX,
+	/*69*/	0, // mode_up_ui2,
+	/*70*/	0, // on_turbo_ui2,
+	/*71*/	0, // on_min_ui2,
+	/*72*/	0, // on_moon_ui2,
+	/*73*/	0, // on_xmode_ui2,
+	/*74*/	0, // mode_down_ui2,
+	/*75*/	0, // step_down_ui2,
+	/*76*/	0, // enter_uis_mode,
+	/*77*/	0, // uis_clickX,
+	/*78*/	0, // reset2def
+};
+

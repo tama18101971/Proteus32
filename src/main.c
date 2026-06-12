@@ -7,6 +7,8 @@
 #include "i2c.h"
 #include "dac.h"
 #include "button.h"
+#include "aux_leds.h"
+#include "wl_flash.h"
 
 volatile uint8_t button_event = 0;
 volatile driver_mode_t mode = MODE_BEACON;
