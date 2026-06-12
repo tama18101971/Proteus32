@@ -156,7 +156,7 @@ void aux_cmd_info_grn(void) {
 //	as_red.acmd.aux_command = command;
 //	as_red.ubits.enable = enable;
 //	as_red.ubits.idmode = idm_mode;
-//	AUX_Set_Delay(delay);							//включаем сторожевой таймер интервалом delay. Нулевой шаг?
+//	AUX_Set_Delay(delay);							
 //}
 
 static void SetBrightness(LED_Bits_t device, uint8_t brightness) {
@@ -290,7 +290,7 @@ void test_aux_beacon(void) {
 	*p = 0;
 
 	aux_ctl_red.idmode			= IDM_BEACON;
-	aux_ctl_red.arr_index		= 0;
+	//aux_ctl_red.arr_index		= 0;
 	aux_ctl_red.enable			= true;
 
 //	aux_cmd_grn.aux.brightness0	= 1;
@@ -302,7 +302,7 @@ void test_aux_beacon(void) {
 //	aux_cmd_grn.aux.duration1	= 40;//128;
 
 	aux_ctl_grn.idmode			= IDM_BEACON;
-	aux_ctl_grn.arr_index		= 0;
+	//aux_ctl_grn.arr_index		= 0;
 	aux_ctl_grn.enable			= true;
 }
 
@@ -348,7 +348,7 @@ union AUX_Cmd_u *handle_aux_array(const uint32_t pArray[], AUX_Ctr_t *ctr) {
 
 void handle_aux(void) {
 	if (EnableArrayProcessing) {
-		p_red = handle_aux_array(buf_grn, &aux_ctl_red);
+		p_red = handle_aux_array(buf_red, &aux_ctl_red);
 		p_grn = handle_aux_array(buf_grn, &aux_ctl_grn);
 	}
 	handle_aux_cmd(p_red, &aux_ctl_red);

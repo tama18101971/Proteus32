@@ -80,12 +80,12 @@ void init_ee(void) {
 	ee.uif.use_memory = 0;
 
 	// bcklight
-	ee.aux.bcklight_color = BCK_COLOR_GRN;
+	ee.aux.bcklight_color = BCK_COLOR_RED;
 	ee.aux.bcklight_type = BCK_TYPE_ON;
 
 	// beacon
 	ee.aux.beacon_mode = BCON_2S;
-	ee.aux.beacon_on = false;
+	ee.aux.beacon_on = true;
 	ee.aux.beacon_type = RED_LED;
 
 	// user menu

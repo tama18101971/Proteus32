@@ -15,9 +15,6 @@ volatile driver_mode_t mode = MODE_BEACON;
 
  led_state_t led_state = LED_OFF_STATE;
 
-//union AUX_Cmd_u *p_red;
-//union AUX_Cmd_u *p_grn;
-
 /*********************************************************************
  * Sleep ~480 ms
  *********************************************************************/
@@ -101,12 +98,6 @@ int main(void)
     // здесь дописать усыпание
 
     test_aux_beacon();
-
-    p_red = &aux_cmd_red;
-	p_grn = &aux_cmd_grn;
-
-	aux_ctl_red.enable = true;
-	aux_ctl_grn.enable = true;
 
     while (1)
     {
