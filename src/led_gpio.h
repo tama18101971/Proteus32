@@ -12,14 +12,6 @@
 #define GRN_PORT	GPIOC
 #define GRN_PIN		GPIO_Pin_4
 
-// Удобные макросы для конфигурации (4-битные поля)
-#define CFG_OUT_PP_10M   0x01  // Выход Push-Pull, 10 МГц
-#define CFG_OUT_PP_2M    0x02  // Выход Push-Pull, 2 МГц
-#define CFG_OUT_PP_50M   0x03  // Выход Push-Pull, 50 МГц
-#define CFG_IN_PULL      0x08  // Вход с Pull-up / Pull-down
-#define CFG_IN_FLOAT     0x04  // Вход плавающий
-#define CFG_IN_ANALOG    0x00  // Аналоговый вход
-
 void led_init(void);
 
 void on_red_h(void);
