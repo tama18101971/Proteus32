@@ -11,9 +11,9 @@ void EXTI7_0_IRQHandler(void)
 {
     if(EXTI_GetITStatus(EXTI_Line3) != RESET)
     {
-        button_event = 1;
-
-        mode = MODE_ON;
+        //button_event = 1;
+        //PWR_AWU_SetWindowValue(AWU_CNT);	// Перезаряжаем счетчик AWU
+        //mode = MODE_ON1;
 
         EXTI_ClearITPendingBit(EXTI_Line3);
     }

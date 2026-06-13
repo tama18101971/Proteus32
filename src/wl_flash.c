@@ -4,6 +4,8 @@
 #include "aux_leds.h"
 #include "array.h"
 #include "main.h"
+#include "button.h"
+
 
 struct ee_data ee;
 static uint32_t ResAddress; 

@@ -9,6 +9,7 @@
 #include "button_gpio.h"
 #include "aux_leds.h"
 #include "wl_flash.h"
+#include "button.h"
 
 volatile uint8_t button_event = 0;
 volatile driver_mode_t mode = MODE_BEACON;
@@ -105,7 +106,7 @@ int main(void)
         if (mode == MODE_BEACON)
         {
             handle_aux();
-    		//scan_ui1();
+    		scan_ui1();
 
             // Sleep500ms();
             Delay_Ms(15);

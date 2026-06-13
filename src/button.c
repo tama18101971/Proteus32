@@ -1,0 +1,405 @@
+/*
+ * button.c
+ *
+ *  Created on: Dec 24, 2022
+ *      Author: tamag
+ */
+
+#include <stdbool.h>
+#include "debug.h"
+
+#include "button.h"
+#include "array.h"
+#include "aux_leds.h"
+#include "wl_flash.h"
+#include "dac.h"
+
+#include "main.h"
+
+uint8_t mode_default = DEFAULT_MODE;			// режим, в котором стартуем по одному клику.
+
+uint8_t VLPT = LONG_HOLD_UI1;					// переменная
+DRIVER_Mode_t driver_mode = MODE_OFF;
+//uint16_t sleep_remains;
+bool stop_bit = false;
+
+uint16_t step_tc;								// step в котором драйвер светит в данный момент c учетом ТК
+uint16_t step_tactic;
+uint16_t step_user;
+uint16_t max_step = MAX_STEP;
+uint16_t step_default = DEFAULT_STEP;
+
+RUMP_Dir_t direction = DIR_UP;					// 1 - up, 0 - down
+
+PSTEP_t ps;										// храним то что было до двойного клика (включения макимума)
+
+uint8_t need_save = false;
+
+/******************************************************************************************/
+
+extern struct ee_data ee;
+
+extern void (*main_op[])(void);
+
+/******************************************************************************************/
+
+void ON_POWER() {
+
+}
+
+void OFF_POWER() {
+
+}
+
+uint16_t get_step_tc(uint16_t step) {
+	int16_t tc_step = (MAX_STEP - 0/*pic.correction*/);	// учитываем термоконтроль - отнимаем от заданного шага корреецию
+	return step <= tc_step ? step : (tc_step > 0 ? tc_step : 1);
+}
+
+/******************************************************************************************/
+
+uint16_t get_min_level(uint16_t step) {// если step = 0 возвращаем 0, иначе возвращаем минимальный уровень
+	return step ? ((ee.eng.min_level << 1) + BASE_MOON_LEVEL) : 0;// BASE_MOON_LEVEL прибавляется чтобы уложиться в запись только 4 бит.
+}
+
+/******************************************************************************************/
+
+void out_set_stc(uint16_t step) { 
+    // Вычисляем 9-bit значение напрямую
+    uint16_t bright = ((uint32_t)step * step * step + 523520) >> 18;
+    DAC7571_SetValue(bright + get_min_level(step));  // Если DAC7571_SetValue вместо DAC_Set
+}
+/******************************************************************************************/
+
+uint8_t on_driver(void)	// Если драйвер выключен - включаем и вернем true, если выключен ничего не делаем и возвращаем false
+{
+	if (ee.uif.ui_index)
+		step_tactic = 0;
+
+	if (driver_mode < MODE_ON) {
+		//save_bckl_status();
+		ON_POWER();
+		vwarning = VWARNING_NONE;			//
+		vwarning_old = VWARNING_NONE;		// 08.04.2020
+		direction = DIR_UP;
+		driver_mode = MODE_ON;
+		return true;
+	} else
+		return false;
+}
+
+/************************************************************************/
+void off_driver(uint8_t reset_step, SoftStartSpeed_t ss_speed) {
+	//restore_bckl_status();
+
+	driver_mode = MODE_OFF;
+	direction = DIR_UP;
+
+	set_current(0, ss_speed);
+	//pi_control_reset(&pic);											// это для ТС
+
+	if (ps.use_prev)							// выполняется в случае если турбо было выключено.
+	{
+		step_tc = 0;													// TC по любому обнуляем
+		ps.use_prev = false;											// сбрасываем флаг
+		if (!ps.start)											// если мы не стартовали драйвер...
+		{
+			if (ee.uif.ui_index == 1)// ... то есть смысл восстановить предыдущий шаг, если это рампинг...
+				step_default = ps.pr_step;
+			else
+				// ... и режим, если это дискрет
+				mode_default = ps.pr_step;
+		}
+		step_tactic = MAX_STEP;	// step_tactic ставим в макимально возможный, это для тактического режима, если step_tactic = 0 будет использоваться step_default
+	}
+
+#ifdef USE_EX_AUX
+	stop_aux_voltage();										// отключаем моргания о низкой напруге
+#endif
+
+	/***********************/
+#ifdef USE_EEPROM
+	if (need_save)
+	write_ee();											// почему бы не записать настройки тут?
+	need_save = false;// сбрасываем флаг.
+#endif
+	/***********************/
+
+	//sleep_remains = SLEEP_DELAY;
+	if (reset_step)
+		step_tc = 0;
+}
+
+/******************************************************************************************/
+void set_current_ll(uint16_t step_target, SoftStartSpeed_t ss_speed) {
+	if (!step_target && step_tc)
+		step_default = step_tc;				// шаг перед выключение нужен для СидПлюсИд и включение в предыдущем режиме.
+
+	if (ss_speed != SS_NO)
+		ss_init(step_target, step_tc, ss_speed);
+	else {
+		out_set_stc(step_target);// Всегда!!! Этот step используется в данный момент. В следующий раз он уже будет старым.
+		step_tc = step_target;
+	}
+}
+
+void set_current(uint16_t step_target, SoftStartSpeed_t ss_speed) {
+	step_user = step_target;								// для ТК. step_user это то, что по идее хочет пользователь
+	set_current_ll(step_target, ss_speed);
+}
+
+/******************************************************************************************/
+
+uint16_t get_max_step(void) {
+	return MAX_STEP;
+}
+
+void off_auto_repeat(void) {
+	if (Pressed)
+		stop_bit = true;
+}
+
+void step_up_ui1(void) {
+	if (step_user < max_step)
+		set_current(++step_user, SS_SLOW);
+}
+
+void step_down_ui1(void) {
+	if (step_user > 1)
+		set_current(--step_user, SS_SLOW);							// не даем погасить совсем, по этому не 0, а 1
+}
+
+void on_rumpup_ui1(void) {
+	EE_PRINTF("on_rumpup_ui1() called\r\n");
+	on_driver();													// заводим если надо
+	ps.use_prev = false;
+	if (direction)
+		step_up_ui1();
+	else
+		step_down_ui1();
+}
+
+void on_rumpdown_ui1(void) {
+	EE_PRINTF("on_rump_down_ui1 called\r\n");
+	ps.use_prev = false;
+	step_down_ui1();
+}
+
+void on_xmode_ui1(void) {
+	EE_PRINTF("on_xmode_ui1() called\r\n");
+	ps.use_prev = false;												//!НЕ УБИРАТЬ - НАДО!
+	on_driver();
+	set_current(ee.uif.use_memory ? (step_user ? step_user : step_default) : ee.defauil_ui1, SS_FAST);// если предыдущий шаг = 0 начинаем с яркости по умолчанию, иначе - с яроксти в пред. шаге
+}
+
+void on_turbo_ui1(void) {
+	EE_PRINTF("on_turbo_ui1() called\r\n");
+	uint8_t start = on_driver();
+
+	if (!ps.use_prev)					// включаем турбо. если до этого драйвер был выключен - start будет равен true
+	{
+		ps.start = start;						// true только если завели драйвер т.е. до двух кликов он был выключен
+		ps.pr_step = step_user ? step_user : step_default;// запоминаем текущий шаг если он не ноль. если он ноль - запоминаем запасное значение
+		ps.use_prev = true;									// ставим флаг использовать этот шаг при выходе из турбо
+		set_current(max_step, SS_FAST);	// плавно включаем турбо, но АКБ уже не та и корпус может быть горячим, по двойному клику тоже уже не MAX_STEP а только max_step
+	} else// выключаем турбо. Тут два варианта нужно или вернуть прежнее значение или выключить драйвер. Зависит от ps.start
+	{
+		ps.use_prev = false;								// сбрасываем флаг.
+
+		if (ps.start)										// Драйвер был включен двойным кликом. Выключаем.
+			off_driver(true, SS_FAST);						// обнуляем степ и выключаем
+		else												// иначе - драйвер уже был включено. Возвращаем яркость
+		{
+			direction = DIR_UP;
+			set_current(ps.pr_step, SS_FAST);				// вернулись из максимума и вернули шаг
+		}
+		step_default = ps.pr_step;				// Потом Будет включено в этой яркости. Обязательно должно быть в конце.
+	}
+}
+
+void off_driver_false(void) {
+	EE_PRINTF("off_driver_false() called\r\n");
+	driver_mode = MODE_OFF;
+	//mode_default = mode_current;
+	//mode_current = 0;
+	off_driver(false, SS_FAST);
+}
+
+/******************************************************************************************/
+
+uint8_t execute_index(uint8_t index, uint8_t timeout, uint8_t check_timeout) // индекс в массиве для запуска, что за таймаут?, проверять или нет таймаут
+{
+	if (check_timeout)	// если проверка таймаута требуется
+	{
+		if (timeout) {
+			main_op[index]();
+			return true;
+		}	// проверяем и в случае необходимости запускаем, возвращаем ВЫПОЛНЕНО
+		else
+			return false;								// иначе возвращаем НЕВЫПОЛНЕНО
+	} else {
+		main_op[index]();
+		return true;
+	}				// если проверка не требуется запускаем и возвращаем ВЫПОЛНЕНО
+}
+
+/************************************************************************/
+/*		                   [UI1/2] общий код							*/
+/************************************************************************/
+
+union common_commands {
+	struct {
+		unsigned int inp_cout :3;
+		unsigned int is_hold :1;
+		unsigned int inp_mask :6;
+		unsigned int drv_mode :5;
+		unsigned int ui :1;
+	} bit;
+	uint16_t byte16;
+};
+
+uint8_t check_bit_map_ui(uint8_t bt_result, uint8_t bt_cnt, uint8_t v_long, uint8_t timeout) {
+
+	/////////////////////////////////////////
+	// 15-й  бит	- выбор UI
+	// 14-10 биты	- режим, в котором работаем
+	// 09-04 биты	- маска нажатий
+	// 03-й  бит	- признак удержания
+	// 02-00 биты	- счетчик длинны ввода
+	/////////////////////////////////////////
+
+	uint8_t op_index = 0;
+	uint8_t check_timeout = 0;
+	union common_commands cc;
+
+	//__NOP();
+	cc.byte16 = 0;
+	cc.bit.inp_cout = bt_cnt;
+	cc.bit.inp_mask = bt_result;
+	cc.bit.is_hold = v_long;
+	cc.bit.drv_mode = driver_mode;
+	cc.bit.ui = ee.uif.ui_index > 1;
+
+	/*	uint8_t uni_slots(uint8_t index, uint8_t timeout)
+	 {
+	 if(!timeout) off_auto_repeat();
+	 op_index = ee.slots[index];
+	 return timeout;
+	 }
+	 */
+
+	switch (cc.byte16) {
+	/************************************************************************/
+	/*                          UI1                                         */
+	/************************************************************************/
+
+	// из MODE_OFF
+	case bit_map_on_ui1:
+		op_index = ON_XMODE;
+		check_timeout = true;
+		break;
+
+	case bit_map_rumpup_ui1:
+		VLPT = LONG_HOLD_RAMP_PAUSE_UI1;// пауза сразу после включения в минимум. Служит для удобства попадания в минимум.
+		// no break
+		// из MODE_ON
+	case bit_map_rumpup_on_ui1:													// включить в самый минимум
+		op_index = ON_RUMPUP;
+		check_timeout = false;
+		break;
+
+	case bit_map_rumpdown_ui1:													// ступенька вниз удержанием
+		op_index = ON_RUMPDOWN;
+		check_timeout = false;
+		break;
+
+	case bit_map_turbo0_ui1:
+	case bit_map_turbo1_ui1:
+		op_index = ON_TURBO_UI1;
+		check_timeout = true;
+		break;
+
+	case bit_map_off_ui1:
+	//case bit_map_off_ui2:						// OFF
+		op_index = OFF_DRV_FALSE;					//
+		check_timeout = true;
+		break;
+
+	default:
+		return 0;
+		break;
+	}
+
+	return execute_index(op_index, timeout, check_timeout);
+}
+
+/************************************************************************/
+/*							[UI1] скан рампинг                          */
+/************************************************************************/
+
+void scan_ui1(void)	 // Эта функция сканер. Она должна вызываться.
+{
+	static uint8_t bt_r_time = 0;		// Счетчик сколько времени прошло после отпускания кнопки
+	static uint8_t bt_d_time = 0;		// Переменная времени нажатия кнопки
+	static uint8_t bt_u_time = 0;		// Переменная времени отпускания кнопки
+	static uint8_t bt_cnt = 0;		// Переменная счетчик нажатий
+	static uint8_t flag = false;// флаг устанавливается при обработке сверх длинного нажатия. Дабы не отрабатывать отпускание кнопки
+
+	if (Pressed)						// Кнопень придавлена.
+	{
+		bt_u_time = 0;
+		//sleep_remains = SLEEP_DELAY;				// для режима сна во всех режимах. без этого засыпает при рампинге.
+
+		if (!bt_d_time) {
+			max_step = get_max_step();// - (pic.correction + 1);			// вычисляем max_step в зависимости от напряжения на АКБ и перегрева
+//			stop_aux_beacon();								// отключаем маяк чтобы не моргал перед отмаргиванием АКБ
+		}
+
+		if ((!bt_d_time) && (step_tc >= max_step))						// если мы уже вверху и кнопка только нажата...
+			direction = DIR_DOWN;										// ...меняем направление на вниз
+
+		if (bt_d_time < 0xFF)
+			bt_d_time++;				// увеличиваем счетчик времени нажатого состояния если это не переполнит uint8_t
+
+		//if ((bt_d_time == 1) && (driver_mode < MODE_BLOCK_C))
+			//set_aux_cmd(SHORT_BLINK, AUX_15MS, true, IDM_OTHER);// моргаем красным при нажатии на кнопку в режиме блокировки
+
+		if (bt_d_time == VLPT) {
+			flag = true;
+			VLPT = 2;//BASE_RUMP_SPEED;					// быстрое время для рампинга. в настройках 0 или 1, а нам надо 2 или 3, по этому прибавляем 2
+			check_bit_map_ui(0, bt_cnt, true, false);
+			if (!stop_bit)
+				bt_d_time = 1;			// для переключения режимов удержанием вводим автоповтор и способ его отключить.
+		}
+	}
+
+	else {
+		VLPT = LONG_HOLD_UI1;										// при отпускании кнопки возвращаем тайминг
+
+		if (bt_d_time > 0) {															// Момент отпускания кнопки.
+			//sleep_remains = SLEEP_DELAY;		// сбрасываем при отпускании... надо ли если сбрасываем при нажатой???
+			stop_bit = false;
+			direction ^= 0x01;	// кнопку отпустили, но на случай, если быстро нажмут опять меняем направление рампинга.
+			bt_r_time = 0;
+			bt_cnt++;												// Короткое нажатие. Пропускаем установку бита.
+
+			if (flag)
+				reset_res_ui3()
+			// обработка не требуется т.к. уже обработано удержание
+			else if (check_bit_map_ui(0, bt_cnt, false, false) || bt_cnt == COMM_MAX_LEN_UI1)
+				reset_res_ui3();
+
+			bt_d_time = 0;									// время придавки кнопки нам больше не нужно, сбрасываем.
+		}
+
+		else if (bt_cnt && (++bt_u_time >= RELEASE_TIMEOUT_UI1)) {// Отпущено, счетчик таймаута комманды(последовательности).
+			if (bt_cnt > 0) {														// Таймаут комманды, сброс состояний
+				check_bit_map_ui(0, bt_cnt, false, true);
+				reset_res_ui3();
+			}
+		}
+
+		if (++bt_r_time >= DIRECTION_TIMEOUT_UI1)
+			direction = DIR_UP;									// после выжидания таймаута меняем направление рампинга
+	}
+}
