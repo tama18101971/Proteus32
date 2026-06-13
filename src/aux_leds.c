@@ -11,7 +11,7 @@
 //#include "eeprom.h"
 //#include "soft_start.h"
 #include "main.h"
-#include "button.h"
+#include "button_gpio.h"
 
 #include "led_gpio.h"
 //#include "macros.h"
@@ -303,7 +303,7 @@ void test_aux_beacon(void) {
 
 	aux_ctl_grn.idmode			= IDM_BEACON;
 	//aux_ctl_grn.arr_index		= 0;
-	aux_ctl_grn.enable			= true;
+	//aux_ctl_grn.enable			= true;
 }
 
 union AUX_Cmd_u *handle_aux_array(const uint32_t pArray[], AUX_Ctr_t *ctr) {

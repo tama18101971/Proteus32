@@ -1,5 +1,5 @@
-#ifndef BUTTON_H
-#define BUTTON_H
+#ifndef BUTTON_GPIO_H
+#define BUTTON_GPIO_H
 
 #include "ch32v00x.h"
 
@@ -44,4 +44,4 @@ extern led_state_t led_state;
 
 void Button_Init(void);
 
-#endif // BUTTON_H
+#endif // BUTTON_GPIO_H

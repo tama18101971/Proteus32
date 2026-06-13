@@ -11,7 +11,7 @@
 
 #include <stdbool.h>
 #include "awu.h"
-#include "button.h"
+#include "button_gpio.h"
 
 typedef enum {
 	RED_LED = 0b001,

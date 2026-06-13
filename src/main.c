@@ -6,14 +6,14 @@
 #include "led_gpio.h"
 #include "i2c.h"
 #include "dac.h"
-#include "button.h"
+#include "button_gpio.h"
 #include "aux_leds.h"
 #include "wl_flash.h"
 
 volatile uint8_t button_event = 0;
 volatile driver_mode_t mode = MODE_BEACON;
 
- led_state_t led_state = LED_OFF_STATE;
+led_state_t led_state = LED_OFF_STATE;
 
 /*********************************************************************
  * Sleep ~480 ms
@@ -34,9 +34,9 @@ void Sleep500ms(void)
     SystemCoreClockUpdate();
     Delay_Init();
 
-    #ifdef WL_FLASH_DEBUG
+#ifdef WL_FLASH_DEBUG
     USART_Printf_Init(115200);
-    #endif
+#endif
 }
 
 /*********************************************************************
@@ -58,9 +58,9 @@ void Sleep150ms(void)
     SystemCoreClockUpdate();
     Delay_Init();
 
-    #ifdef WL_FLASH_DEBUG
+#ifdef WL_FLASH_DEBUG
     USART_Printf_Init(115200);
-    #endif
+#endif
 }
 
 int main(void)
@@ -73,9 +73,9 @@ int main(void)
 
     Delay_Ms(4000);
 
-    #ifdef WL_FLASH_DEBUG
+#ifdef WL_FLASH_DEBUG
     USART_Printf_Init(115200);
-    #endif
+#endif
 
     EE_PRINTF("\r\nBoot...\r\n");
 
@@ -89,9 +89,10 @@ int main(void)
     DAC7571_Set100K();
     DAC7571_SetValue(1024);
 
-    if (read_ee() == FAILED) {
+    if (read_ee() == FAILED)
+    {
         init_ee();
-        }
+    }
 
     awu_set_delay(AUX_15MS);
 
@@ -103,9 +104,10 @@ int main(void)
     {
         if (mode == MODE_BEACON)
         {
-     		handle_aux();
+            handle_aux();
+    		//scan_ui1();
 
-            //Sleep500ms();
+            // Sleep500ms();
             Delay_Ms(15);
         }
         else

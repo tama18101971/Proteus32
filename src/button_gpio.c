@@ -1,4 +1,4 @@
-#include "button.h"
+#include "button_gpio.h"
 #include "ch32v00x.h"
 
 /*********************************************************************
