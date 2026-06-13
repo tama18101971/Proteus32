@@ -246,42 +246,12 @@ void off_driver_false(void)
 
 /******************************************************************************************/
 
-uint8_t execute_index(uint8_t index, uint8_t timeout, uint8_t check_timeout) // индекс в массиве для запуска, что за таймаут?, проверять или нет таймаут
+uint8_t execute_func(void (*func_ptr)(void), uint8_t timeout, uint8_t check_timeout)
 {
-	if (check_timeout) // если проверка таймаута требуется
-	{
-		if (timeout)
-		{
-			main_op[index]();
-			return true;
-		} // проверяем и в случае необходимости запускаем, возвращаем ВЫПОЛНЕНО
-		else
-			return false; // иначе возвращаем НЕВЫПОЛНЕНО
-	}
-	else
-	{
-		main_op[index]();
-		return true;
-	} // если проверка не требуется запускаем и возвращаем ВЫПОЛНЕНО
-}
-
-uint8_t execute_ptr(void (*func_ptr)(void), uint8_t timeout, uint8_t check_timeout)
-{
-	if (check_timeout) // если проверка таймаута требуется
-	{
-		if (timeout)
-		{
-			func_ptr();
-			return true;
-		} // проверяем и в случае необходимости запускаем, возвращаем ВЫПОЛНЕНО
-		else
-			return false; // иначе возвращаем НЕВЫПОЛНЕНО
-	}
-	else
-	{
-		func_ptr();
-		return true;
-	} // если проверка не требуется запускаем и возвращаем ВЫПОЛНЕНО
+	if (check_timeout && !timeout)
+		return false;
+	func_ptr();
+	return true;
 }
 
 /************************************************************************/
@@ -344,7 +314,6 @@ uint8_t check_bit_map_ui(uint8_t bt_result, uint8_t bt_cnt, uint8_t v_long, uint
 	// из MODE_OFF
 	case bit_map_on_ui1:
 		func_ptr = &on_xmode_ui1;
-		op_index = ON_XMODE;
 		check_timeout = true;
 		break;
 
@@ -353,24 +322,24 @@ uint8_t check_bit_map_ui(uint8_t bt_result, uint8_t bt_cnt, uint8_t v_long, uint
 										 // no break
 										 // из MODE_ON
 	case bit_map_rumpup_on_ui1:			 // включить в самый минимум
-		op_index = ON_RUMPUP;
+		func_ptr = &on_rumpup_ui1; // ступенька вверх удержанием
 		check_timeout = false;
 		break;
 
-	case bit_map_rumpdown_ui1: // ступенька вниз удержанием
-		op_index = ON_RUMPDOWN;
+	case bit_map_rumpdown_ui1: 
+		func_ptr = &on_rumpdown_ui1; // ступенька вниз удержанием
 		check_timeout = false;
 		break;
 
 	case bit_map_turbo0_ui1:
 	case bit_map_turbo1_ui1:
-		op_index = ON_TURBO_UI1;
+		func_ptr = &on_turbo_ui1;
 		check_timeout = true;
 		break;
 
 	case bit_map_off_ui1:
 		// case bit_map_off_ui2:						// OFF
-		op_index = OFF_DRV_FALSE; //
+		func_ptr = &off_driver_false; 
 		check_timeout = true;
 		break;
 
@@ -379,16 +348,8 @@ uint8_t check_bit_map_ui(uint8_t bt_result, uint8_t bt_cnt, uint8_t v_long, uint
 		break;
 	}
 
-	uint8_t result;
-
-	if (func_ptr != NULL)
-	{
-		result = execute_ptr(func_ptr, timeout, check_timeout);
-	}
-	else
-	{
-		result = execute_index(op_index, timeout, check_timeout);
-	}
+	void (*target_func)(void) = func_ptr ? func_ptr : main_op[op_index];
+	uint8_t result = execute_func(target_func, timeout, check_timeout);
 	return result;
 }
 
