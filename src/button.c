@@ -260,7 +260,7 @@ uint8_t execute_func(void (*func_ptr)(void), uint8_t timeout, uint8_t check_time
 
 union common_commands
 {
-	struct
+	struct __attribute__((packed))
 	{
 		unsigned int inp_cout : 3;
 		unsigned int is_hold : 1;
@@ -290,12 +290,13 @@ uint8_t check_bit_map_ui(uint8_t bt_result, uint8_t bt_cnt, uint8_t v_long, uint
 	func_ptr = 0;
 
 	//__NOP();
-	cc.byte16 = 0;
-	cc.bit.inp_cout = bt_cnt;
-	cc.bit.inp_mask = bt_result;
-	cc.bit.is_hold = v_long;
-	cc.bit.drv_mode = driver_mode;
-	cc.bit.ui = ee.uif.ui_index > 1;
+	/* БЫСТРЫЙ способ (правильные смещения): */
+	cc.byte16 = (((uint16_t)bt_cnt << 0) |				 // bits 0-2
+				 ((uint16_t)v_long << 3) |				 // bit 3
+				 ((uint16_t)bt_result << 4) |			 // bits 4-9
+				 ((uint16_t)driver_mode << 10) |		 // bits 10-14
+				 ((uint16_t)(ee.uif.ui_index > 1) << 15) // bit 15
+	);
 
 	/*	uint8_t uni_slots(uint8_t index, uint8_t timeout)
 	 {
@@ -322,11 +323,11 @@ uint8_t check_bit_map_ui(uint8_t bt_result, uint8_t bt_cnt, uint8_t v_long, uint
 										 // no break
 										 // из MODE_ON
 	case bit_map_rumpup_on_ui1:			 // включить в самый минимум
-		func_ptr = &on_rumpup_ui1; // ступенька вверх удержанием
+		func_ptr = &on_rumpup_ui1;		 // ступенька вверх удержанием
 		check_timeout = false;
 		break;
 
-	case bit_map_rumpdown_ui1: 
+	case bit_map_rumpdown_ui1:
 		func_ptr = &on_rumpdown_ui1; // ступенька вниз удержанием
 		check_timeout = false;
 		break;
@@ -339,7 +340,7 @@ uint8_t check_bit_map_ui(uint8_t bt_result, uint8_t bt_cnt, uint8_t v_long, uint
 
 	case bit_map_off_ui1:
 		// case bit_map_off_ui2:						// OFF
-		func_ptr = &off_driver_false; 
+		func_ptr = &off_driver_false;
 		check_timeout = true;
 		break;
 
