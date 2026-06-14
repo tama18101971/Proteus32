@@ -4,6 +4,9 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#define FLASH_KEY1          0x45670123UL
+#define FLASH_KEY2          0xCDEF89ABUL
+
 typedef enum
 {
     FAILED = 0,

@@ -24,8 +24,10 @@ CH32V003 has no hardware EEPROM. Data is emulated using the last 256 bytes of fl
 - Struct size: 32 bytes (exactly 8 flash words)
 - Slots: 8 (256 / 32 = 8)
 - Data integrity: each record contains CRC32 + sequence number + version
-- Erase policy: page-by-page erase (only when first slot of page is written)
+- Erase: 1KB page erase via PER register bit (not 64-byte PAGE_ER)
+- Flash write: direct register access (PG bit, two 16-bit halfwords per word)
 - CRC: nibble-based lookup table (16 entries, compact and fast)
+- All peripheral access: bare-metal registers (no SDK functions)
 
 ---
 
@@ -93,7 +95,7 @@ sizeof(struct ee_data) MUST be a multiple of 4 (DATAWIDTH)
 ```
 
 **Why:**
-- Read/write operates via `FLASH_ProgramWord()` — 4 bytes at a time
+- Read/write operates via direct register access — 4 bytes (2 × 16-bit halfwords) at a time
 - Write loop: `for (i = 0; i < sizeof / 4; i++)` — writes `sizeof/4` words
 - If sizeof is not a multiple of 4, the last byte of CRC won't be written/read
 - On next read, `temp.crc` gets garbage in the MSB → CRC check always fails
@@ -159,21 +161,21 @@ Field order determines:
 
 ### 4.3. Erase Policy
 
-Flash is erased in **pages** (64 bytes). Two scenarios:
+Flash is erased in **1KB pages** via the PER (Page Erase) register bit. Two scenarios:
 
 **A. Page-by-page erase (normal operation):**
 When writing to the FIRST slot of a page (address is page-aligned):
 1. Check if page is already erased (`is_page_erased`)
-2. If not erased — erase only that page
+2. If not erased — erase only that 1KB page
 3. Other pages remain untouched (data preserved)
 
 **B. Full erase (all slots occupied):**
 When all 8 slots are full:
-1. All 4 pages are erased sequentially
+1. All 4 pages are erased sequentially (each triggers a 1KB erase)
 2. Writing restarts from slot 0
 
 **Why page-by-page:**
-- Reduces flash wear (only 64 bytes erased vs 256)
+- Reduces flash wear (only 1KB erased vs multiple pages)
 - Better power-loss safety (only 1 page affected, not all 4)
 - Other pages serve as backup until overwritten
 
@@ -208,8 +210,8 @@ flash empty → read_ee() returns 0
 │    d. If ResAddress == 0 → scan again or erase all   │
 │    e. If first slot of page → erase page if needed   │
 │    f. __disable_irq()                                │
-│    g. FLASH_ProgramWord() × 8 words (32 bytes)       │
-│    h. flash_wait_bsy() + FLASH_Lock()                │
+│    g. Unlock flash, write 8 words via registers      │
+│    h. flash_wait_bsy() + Lock flash                  │
 │    i. __enable_irq()                                 │
 └─────────────────────────────────────────────────────┘
 ```
@@ -262,12 +264,12 @@ CRC32(first 28 bytes) == temp.crc?
 
 ```
 __disable_irq()
-Unlock flash
+Unlock flash (FLASH->KEYR = KEY1, KEY2)
 flash_wait_bsy()
 Clear error flags
-Erase page (64 bytes)
+Erase 1KB page (FLASH->CTLR |= PER, ADDR = page, CTLR |= STRT)
 flash_wait_bsy()
-Lock flash
+Lock flash (FLASH->CTLR |= LOCK)
 __enable_irq()
 ```
 
