@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Анализ алгоритма Wear Leveling — wl_flash.c</title>
+    <style>
+        :root {
+            --bg: #0d1117;
+            --surface: #161b22;
+            --border: #30363d;
+            --text: #c9d1d9;
+            --heading: #58a6ff;
+            --accent: #1f6feb;
+            --green: #3fb950;
+            --red: #f85149;
+            --yellow: #d29922;
+            --orange: #db6d28;
+            --purple: #bc8cff;
+            --code-bg: #1c2128;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; padding: 20px; }
+        .container { max-width: 1100px; margin: 0 auto; }
+        h1 { color: var(--heading); font-size: 2em; margin-bottom: 10px; border-bottom: 2px solid var(--accent); padding-bottom: 10px; }
+        h2 { color: var(--green); margin-top: 30px; font-size: 1.4em; }
+        h3 { color: var(--yellow); margin-top: 20px; font-size: 1.1em; }
+        p { margin: 10px 0; }
+        code { background: var(--code-bg); padding: 2px 6px; border-radius: 4px; font-family: 'Consolas', 'Courier New', monospace; font-size: 0.95em; }
+        pre { background: var(--code-bg); padding: 15px; border-radius: 8px; overflow-x: auto; border: 1px solid var(--border); margin: 10px 0; }
+        pre code { background: none; padding: 0; }
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+        th, td { border: 1px solid var(--border); padding: 10px 14px; text-align: left; }
+        th { background: var(--surface); color: var(--heading); font-weight: 600; }
+        tr:hover { background: var(--surface); }
+        .warning { background: #2d1f0f; border-left: 4px solid var(--yellow); padding: 10px 15px; margin: 15px 0; border-radius: 0 8px 8px 0; }
+        .danger { background: #2d0f0f; border-left: 4px solid var(--red); padding: 10px 15px; margin: 15px 0; border-radius: 0 8px 8px 0; }
+        .success { background: #0f2d1f; border-left: 4px solid var(--green); padding: 10px 15px; margin: 15px 0; border-radius: 0 8px 8px 0; }
+        .info { background: #0f1f2d; border-left: 4px solid var(--heading); padding: 10px 15px; margin: 15px 0; border-radius: 0 8px 8px 0; }
+        .opt { background: #1f0f2d; border-left: 4px solid var(--purple); padding: 10px 15px; margin: 15px 0; border-radius: 0 8px 8px 0; }
+        ul, ol { margin: 10px 0; padding-left: 25px; }
+        li { margin: 5px 0; }
+        hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+        .severity-critical { color: var(--red); font-weight: bold; }
+        .severity-warning { color: var(--orange); font-weight: bold; }
+        .severity-info { color: var(--yellow); }
+        .diagram { background: var(--surface); padding: 15px; border-radius: 8px; margin: 10px 0; font-family: monospace; white-space: pre; }
+        .metric { display: inline-block; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 20px; margin: 5px; text-align: center; }
+        .metric-value { font-size: 1.5em; font-weight: bold; color: var(--green); }
+        .metric-label { font-size: 0.9em; color: var(--text); }
+        .toc { background: var(--surface); padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; }
+        .toc a { color: var(--heading); text-decoration: none; }
+        .toc a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Анализ алгоритма Wear Leveling</h1>
+        <p>Файл: <code>wl_flash.c</code> — эмуляция EEPROM во Flash-памяти для CH32V003</p>
+
+        <div class="toc">
+            <strong>Содержание</strong>
+            <ol>
+                <li><a href="#params">Параметры системы</a></li>
+                <li><a href="#algo">Описание алгоритма</a></li>
+                <li><a href="#flow">Блок-схема</a></li>
+                <li><a href="#reliability">Оценка надёжности</a></li>
+                <li><a href="#problems">Выявленные проблемы</a></li>
+                <li><a href="#optimizations">Рекомендации по оптимизации</a></li>
+                <li><a href="#rating">Итоговая оценка</a></li>
+            </ol>
+        </div>
+
+        <hr>
+
+        <h2 id="params">1. Параметры системы</h2>
+
+        <table>
+            <tr><th>Параметр</th><th>Значение</th><th>Описание</th></tr>
+            <tr><td>Начальный адрес</td><td><code>0x08003F80</code></td><td>Конец Flash-памяти CH32V003</td></tr>
+            <tr><td>Конечный адрес</td><td><code>0x08004000</code></td><td>Граница Flash</td></tr>
+            <tr><td>Размер области</td><td>128 байт</td><td>2 страницы по 64 байта</td></tr>
+            <tr><td>Размер страницы</td><td>64 байта</td><td>Минимальная единица стирания</td></tr>
+            <tr><td>Размер структуры</td><td>28 байт</td><td><code>struct ee_data</code></td></tr>
+            <tr><td>Выравнивание</td><td>4 байта</td><td><code>aligned(4)</code></td></tr>
+            <tr><td>Количество слотов</td><td>10</td><td>Максимум записей в области</td></tr>
+        </table>
+
+        <div class="info">
+            <strong>Емкость:</strong> 128 байт / 28 байт = <strong>4 слота</strong> для записи (с учётом выравнивания)
+        </div>
+
+        <hr>
+
+        <h2 id="algo">2. Описание алгоритма</h2>
+
+        <h3>2.1 Принцип работы</h3>
+        <p>Алгоритм реализует <strong>простой линейный wear leveling</strong> (последовательное заполнение с циклическим стиранием).</p>
+
+        <div class="diagram">
+┌─────────────────────────────────────────────────────────────────────┐
+│                        АДРЕСНОЕ ПРОСТРАНСТВО                       │
+├─────────────┬─────────────┬─────────────┬─────────────┬─────────────┤
+│   Слот 0   │   Слот 1   │   Слот 2   │   Слот 3   │   Свободно  │
+│  28 байт   │  28 байт   │  28 байт   │  28 байт   │   (0xFF)    │
+│ 0x3F80     │ 0x3F9C     │ 0x3FB8     │ 0x3FD4     │             │
+├─────────────┴─────────────┴─────────────┴─────────────┴─────────────┤
+│                                                                     │
+│  write_addr: ─────────────────────────────────────►                 │
+│  (свободный слот)                                                   │
+│                                                                     │
+│  last_valid: ──────────────────────────►                            │
+│  (последняя запись)                                                 │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+        </div>
+
+        <h3>2.2 Функция <code>flash_search_address()</code></h3>
+        <p>Поиск свободного слота для записи и определение адреса последней валидной записи.</p>
+
+        <pre><code>// Алгоритм:
+// 1. Начинаем с PAGE_WRITE_START_ADDR
+// 2. Проверяем первый байт слота:
+//    - Если != 0xFF → слот занят, запоминаем как LastValidAddr
+//    - Если == 0xFF → слот свободен, это адрес для записи
+// 3. Сдвигаемся на struct_size (28 байт)
+// 4. Повторяем пока не достигнем конца области</code></pre>
+
+        <div class="info">
+            <strong>Оптимистичная проверка:</strong> Проверяется только первый байт (<code>*(volatile uint8_t*)current != 0xFF</code>).
+            Это быстро, но не гарантирует валидность всей записи.
+        </div>
+
+        <h3>2.3 Функция <code>read_ee()</code></h3>
+        <pre><code>// Алгоритм:
+// 1. Ищем адрес для записи и адрес последней записи
+// 2. Если last_data_address == 0 → хранилище пусто
+// 3. Копируем данные во временный буфер
+// 4. Считаем CRC32 всех данных (включая поле crc)
+// 5. Если CRC == 0 → данные валидны, копируем в ee
+// 6. Иначе → ошибка CRC</code></pre>
+
+        <h3>2.4 Функция <code>write_ee()</code></h3>
+        <pre><code>// Алгоритм:
+// 1. Вычисляем CRC32 для всех данных кроме поля crc
+// 2. Записываем в поле ee.crc
+// 3. Ищем свободный адрес
+// 4. Если адрес == 0 (все слоты заняты):
+//    a. Стираем ОБЕ страницы (128 байт)
+//    b. Устанавливаем адрес на начало
+// 5. Записываем структуру побайтово (Flash_ProgramWord)
+// 6. Возвращаем статус успеха</code></pre>
+
+        <h3>2.5 Функция <code>erase_flash()</code></h3>
+        <pre><code>// Алгоритм:
+// 1. Разблокируем Flash
+// 2. Очищаем флаги
+// 3. Стираем страницу PAGE_WRITE_START_ADDR (64 байта)
+// 4. Стираем страницу PAGE_WRITE_START_ADDR + 64 (64 байта)
+// 5. Блокируем Flash
+// 6. Возвращаем 1</code></pre>
+
+        <hr>
+
+        <h2 id="flow">3. Блок-схема</h2>
+
+        <h3>3.1 Запись (write_ee)</h3>
+        <div class="diagram">
+                    ┌─────────────────┐
+                    │   Начало        │
+                    │   write_ee()    │
+                    └────────┬────────┘
+                             │
+                    ┌────────▼────────┐
+                    │ Вычислить CRC32 │
+                    │ для данных      │
+                    └────────┬────────┘
+                             │
+                    ┌────────▼────────┐
+                    │ Искать свободный│
+                    │ адрес           │
+                    └────────┬────────┘
+                             │
+                    ┌────────▼────────┐
+                    │ addr == 0 ?     │
+                    └────────┬────────┘
+                       Да ┌──┴──┐ Нет
+                         │      │
+              ┌──────────▼─┐    │
+              │ Стереть    │    │
+              │ обе страницы│    │
+              └──────┬─────┘    │
+                     │          │
+              ┌──────▼─────┐    │
+              │ addr =     │    │
+              │ START_ADDR │    │
+              └──────┬─────┘    │
+                     │          │
+              ┌──────▼──────────▼─┐
+              │ Записать структуру│
+              │ побайтово         │
+              └──────┬────────────┘
+                     │
+              ┌──────▼────────────┐
+              │ Вернуть статус    │
+              └───────────────────┘
+        </div>
+
+        <h3>3.2 Чтение (read_ee)</h3>
+        <div class="diagram">
+                    ┌─────────────────┐
+                    │   Начало        │
+                    │   read_ee()     │
+                    └────────┬────────┘
+                             │
+                    ┌────────▼────────┐
+                    │ Искать адрес    │
+                    │ последней записи│
+                    └────────┬────────┘
+                             │
+                    ┌────────▼────────┐
+                    │ last_addr == 0 ?│
+                    └────────┬────────┘
+                       Да ┌──┴──┐ Нет
+                         │      │
+              ┌──────────▼─┐    │
+              │ return 0   │    │
+              │ (пусто)    │    │
+              └────────────┘    │
+                                │
+                    ┌───────────▼───────────┐
+                    │ Копировать данные     │
+                    │ во временный буфер    │
+                    └───────────┬───────────┘
+                                │
+                    ┌───────────▼───────────┐
+                    │ Считать CRC32         │
+                    └───────────┬───────────┘
+                                │
+                    ┌───────────▼───────────┐
+                    │ CRC32 == 0 ?          │
+                    └───────────┬───────────┘
+                       Да ┌─────┴─────┐ Нет
+                         │           │
+              ┌──────────▼──┐  ┌─────▼─────┐
+              │ Копировать  │  │ return 0  │
+              │ в ee        │  │ (ошибка)  │
+              └──────┬──────┘  └───────────┘
+                     │
+              ┌──────▼──────┐
+              │ return 1    │
+              │ (успех)     │
+              └─────────────┘
+        </div>
+
+        <hr>
+
+        <h2 id="reliability">4. Оценка надёжности</h2>
+
+        <div style="display: flex; flex-wrap: wrap;">
+            <div class="metric">
+                <div class="metric-value">4</div>
+                <div class="metric-label">Записи до стирания</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">~100K</div>
+                <div class="metric-label">Циклов стирания Flash</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">28</div>
+                <div class="metric-label">Байт на запись</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">CRC32</div>
+                <div class="metric-label">Проверка целостности</div>
+            </div>
+        </div>
+
+        <h3>4.1 Сильные стороны</h3>
+        <div class="success">
+            <ul>
+                <li><strong>Простота:</strong> Мало кода, легко отлаживать</li>
+                <li><strong>CRC32:</strong> Обнаружение ошибок в данных</li>
+                <li><strong>Быстрый поиск:</strong> Проверка одного байта для определения занятости слота</li>
+                <li><strong>Выравнивание:</strong> Гарантия записи целых слов (4 байта)</li>
+            </ul>
+        </div>
+
+        <h3>4.2 Слабые стороны</h3>
+        <div class="danger">
+            <ul>
+                <li><strong>Нет атомарности:</strong> Запись может прерваться (обрыв питания)</li>
+                <li><strong>Полное стирание:</strong> Стираются обе страницы даже если есть свободное место</li>
+                <li><strong>Слабая валидация:</strong> Проверяется только первый байт слота</li>
+                <li><strong>CRC == 0:</strong> Возможна ложная валидация (если данные дают CRC = 0)</li>
+            </ul>
+        </div>
+
+        <hr>
+
+        <h2 id="problems">5. Выявленные проблемы</h2>
+
+        <h3 class="severity-critical">Проблема 1: Нет атомарности записи</h3>
+        <div class="danger">
+            <p><strong>Серьёзность:</strong> <span class="severity-critical">КРИТИЧЕСКАЯ</span></p>
+            <p><strong>Описание:</strong> Запись структуры из 7 слов (28 байт) выполняется побайтово в цикле. Если питание отключится во время записи, часть слов будет записана, а часть — нет. Это приведёт к:</p>
+            <ul>
+                <li>Повреждению данных</li>
+                <li>Потере настроек</li>
+                <li>Возможному зацикливанию стирания</li>
+            </ul>
+            <pre><code>// Проблемный код:
+for (uint32_t i = 0; i < struct_size / DATAWIDTH; i++) {
+    FLASH_ProgramWord(ResAddress, pBuffer[i]);  // ← прерывание здесь
+    ResAddress = ResAddress + DATAWIDTH;
+}</code></pre>
+        </div>
+
+        <h3 class="severity-critical">Проблема 2: Полное стирание при переполнении</h3>
+        <div class="danger">
+            <p><strong>Серьёзность:</strong> <span class="severity-critical">КРИТИЧЕСКАЯ</span></p>
+            <p><strong>Описание:</strong> При заполнении всех слотов стираются <strong>обе страницы</strong> (128 байт), хотя для записи новой данных нужна только одна. Это:</p>
+            <ul>
+                <li>Удваивает износ Flash</li>
+                <li>Уменьшает срок службы в 2 раза</li>
+                <li>Лишняя работа (два цикла стирания)</li>
+            </ul>
+            <pre><code>// Проблемный код:
+static int erase_flash(void) {
+    FLASH_ErasePage(PAGE_WRITE_START_ADDR);        // ← лишнее
+    FLASH_ErasePage(PAGE_WRITE_START_ADDR + FLASH_PAGE_SIZE);  // ← достаточно только это
+}</code></pre>
+        </div>
+
+        <h3 class="severity-warning">Проблема 3: Слабая валидация слотов</h3>
+        <div class="warning">
+            <p><strong>Серьёзность:</strong> <span class="severity-warning">СРЕДНЯЯ</span></p>
+            <p><strong>Описание:</strong> Проверяется только первый байт слота (<code>*(volatile uint8_t*)current != 0xFF</code>). Если первый байт не 0xFF, но остальные повреждены:</p>
+            <ul>
+                <li>Слот считается валидным</li>
+                <li>Повреждённые данные будут прочитаны</li>
+                <li>CRC может не обнаружить проблему (если повреждение совпало с корректным CRC)</li>
+            </ul>
+        </div>
+
+        <h3 class="severity-warning">Проблема 4: CRC == 0 — ложная валидация</h3>
+        <div class="warning">
+            <p><strong>Серьёзность:</strong> <span class="severity-warning">СРЕДНЯЯ</span></p>
+            <p><strong>Описание:</strong> Проверка <code>if (sum == 0)</code> предполагает, что если CRC32 всех данных (включая поле crc) равно 0, данные валидны. Однако:</p>
+            <ul>
+                <li>Вероятность: 1/2³² ≈ 2.3×10⁻¹⁰ (крайне мала)</li>
+                <li>Но при повреждении данных CRC может случайно стать 0</li>
+                <li>Более надёжно: хранить CRC отдельно и сравнивать с вычисленным</li>
+            </ul>
+        </div>
+
+        <h3 class="severity-info">Проблема 5: Остаточный указатель ResAddress</h3>
+        <div class="info">
+            <p><strong>Серьёзность:</strong> <span class="severity-info">НИЗКАЯ</span></p>
+            <p><strong>Описание:</strong> Глобальная переменная <code>ResAddress</code> обновляется после каждой записи, но не сбрасывается при стирании. Это может привести к использованию устаревшего адреса, если стирание произошло в другой функции.</p>
+        </div>
+
+        <h3 class="severity-info">Проблема 6: Нет проверки возврата FLASH_ProgramWord</h3>
+        <div class="info">
+            <p><strong>Серьёзность:</strong> <span class="severity-info">НИЗКАЯ</span></p>
+            <p><strong>Описание:</strong> Ошибка записи фиксируется в переменной <code>success</code>, но не обрабатывается. Запись продолжается даже при ошибке.</p>
+        </div>
+
+        <hr>
+
+        <h2 id="optimizations">6. Рекомендации по оптимизации</h2>
+
+        <h3 class="severity-critical">Оптимизация 1: Двойной буфер (Double Buffering)</h3>
+        <div class="opt">
+            <p><strong>Цель:</strong> Обеспечить атомарность записи</p>
+            <p><strong>Решение:</strong> Использовать два слота для каждой настройки. Записывать сначала в резервный, затем в основной. При чтении — брать последний валидный.</p>
+            <pre><code>// Структура с двойным буфером
+struct __attribute__((packed, aligned(4))) ee_slot {
+    struct ee_data data;    // 28 байт
+    uint32_t seq;           // 4 байта: номер последовательности
+};
+
+// Запись:
+// 1. Увеличиваем seq
+// 2. Записываем в слот 0
+// 3. Записываем в слот 1 (копия)
+// 4. При чтении — берём слот с наибольшим seq</code></pre>
+        </div>
+
+        <h3 class="severity-warning">Оптимизация 2: Стирание только одной страницы</h3>
+        <div class="opt">
+            <p><strong>Цель:</strong> Уменьшить износ Flash</p>
+            <p><strong>Решение:</strong> Стирать только ту страницу, которая заполнена.</p>
+            <pre><code>static int erase_flash(void) {
+    // Определяем, какая страница заполнена
+    uint32_t page1_start = PAGE_WRITE_START_ADDR;
+    uint32_t page2_start = PAGE_WRITE_START_ADDR + FLASH_PAGE_SIZE;
+
+    // Стираем только заполненную страницу
+    if (*(volatile uint8_t*)page1_start != 0xFF) {
+        FLASH_ErasePage(page1_start);
+    } else if (*(volatile uint8_t*)page2_start != 0xFF) {
+        FLASH_ErasePage(page2_start);
+    }
+
+    return 1;
+}</code></pre>
+        </div>
+
+        <h3 class="severity-warning">Оптимизация 3: Улучшенная валидация</h3>
+        <div class="opt">
+            <p><strong>Цель:</strong> Обнаруживать повреждённые слоты</p>
+            <p><strong>Решение:</strong> Проверять не только первый байт, но и CRC перед использованием.</p>
+            <pre><code>bool is_slot_valid(uint32_t addr) {
+    // Проверяем первый байт
+    if (*(volatile uint8_t*)addr == 0xFF) {
+        return false;
+    }
+
+    // Проверяем CRC
+    struct ee_data temp;
+    memcpy(&temp, (void*)addr, sizeof(struct ee_data));
+
+    uint32_t calculated_crc = crc32_le_words(
+        sizeof(struct ee_data) - DATAWIDTH, &temp
+    );
+
+    return (calculated_crc == temp.crc);
+}</code></pre>
+        </div>
+
+        <h3 class="severity-info">Оптимизация 4: Счётчик последовательности</h3>
+        <div class="opt">
+            <p><strong>Цель:</strong> Определять порядок записей</p>
+            <p><strong>Решение:</strong> Добавить поле <code>seq</code> в структуру для отслеживания порядка.</p>
+            <pre><code>// В структуру ee_data добавить:
+uint32_t seq;  // Номер записи (увеличивается при каждой записи)
+
+// При чтении:
+// Берём запись с максимальным seq</code></pre>
+        </div>
+
+        <h3 class="severity-info">Оптимизация 5: Проверка ошибок записи</h3>
+        <div class="opt">
+            <p><strong>Цель:</strong> Обрабатывать ошибки записи</p>
+            <p><strong>Решение:</strong> Прерывать запись при ошибке и пытаться стереть.</p>
+            <pre><code>int write_ee(void) {
+    // ... существующий код ...
+
+    for (uint32_t i = 0; i < struct_size / DATAWIDTH; i++) {
+        if (FLASH_ProgramWord(ResAddress, pBuffer[i]) != FLASH_COMPLETE) {
+            FLASH_Lock();
+            erase_flash();
+            return 0;  // Ошибка записи
+        }
+        ResAddress += DATAWIDTH;
+    }
+
+    FLASH_Lock();
+    return 1;
+}</code></pre>
+        </div>
+
+        <hr>
+
+        <h2 id="rating">7. Итоговая оценка</h2>
+
+        <table>
+            <tr><th>Критерий</th><th>Оценка</th><th>Комментарий</th></tr>
+            <tr><td>Простота</td><td style="color: var(--green);">★★★★★</td><td>Очень простой и понятный код</td></tr>
+            <tr><td>Атомарность</td><td style="color: var(--red);">★★☆☆☆</td><td>Нет защиты от обрыва питания</td></tr>
+            <tr><td>Износостойкость</td><td style="color: var(--orange);">★★★☆☆</td><td>Лишнее стирание обеих страниц</td></tr>
+            <tr><td>Целостность данных</td><td style="color: var(--green);">★★★★☆</td><td>CRC32 обнаруживает ошибки</td></tr>
+            <tr><td>Обнаружение ошибок</td><td style="color: var(--orange);">★★★☆☆</td><td>Слабая валидация слотов</td></tr>
+            <tr><td>Расширяемость</td><td style="color: var(--green);">★★★★☆</td><td>Легко добавить новые поля</td></tr>
+        </table>
+
+        <div class="warning">
+            <strong>Общая оценка:</strong> <span style="color: var(--orange); font-size: 1.2em;">3.5 / 5</span>
+            <p>Алгоритм подходит для прототипов и устройств с батарейным питанием (где обрыв питания маловероятен). Для промышленных решений cần дополнительная доработка.</p>
+        </div>
+
+        <hr>
+
+        <h3>Приоритет рекомендаций</h3>
+        <table>
+            <tr><th>#</th><th>Оптимизация</th><th>Приоритет</th><th>Сложность</th></tr>
+            <tr><td>1</td><td>Двойной буфер</td><td style="color: var(--red);">КРИТИЧЕСКИЙ</td><td>Средняя</td></tr>
+            <tr><td>2</td><td>Строгое стирание</td><td style="color: var(--orange);">ВЫСОКИЙ</td><td>Низкая</td></tr>
+            <tr><td>3</td><td>Улучшенная валидация</td><td style="color: var(--orange);">ВЫСОКИЙ</td><td>Низкая</td></tr>
+            <tr><td>4</td><td>Счётчик seq</td><td style="color: var(--yellow);">СРЕДНИЙ</td><td>Низкая</td></tr>
+            <tr><td>5</td><td>Обработка ошибок</td><td style="color: var(--yellow);">СРЕДНИЙ</td><td>Низкая</td></tr>
+        </table>
+    </div>
+</body>
+</html>
