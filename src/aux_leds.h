@@ -122,11 +122,14 @@ extern const uint32_t buf_grn[];
 extern const uint32_t buf_sos_red[];
 
 
+bool is_aux_active(LED_Bits_t channel);
+bool is_aux_mode(LED_Bits_t channel, IDM_Type_t mode);
 bool is_aux_cmd(LED_Bits_t channel);
 bool is_aux_beacon(LED_Bits_t channel);
 bool is_aux_voltage(LED_Bits_t channel);
 bool is_aux_strobe(LED_Bits_t channel);
 bool is_aux_other(LED_Bits_t channel);
+void stop_aux_mode(LED_Bits_t channel, IDM_Type_t mode);
 void stop_aux_beacon(LED_Bits_t channel);
 void stop_aux_voltage(LED_Bits_t channel);
 void stop_aux_strobe(LED_Bits_t channel);

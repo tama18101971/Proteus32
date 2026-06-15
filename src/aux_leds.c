@@ -29,11 +29,6 @@ const uint32_t buf_grn[3] 		= {0b101000000000000010001011010, 0b1000101000000000
 //const uint32_t buf_sos_red[5]	= {0xA0571, 0x4140A31, 0x4141E31, 0x4140A31, 0x1}; // .=10 -=30
 const uint32_t buf_sos_red[5]	= {0b10100000010101110001, 0b0100000101000000101000110001, 0b0100000101000001111000110001, 0b0100000101000000101000110001, 1};
 
-const uint32_t strobes[3][5]	= {	{0xA0571, 0x4140A31, 0x4141E31, 0x4140A31, 0x1 }, // .=10 -=30 SOS
-									{},
-									{},
-									};
-
 union AUX_Cmd_u *p_red;
 union AUX_Cmd_u *p_grn;
 union AUX_Cmd_u *p_hbl;
@@ -52,23 +47,31 @@ bool EnableArrayProcessingGrn = false;
 const uint32_t *current_buf_red = NULL;
 const uint32_t *current_buf_grn = NULL;
 
+static AUX_Ctr_t *const aux_ctl_table[] = {
+	[RED_LED] = &aux_ctl_red,
+	[GRN_LED] = &aux_ctl_grn,
+	[HBL_LED] = &aux_ctl_hbl,
+};
+
+static union AUX_Cmd_u *const aux_cmd_table[] = {
+	[RED_LED] = &aux_cmd_red,
+	[GRN_LED] = &aux_cmd_grn,
+	[HBL_LED] = &aux_cmd_hbl,
+};
+
+static union AUX_Cmd_u **const aux_ptr_table[] = {
+	[RED_LED] = &p_red,
+	[GRN_LED] = &p_grn,
+	[HBL_LED] = &p_hbl,
+};
+
 void start_aux_array(const uint32_t *pArray) {
 	LED_Bits_t channel = (LED_Bits_t)(pArray[0] & 0x07);
-	AUX_Ctr_t *ctl;
-	bool *flag;
 
-	switch (channel) {
-	case RED_LED:
-		ctl = &aux_ctl_red;
-		flag = &EnableArrayProcessingRed;
-		break;
-	case GRN_LED:
-		ctl = &aux_ctl_grn;
-		flag = &EnableArrayProcessingGrn;
-		break;
-	default:
-		return;
-	}
+	if (channel < RED_LED || channel > GRN_LED) return;
+
+	AUX_Ctr_t *ctl = aux_ctl_table[channel];
+	bool *flag = (channel == RED_LED) ? &EnableArrayProcessingRed : &EnableArrayProcessingGrn;
 
 	uint32_t *p = (uint32_t*)ctl;
 	*p = 0;
@@ -110,63 +113,39 @@ void smart_off_leds(LED_Bits_t channel) {
 }
 
 static AUX_Ctr_t* get_aux_ctl(LED_Bits_t channel) {
-	switch (channel)
-	{
-	case RED_LED:  return &aux_ctl_red;
-	case GRN_LED:  return &aux_ctl_grn;
-	case HBL_LED:  return &aux_ctl_hbl;
-	default:       return NULL;
-	}
+	if (channel < RED_LED || channel > HBL_LED) return NULL;
+	return aux_ctl_table[channel];
 }
 
-static union AUX_Cmd_u* get_aux_cmd(LED_Bits_t channel) {
-	switch (channel)
-	{
-	case RED_LED:  return &aux_cmd_red;
-	case GRN_LED:  return &aux_cmd_grn;
-	case HBL_LED:  return &aux_cmd_hbl;
-	default:       return NULL;
-	}
+bool is_aux_mode(LED_Bits_t channel, IDM_Type_t mode) {
+	AUX_Ctr_t *ctl = get_aux_ctl(channel);
+	return (ctl && ctl->enable && (ctl->idmode == mode));
 }
 
-static union AUX_Cmd_u** get_aux_ptr(LED_Bits_t channel) {
-	switch (channel)
-	{
-	case RED_LED:  return &p_red;
-	case GRN_LED:  return &p_grn;
-	case HBL_LED:  return &p_hbl;
-	default:       return NULL;
-	}
-}
-
-bool is_aux_cmd(LED_Bits_t channel) {
+bool is_aux_active(LED_Bits_t channel) {
 	AUX_Ctr_t *ctl = get_aux_ctl(channel);
 	return (ctl && ctl->enable);
 }
 
-bool is_aux_beacon(LED_Bits_t channel) {
-	AUX_Ctr_t *ctl = get_aux_ctl(channel);
-	return (ctl && ctl->enable && (ctl->idmode == IDM_BEACON));
-}
-
-bool is_aux_voltage(LED_Bits_t channel) {
-	AUX_Ctr_t *ctl = get_aux_ctl(channel);
-	return (ctl && ctl->enable && (ctl->idmode == IDM_VWARNING));
-}
-
-bool is_aux_strobe(LED_Bits_t channel) {
-	AUX_Ctr_t *ctl = get_aux_ctl(channel);
-	return (ctl && ctl->enable && (ctl->idmode == IDM_STROBE));
-}
-
-bool is_aux_other(LED_Bits_t channel) {
-	AUX_Ctr_t *ctl = get_aux_ctl(channel);
-	return (ctl && ctl->enable && (ctl->idmode == IDM_OTHER));
-}
+bool is_aux_cmd(LED_Bits_t channel) { return is_aux_active(channel); }
+bool is_aux_beacon(LED_Bits_t channel) { return is_aux_mode(channel, IDM_BEACON); }
+bool is_aux_voltage(LED_Bits_t channel) { return is_aux_mode(channel, IDM_VWARNING); }
+bool is_aux_strobe(LED_Bits_t channel) { return is_aux_mode(channel, IDM_STROBE); }
+bool is_aux_other(LED_Bits_t channel) { return is_aux_mode(channel, IDM_OTHER); }
 
 /************************************************************************/
 /*                                                                      */
 /************************************************************************/
+static union AUX_Cmd_u* get_aux_cmd(LED_Bits_t channel) {
+	if (channel < RED_LED || channel > HBL_LED) return NULL;
+	return aux_cmd_table[channel];
+}
+
+static union AUX_Cmd_u** get_aux_ptr(LED_Bits_t channel) {
+	if (channel < RED_LED || channel > HBL_LED) return NULL;
+	return aux_ptr_table[channel];
+}
+
 void off_aux_cmd(LED_Bits_t channel, bool stop_lsi) {
 	AUX_Ctr_t *ctl = get_aux_ctl(channel);
 	if (!ctl) return;
@@ -178,7 +157,7 @@ void off_aux_cmd(LED_Bits_t channel, bool stop_lsi) {
 	smart_off_leds(channel);
 
 	if (stop_lsi) {
-		if (!is_aux_cmd(RED_LED) && !is_aux_cmd(GRN_LED) && !is_aux_cmd(HBL_LED)) {
+		if (!is_aux_active(RED_LED) && !is_aux_active(GRN_LED) && !is_aux_active(HBL_LED)) {
 			awu_stop(true);
 		}
 	}
@@ -237,19 +216,20 @@ void aux_cmd_info_grn(void) {
  * @param idm_mode  режим индикации (beacon, vwarning, strobe, other)
  */
 void set_aux_cmd(uint32_t command, awu_tick_t delay, bool enable, IDM_Type_t idm_mode) {
-    // Извлекаем номер канала из младших 3 бит команды (биты 0..2 = поле device в AUX_Cmd_u)
     LED_Bits_t channel = command & 0x07;
 
 	#ifdef AUX_DEBUG
 	debug_cmd(command);
 	#endif
 
-    // Получаем указатели на структуры команды, контроля и указателя для целевого канала
-    union AUX_Cmd_u *cmd = get_aux_cmd(channel);    // буфер команды (aux_cmd_red/grn/hbl)
-    AUX_Ctr_t *ctl = get_aux_ctl(channel);          // регистр состояния канала
-    union AUX_Cmd_u **ptr = get_aux_ptr(channel);   // указатель на активную команду (p_red/grn/hbl)
+    union AUX_Cmd_u *cmd = get_aux_cmd(channel);
+    AUX_Ctr_t *ctl = get_aux_ctl(channel);
+    union AUX_Cmd_u **ptr = get_aux_ptr(channel);
 
     if (!cmd || !ctl || !ptr) return;
+
+    if (channel == RED_LED) EnableArrayProcessingRed = false;
+    else if (channel == GRN_LED) EnableArrayProcessingGrn = false;
 
     cmd->aux_cmd = command;
 
@@ -300,77 +280,60 @@ static void SetBrightness(LED_Bits_t device, uint8_t brightness) {
 //
 //********************************************************************************************************************************//
 
+static bool handle_half_period(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits,
+								uint8_t brightness, uint16_t next_duration, PER_Step_t next_period) {
+	LED_Bits_t device = (LED_Bits_t) aux->aux.device;
+
+	if (brightness != ubits->current_brightness) {
+		SetBrightness(device, brightness);
+		ubits->current_brightness = brightness;
+	}
+
+	uint16_t duration = (uint16_t)(ubits->work_duration);
+
+	if (--duration) {
+		ubits->work_duration = duration;
+		return false;
+	}
+
+	ubits->period = next_period;
+	ubits->work_duration = next_duration;
+	return true;
+}
+
 void handle_aux_cmd(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits) {
 
 	if (ubits->enable) {
 
 		if (ubits->period == PER_INIT) {
-			// ИНИЦИАЛИЗАЦИЯ
-			ubits->work_duration = aux->aux.duration0;				// Загружаем длительность.
+			ubits->work_duration = aux->aux.duration0;
 			ubits->work_count = aux->aux.count;
 			ubits->period = PER_FIRST;
 		}
 
-		LED_Bits_t device = (LED_Bits_t) aux->aux.device;				// Определяем, чем управлять
-
-		uint8_t current_brightness, brightness;
-		uint16_t duration;
-		uint8_t cycle = (uint8_t) aux->aux.cycle;						// достаем признак вечного цикла
-		uint8_t counter = (uint8_t) ubits->work_count;					// Достаем счетчик
-
 		if (ubits->period == PER_FIRST) {
-			// ОБРАБАТЫВАЕМ НУЛЕВОЙ ПОЛУПЕРИОД
-			brightness = (uint8_t) aux->aux.brightness0;				//... определяем какую яркость установить...
-
-			uint8_t current_brightness = ubits->current_brightness;
-
-			if (brightness != current_brightness) {						// если яркость изменилась - устанавливаем ее.
-				SetBrightness(device, brightness);
-				ubits->current_brightness = brightness;
-			}
-
-			duration = (uint16_t) (ubits->work_duration);				//... на какое время.
-
-			if (--duration) {											// если длительность 0 - закончилась переходим ко второму полупериоду
-				ubits->work_duration = duration;						// записываем новое уменьшенное значение
-			} else {
-				ubits->period = PER_SECOND;								// Переключаем период.
-				ubits->work_duration = aux->aux.duration1;				// загружаем значение для следующего полупериода
-			}
+			handle_half_period(aux, ubits, aux->aux.brightness0, aux->aux.duration1, PER_SECOND);
 		}
-		
+
 		else if (ubits->period == PER_SECOND) {
-			// ОБРАБАТЫВАЕМ ВТОРОЙ ПОЛУПЕРИОД
-			brightness = (uint8_t) aux->aux.brightness1;
-
-			current_brightness = ubits->current_brightness;
-
-			if (brightness != current_brightness) {						// если яркость изменилась - устанавливаем ее.
-				SetBrightness(device, brightness);
-				ubits->current_brightness = brightness;
-			}
-
-			duration = (uint16_t) (ubits->work_duration);
-
-			if (--duration) {											// если длительность 0 - закончилась переходим ко второму полупериоду
-				ubits->work_duration = duration;						// записываем новое уменьшенное значение
-			} else {
-				ubits->period = PER_END;								// Досчитали второй полупериод. Переключаем период.
-			}
+			handle_half_period(aux, ubits, aux->aux.brightness1, 0, PER_END);
 		}
 
-		else if (ubits->period == PER_END) {									// Два полупериода досчитано - пора решать, что делать дальше.
+		else if (ubits->period == PER_END) {
 
-			ubits->work_duration = aux->aux.duration0;					// Загружаем длительность для следующего цикла.
-			ubits->period = PER_FIRST;									// На первый полупериод
+			ubits->work_duration = aux->aux.duration0;
+			ubits->period = PER_FIRST;
 
-			if (!cycle) {												// уменьшаем счетчик, если цикл не вечный
+			uint8_t cycle = (uint8_t) aux->aux.cycle;
+			uint8_t counter = (uint8_t) ubits->work_count;
+
+			if (!cycle) {
 				counter--;
 				ubits->work_count = counter;
 
-				if (!counter) {											// Если счетчик досчитал до 0 - отключаем.
+				if (!counter) {
 					ubits->enable = false;
-					ubits->period = PER_NEXT;							// Сообщаем, что пора загружать новую команду.
+					ubits->period = PER_NEXT;
 				}
 			}
 		}
@@ -470,26 +433,14 @@ void start_exaux_voltage(WARNING_Fr_t ex_mode) {
 /************************************************************************/
 /*                                                                      */
 /************************************************************************/
-void stop_aux_beacon(LED_Bits_t channel) {
-	if (is_aux_beacon(channel))
+void stop_aux_mode(LED_Bits_t channel, IDM_Type_t mode) {
+	if (is_aux_mode(channel, mode))
 		off_aux_cmd(channel, false);
 }
 
-/************************************************************************/
-/*                                                                      */
-/************************************************************************/
-void stop_aux_voltage(LED_Bits_t channel) {
-	if (is_aux_voltage(channel))
-		off_aux_cmd(channel, false);
-}
-
-/************************************************************************/
-/*                                                                      */
-/************************************************************************/
-void stop_aux_strobe(LED_Bits_t channel) {
-	if (is_aux_strobe(channel))
-		off_aux_cmd(channel, false);
-}
+void stop_aux_beacon(LED_Bits_t channel) { stop_aux_mode(channel, IDM_BEACON); }
+void stop_aux_voltage(LED_Bits_t channel) { stop_aux_mode(channel, IDM_VWARNING); }
+void stop_aux_strobe(LED_Bits_t channel) { stop_aux_mode(channel, IDM_STROBE); }
 
 /************************************************************************/
 /*                                                                      */
@@ -542,31 +493,12 @@ void debug_cmd(uint32_t cmd) {
 /*                                                                      */
 /************************************************************************/
 void test_aux_beacon(void) {
-
-//	aux_cmd_red.aux.brightness0	= 0;
-//	aux_cmd_red.aux.brightness1	= 0;
-//	aux_cmd_red.aux.count		= 7;
-//	aux_cmd_red.aux.cycle		= false;
-//	aux_cmd_red.aux.device		= RED_LED;
-//	aux_cmd_red.aux.duration0	= 5;//8;
-//	aux_cmd_red.aux.duration1	= 5;//128;
-
 	uint32_t *p = (uint32_t*)&aux_ctl_red;
 	*p = 0;
 	p = (uint32_t*)&aux_ctl_grn;
 	*p = 0;
 
 	aux_ctl_red.idmode			= IDM_BEACON;
-	//aux_ctl_red.arr_index		= 0;
-	//aux_ctl_red.enable			= true;
-
-//	aux_cmd_grn.aux.brightness0	= 1;
-//	aux_cmd_grn.aux.brightness1	= 0;
-//	aux_cmd_grn.aux.count		= 5;
-//	aux_cmd_grn.aux.cycle		= true;
-//	aux_cmd_grn.aux.device		= GRN_LED;
-//	aux_cmd_grn.aux.duration0	= 4;//8;
-//	aux_cmd_grn.aux.duration1	= 40;//128;
 
 	aux_ctl_grn.idmode			= IDM_BEACON;
 	aux_ctl_grn.arr_index		= 0;
