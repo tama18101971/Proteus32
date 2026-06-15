@@ -74,7 +74,7 @@ int main(void)
 
     Delay_Ms(4000);
 
-#ifdef WL_FLASH_DEBUG
+#if defined(WL_FLASH_DEBUG) || defined(AUX_DEBUG)
     USART_Printf_Init(115200);
 #endif
 
@@ -99,7 +99,10 @@ int main(void)
 
     // здесь дописать усыпание
 
-    test_aux_beacon();
+    //test_aux_beacon();
+    
+    set_aux_cmd(MAKE_CMD(RED_LED, 0, 2, 5, 20, 1, 0), AUX_15MS, true, IDM_BEACON);
+    set_aux_cmd(MAKE_CMD(GRN_LED, 1, 0, 5, 200, 1, 0), AUX_15MS, true, IDM_BEACON);
 
     while (1)
     {

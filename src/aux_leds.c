@@ -26,7 +26,7 @@ uint8_t vwarning_old = VWARNING_NONE;
 
 const uint32_t buf_red[5]		= {0b101000000000000010001010001, 0b100010100000000010001010001, 0b101000000000000010001000001, 0b100010100000000010001010001, 0x6};
 const uint32_t buf_grn[3] 		= {0b101000000000000010001011010, 0b100010100000000010001011010, 0};
-//const uint32_t buf_sos_red[5]	= {0xA0571, 0x4140A31, 0x4141E31, 0x4140A31, 0x1}; // .=10 -=30
+const uint32_t buf_sos_red[5]	= {0xA0571, 0x4140A31, 0x4141E31, 0x4140A31, 0x1}; // .=10 -=30
 
 const uint32_t strobes[3][5]	= {	{0xA0571, 0x4140A31, 0x4141E31, 0x4140A31, 0x1 }, // .=10 -=30 SOS
 									{},
@@ -45,12 +45,12 @@ AUX_Ctr_t aux_ctl_red;
 AUX_Ctr_t aux_ctl_grn;
 AUX_Ctr_t aux_ctl_hbl;
 
-bool EnableArrayProcessing = true;
+bool EnableArrayProcessing = false;
 
 /************************************************************************/
 /*                                                                      */
 /************************************************************************/
-void smart_off(LED_Bits_t channel) {
+void smart_off_leds(LED_Bits_t channel) {
 	if (ee.aux.bcklight_type != BCK_TYPE_ON) {
 		if (channel == RED_LED) off_red();
 		else off_grn();
@@ -136,10 +136,12 @@ void off_aux_cmd(LED_Bits_t channel, bool stop_lsi) {
 	ctl->period = PER_INIT;
 	ctl->idmode = IDM_OTHER;
 
-	smart_off(channel);
+	smart_off_leds(channel);
 
 	if (stop_lsi) {
-		awu_stop(stop_lsi);
+		if (!is_aux_cmd(RED_LED) && !is_aux_cmd(GRN_LED) && !is_aux_cmd(HBL_LED)) {
+			awu_stop(true);
+		}
 	}
 }
 
@@ -199,6 +201,10 @@ void set_aux_cmd(uint32_t command, awu_tick_t delay, bool enable, IDM_Type_t idm
     // Извлекаем номер канала из младших 3 бит команды (биты 0..2 = поле device в AUX_Cmd_u)
     LED_Bits_t channel = command & 0x07;
 
+	#ifdef AUX_DEBUG
+	debug_cmd(command);
+	#endif
+
     // Получаем указатели на структуры команды, контроля и указателя для целевого канала
     union AUX_Cmd_u *cmd = get_aux_cmd(channel);    // буфер команды (aux_cmd_red/grn/hbl)
     AUX_Ctr_t *ctl = get_aux_ctl(channel);          // регистр состояния канала
@@ -226,11 +232,11 @@ static void SetBrightness(LED_Bits_t device, uint8_t brightness) {
 	switch (device) {
 		case RED_LED:
 			if (brightness) on_red_h();
-			else smart_off(RED_LED);
+			else smart_off_leds(RED_LED);
 			break;
 		case GRN_LED:
 			if (brightness) on_grn_h();
-			else smart_off(GRN_LED);
+			else smart_off_leds(GRN_LED);
 			break;
 		case HBL_LED:
 			// TODO: Сделать
@@ -334,41 +340,6 @@ void handle_aux_cmd(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits) {
 	}
 }
 
-/************************************************************************/
-/*                                                                      */
-/************************************************************************/
-void test_aux_beacon(void) {
-
-//	aux_cmd_red.aux.brightness0	= 0;
-//	aux_cmd_red.aux.brightness1	= 0;
-//	aux_cmd_red.aux.count		= 7;
-//	aux_cmd_red.aux.cycle		= false;
-//	aux_cmd_red.aux.device		= RED_LED;
-//	aux_cmd_red.aux.duration0	= 5;//8;
-//	aux_cmd_red.aux.duration1	= 5;//128;
-
-	uint32_t *p = (uint32_t*)&aux_ctl_red;
-	*p = 0;
-	p = (uint32_t*)&aux_ctl_grn;
-	*p = 0;
-
-	aux_ctl_red.idmode			= IDM_BEACON;
-	//aux_ctl_red.arr_index		= 0;
-	aux_ctl_red.enable			= true;
-
-//	aux_cmd_grn.aux.brightness0	= 1;
-//	aux_cmd_grn.aux.brightness1	= 0;
-//	aux_cmd_grn.aux.count		= 5;
-//	aux_cmd_grn.aux.cycle		= true;
-//	aux_cmd_grn.aux.device		= GRN_LED;
-//	aux_cmd_grn.aux.duration0	= 4;//8;
-//	aux_cmd_grn.aux.duration1	= 40;//128;
-
-	aux_ctl_grn.idmode			= IDM_BEACON;
-	aux_ctl_grn.arr_index		= 0;
-	aux_ctl_grn.enable			= true;
-}
-
 union AUX_Cmd_u *handle_aux_array(const uint32_t pArray[], AUX_Ctr_t *ctr) {
 
 	union AUX_Cmd_u *p = (union AUX_Cmd_u*) pArray;
@@ -430,14 +401,6 @@ void start_aux_beacon(void) {
 	set_aux_cmd(cmd, AUX_1S, true, IDM_BEACON);
 }
 
-/************************************************************************/
-/*                                                                      */
-/************************************************************************/
-void stop_aux_beacon(void) {
-	if (is_aux_beacon(RED_LED))
-		off_aux_cmd(RED_LED, false);
-}
-
 #ifdef USE_EX_AUX
 /************************************************************************/
 /*                   �������� ����������� ������������                  */
@@ -462,9 +425,25 @@ void start_exaux_voltage(WARNING_Fr_t ex_mode) {
 /************************************************************************/
 /*                                                                      */
 /************************************************************************/
-void stop_aux_voltage(void) {
-	if (is_aux_voltage(RED_LED))
-		off_aux_cmd(RED_LED, false);
+void stop_aux_beacon(LED_Bits_t channel) {
+	if (is_aux_beacon(channel))
+		off_aux_cmd(channel, false);
+}
+
+/************************************************************************/
+/*                                                                      */
+/************************************************************************/
+void stop_aux_voltage(LED_Bits_t channel) {
+	if (is_aux_voltage(channel))
+		off_aux_cmd(channel, false);
+}
+
+/************************************************************************/
+/*                                                                      */
+/************************************************************************/
+void stop_aux_strobe(LED_Bits_t channel) {
+	if (is_aux_strobe(channel))
+		off_aux_cmd(channel, false);
 }
 
 /************************************************************************/
@@ -473,17 +452,10 @@ void stop_aux_voltage(void) {
 void slot_batt_ind(void) /* в массив настраиваемых слотов */
 {
 #ifdef USE_BATTIND
-	stop_aux_beacon();					// 20.03.2021
+	stop_aux_beacon(RED_LED);					// 20.03.2021
+	stop_aux_beacon(GRN_LED);					// 15.06.2026
 	set_aux_count(bat_get_flashes());
 #endif
-}
-
-/************************************************************************/
-/*                                                                      */
-/************************************************************************/
-void stop_aux_strobe(void) {
-//	if (is_aux_strobe())
-//		off_aux_cmd(RED_LED, false);
 }
 
 void aux_on(void) {
@@ -504,4 +476,54 @@ void aux_count(uint8_t count) {
 }
 
 /**********************************************************************************************/
+#ifdef AUX_DEBUG
+// Функция для отладки: вывод полей команды
+void debug_cmd(uint32_t cmd) {
+    union AUX_Cmd_u u;
+    u.aux_cmd = cmd;
 
+    EE_PRINTF("[AUX] CMD: 0x%08lX\n", cmd);
+    EE_PRINTF("  device    = %d\n", u.aux.device);
+    EE_PRINTF("  cycle     = %d\n", u.aux.cycle);
+    EE_PRINTF("  count     = %d\n", u.aux.count);
+    EE_PRINTF("  duration0 = %d (%d ms)\n", u.aux.duration0, u.aux.duration0 * 15);
+    EE_PRINTF("  duration1 = %d (%d ms)\n", u.aux.duration1, u.aux.duration1 * 15);
+    EE_PRINTF("  bright0   = %d\n", u.aux.brightness0);
+    EE_PRINTF("  bright1   = %d\n", u.aux.brightness1);
+}
+#endif /* AUX_DEBUG */
+
+/************************************************************************/
+/*                                                                      */
+/************************************************************************/
+void test_aux_beacon(void) {
+
+//	aux_cmd_red.aux.brightness0	= 0;
+//	aux_cmd_red.aux.brightness1	= 0;
+//	aux_cmd_red.aux.count		= 7;
+//	aux_cmd_red.aux.cycle		= false;
+//	aux_cmd_red.aux.device		= RED_LED;
+//	aux_cmd_red.aux.duration0	= 5;//8;
+//	aux_cmd_red.aux.duration1	= 5;//128;
+
+	uint32_t *p = (uint32_t*)&aux_ctl_red;
+	*p = 0;
+	p = (uint32_t*)&aux_ctl_grn;
+	*p = 0;
+
+	aux_ctl_red.idmode			= IDM_BEACON;
+	//aux_ctl_red.arr_index		= 0;
+	//aux_ctl_red.enable			= true;
+
+//	aux_cmd_grn.aux.brightness0	= 1;
+//	aux_cmd_grn.aux.brightness1	= 0;
+//	aux_cmd_grn.aux.count		= 5;
+//	aux_cmd_grn.aux.cycle		= true;
+//	aux_cmd_grn.aux.device		= GRN_LED;
+//	aux_cmd_grn.aux.duration0	= 4;//8;
+//	aux_cmd_grn.aux.duration1	= 40;//128;
+
+	aux_ctl_grn.idmode			= IDM_BEACON;
+	aux_ctl_grn.arr_index		= 0;
+	aux_ctl_grn.enable			= true;
+}

@@ -12,6 +12,7 @@
 #include <stdbool.h>
 #include "awu.h"
 #include "button_gpio.h"
+#include "config.h"
 
 typedef enum {
 	RED_LED = 0b001,
@@ -116,9 +117,9 @@ bool is_aux_beacon(LED_Bits_t channel);
 bool is_aux_voltage(LED_Bits_t channel);
 bool is_aux_strobe(LED_Bits_t channel);
 bool is_aux_other(LED_Bits_t channel);
-void stop_aux_beacon(void);
-void stop_aux_voltage(void);
-void stop_aux_strobe(void);
+void stop_aux_beacon(LED_Bits_t channel);
+void stop_aux_voltage(LED_Bits_t channel);
+void stop_aux_strobe(LED_Bits_t channel);
 void slot_batt_ind(void);
 void start_aux_beacon(void);
 void start_exaux_voltage(uint8_t beacon_mode);
@@ -126,7 +127,7 @@ void off_aux_cmd(LED_Bits_t channel, bool stop_lsi);
 void set_aux_count(uint8_t count);
 void set_aux_cmd(uint32_t command, awu_tick_t delay, bool enable, IDM_Type_t idm_mode);
 
-void smart_off(LED_Bits_t channel);
+void smart_off_leds(LED_Bits_t channel);
 
 void aux_on(void);
 void aux_off(void);
@@ -142,8 +143,35 @@ void aux_count(uint8_t count);
 void aux_cmd_info_red(void);
 void aux_cmd_info_grn(void);
 
+#ifdef AUX_DEBUG
+void debug_cmd(uint32_t cmd);
+#endif
+
+
 #define SHORT_BLINK 		0b00000000000000010000000000010001
 #define INFO_RED			0b00000000000000010001010100010001
 #define INFO_GRN			0b00000000000000010100010000100010
+
+/**
+ * @brief Формирует 32-битную AUX-команду из полей структуры AUX_Cmd_u
+ *
+ * @param device       канал управления (RED_LED=1, GRN_LED=2, HBL_LED=4)
+ * @param cycle        зацикливание (0 — однократно, 1 — повторять)
+ * @param count        количество повторов (0..15)
+ * @param duration0    длительность 1-го полупериода в тиках AWU (0..511)
+ * @param duration1    длительность 2-го полупериода в тиках AWU (0..511)
+ * @param brightness0  яркость 1-го полупериода (0..7)
+ * @param brightness1  яркость 2-го полупериода (0..7)
+ *
+ * @return 32-битная команда для set_aux_cmd() или массива
+ */
+#define MAKE_CMD(device, cycle, count, duration0, duration1, brightness0, brightness1) \
+    ((uint32_t)((device) & 0x7)             | \
+     ((uint32_t)((cycle) & 0x1) << 3)       | \
+     ((uint32_t)((count) & 0xF) << 4)       | \
+     ((uint32_t)((duration0) & 0x1FF) << 8) | \
+     ((uint32_t)((duration1) & 0x1FF) << 17)| \
+     ((uint32_t)((brightness0) & 0x7) << 26)| \
+     ((uint32_t)((brightness1) & 0x7) << 29))
 
 #endif /* AUX_LEDS_H_ */
