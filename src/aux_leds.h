@@ -154,7 +154,7 @@ void debug_cmd(uint32_t cmd);
 //#define SHORT_BLINK 		MAKE_CMD(RED_LED, 0, 1, 30, 60, 1, 0)
 #define INFO_RED			MAKE_CMD(RED_LED, 0, 1, 30, 60, 1, 0)
 #define INFO_GRN			MAKE_CMD(GRN_LED, 0, 1, 15, 75, 1, 0)
-#define ERRO_RED			MAKE_CMD(RED_LED, 0, 3, 2, 6, 1, 0)
+#define ERRO_RED			MAKE_CMD(RED_LED, 0, 3, 1, 6, 1, 0)
 
 /**
  * @brief Формирует 32-битную AUX-команду из полей структуры AUX_Cmd_u

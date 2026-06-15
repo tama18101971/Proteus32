@@ -277,6 +277,8 @@ void handle_aux_cmd(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits) {
 
 		uint8_t current_brightness, brightness;
 		uint16_t duration;
+		uint8_t cycle = (uint8_t) aux->aux.cycle;						// достаем признак вечного цикла
+		uint8_t counter = (uint8_t) ubits->work_count;					// Достаем счетчик
 
 		if (ubits->period == PER_FIRST) {
 			// ОБРАБАТЫВАЕМ НУЛЕВОЙ ПОЛУПЕРИОД
@@ -298,8 +300,8 @@ void handle_aux_cmd(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits) {
 				ubits->work_duration = aux->aux.duration1;				// загружаем значение для следующего полупериода
 			}
 		}
-
-		if (ubits->period == PER_SECOND) {
+		
+		else if (ubits->period == PER_SECOND) {
 			// ОБРАБАТЫВАЕМ ВТОРОЙ ПОЛУПЕРИОД
 			brightness = (uint8_t) aux->aux.brightness1;
 
@@ -319,11 +321,7 @@ void handle_aux_cmd(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits) {
 			}
 		}
 
-		// РАБОТАЕМ СО СЧЕТЧИКОМ
-		uint8_t cycle = (uint8_t) aux->aux.cycle;						// достаем признак вечного цикла
-		uint8_t counter = (uint8_t) ubits->work_count;					// Достаем счетчик
-
-		if (ubits->period == PER_END) {									// Два полупериода досчитано - пора решать, что делать дальше.
+		else if (ubits->period == PER_END) {									// Два полупериода досчитано - пора решать, что делать дальше.
 
 			ubits->work_duration = aux->aux.duration0;					// Загружаем длительность для следующего цикла.
 			ubits->period = PER_FIRST;									// На первый полупериод
