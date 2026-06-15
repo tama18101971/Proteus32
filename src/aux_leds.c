@@ -45,7 +45,8 @@ AUX_Ctr_t aux_ctl_red;
 AUX_Ctr_t aux_ctl_grn;
 AUX_Ctr_t aux_ctl_hbl;
 
-bool EnableArrayProcessing = false;
+bool EnableArrayProcessingRed = false;
+bool EnableArrayProcessingGrn = false;
 
 /************************************************************************/
 /*                                                                      */
@@ -350,7 +351,6 @@ union AUX_Cmd_u *handle_aux_array(const uint32_t pArray[], AUX_Ctr_t *ctr) {
 
 		switch ((Array_Cmd_t) p->cmd.command) {
 		case AC_STOP:							// остановить выполнение комманд
-			EnableArrayProcessing = false;		// Выключаем
 			p = NULL;
 			break;
 		case AC_REP_ATSTART:					// повторять в цикле с начала массива
@@ -381,9 +381,13 @@ union AUX_Cmd_u *handle_aux_array(const uint32_t pArray[], AUX_Ctr_t *ctr) {
 }
 
 void handle_aux(void) {
-	if (EnableArrayProcessing) {
+	if (EnableArrayProcessingRed) {
 		p_red = handle_aux_array(buf_red, &aux_ctl_red);
+		if (p_red == NULL) EnableArrayProcessingRed = false;
+	}
+	if (EnableArrayProcessingGrn) {
 		p_grn = handle_aux_array(buf_grn, &aux_ctl_grn);
+		if (p_grn == NULL) EnableArrayProcessingGrn = false;
 	}
 	handle_aux_cmd(p_red, &aux_ctl_red);
 	handle_aux_cmd(p_grn, &aux_ctl_grn);

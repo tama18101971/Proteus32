@@ -101,8 +101,8 @@ int main(void)
 
     //test_aux_beacon();
     
-    set_aux_cmd(MAKE_CMD(RED_LED, 0, 2, 5, 20, 1, 0), AUX_15MS, true, IDM_BEACON);
-    set_aux_cmd(MAKE_CMD(GRN_LED, 1, 0, 5, 200, 1, 0), AUX_15MS, true, IDM_BEACON);
+    set_aux_cmd(ERRO_RED, AUX_15MS, true, IDM_BEACON);
+    //set_aux_cmd(INFO_GRN, AUX_15MS, true, IDM_BEACON);
 
     while (1)
     {

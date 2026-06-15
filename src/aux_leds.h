@@ -111,6 +111,9 @@ extern union AUX_Cmd_u *p_grn;
 extern uint8_t vwarning;
 extern uint8_t vwarning_old;
 
+extern bool EnableArrayProcessingRed;
+extern bool EnableArrayProcessingGrn;
+
 
 bool is_aux_cmd(LED_Bits_t channel);
 bool is_aux_beacon(LED_Bits_t channel);
@@ -148,9 +151,10 @@ void debug_cmd(uint32_t cmd);
 #endif
 
 
-#define SHORT_BLINK 		0b00000000000000010000000000010001
-#define INFO_RED			0b00000000000000010001010100010001
-#define INFO_GRN			0b00000000000000010100010000100010
+//#define SHORT_BLINK 		MAKE_CMD(RED_LED, 0, 1, 30, 60, 1, 0)
+#define INFO_RED			MAKE_CMD(RED_LED, 0, 1, 30, 60, 1, 0)
+#define INFO_GRN			MAKE_CMD(GRN_LED, 0, 1, 15, 75, 1, 0)
+#define ERRO_RED			MAKE_CMD(RED_LED, 0, 3, 2, 6, 1, 0)
 
 /**
  * @brief Формирует 32-битную AUX-команду из полей структуры AUX_Cmd_u

@@ -100,12 +100,13 @@ cmd |= (new_value << start_bit); // записать значение
 
 ### 4. Алгоритм работы handle_aux()
 ```
-1. Проверяем EnableArrayProcessing
+1. Проверяем EnableArrayProcessingRed / EnableArrayProcessingGrn
 2. Если включено — обрабатываем массивы команд:
    - handle_aux_array() — извлекает команду из массива
    - Если команда == 0 — это системная команда (STOP/REP_ATSTART/REP_ATSTEPS)
    - Иначе — переходим к следующему элементу массива
-3. handle_aux_cmd() — выполняет команду:
+3. Если handle_aux_array() вернул NULL (AC_STOP) — выключаем соответствующий флаг
+4. handle_aux_cmd() — выполняет команду:
    - PER_INIT: загружаем duration0, count, переходим в PER_FIRST
    - PER_FIRST: устанавливаем brightness0, уменьшаем duration0
    - Когда duration0 == 0 → PER_SECOND
