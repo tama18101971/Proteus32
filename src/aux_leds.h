@@ -147,7 +147,7 @@ void test_aux_beacon(void);
 void handle_aux(void);
 void handle_aux_cmd(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits);
 union AUX_Cmd_u *handle_aux_array(const uint32_t pBuffer[], AUX_Ctr_t *ubits) ;
-void start_aux_array(LED_Bits_t channel, const uint32_t *pArray);
+void start_aux_array(const uint32_t *pArray);
 
 void aux_count(uint8_t count);
 

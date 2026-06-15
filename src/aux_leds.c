@@ -52,7 +52,8 @@ bool EnableArrayProcessingGrn = false;
 const uint32_t *current_buf_red = NULL;
 const uint32_t *current_buf_grn = NULL;
 
-void start_aux_array(LED_Bits_t channel, const uint32_t *pArray) {
+void start_aux_array(const uint32_t *pArray) {
+	LED_Bits_t channel = (LED_Bits_t)(pArray[0] & 0x07);
 	AUX_Ctr_t *ctl;
 	bool *flag;
 
