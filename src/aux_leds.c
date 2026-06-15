@@ -80,6 +80,26 @@ static AUX_Ctr_t* get_aux_ctl(LED_Bits_t channel) {
 	}
 }
 
+static union AUX_Cmd_u* get_aux_cmd(LED_Bits_t channel) {
+	switch (channel)
+	{
+	case RED_LED:  return &aux_cmd_red;
+	case GRN_LED:  return &aux_cmd_grn;
+	case HBL_LED:  return &aux_cmd_hbl;
+	default:       return NULL;
+	}
+}
+
+static union AUX_Cmd_u** get_aux_ptr(LED_Bits_t channel) {
+	switch (channel)
+	{
+	case RED_LED:  return &p_red;
+	case GRN_LED:  return &p_grn;
+	case HBL_LED:  return &p_hbl;
+	default:       return NULL;
+	}
+}
+
 bool is_aux_cmd(LED_Bits_t channel) {
 	AUX_Ctr_t *ctl = get_aux_ctl(channel);
 	return (ctl && ctl->enable);
@@ -108,17 +128,20 @@ bool is_aux_other(LED_Bits_t channel) {
 /************************************************************************/
 /*                                                                      */
 /************************************************************************/
-//void off_aux_cmd(bool rcc_stop) {
-//	as_red.ubits.enable = false;
-//	as_red.ubits.period = 0;
-//	as_red.acmd.aux_command = 0;
-//	as_red.ubits.idmode = IDM_OTHER;
-//	if (rcc_stop) {
-//		//stop_wakeup();
-//	}
-//	smart_off(RED_LED);
-//	smart_off(GRN_LED);
-//}
+void off_aux_cmd(LED_Bits_t channel, bool stop_lsi) {
+	AUX_Ctr_t *ctl = get_aux_ctl(channel);
+	if (!ctl) return;
+
+	ctl->enable = false;
+	ctl->period = PER_INIT;
+	ctl->idmode = IDM_OTHER;
+
+	smart_off(channel);
+
+	if (stop_lsi) {
+		awu_stop(stop_lsi);
+	}
+}
 
 #ifdef USE_BATTIND
 /************************************************************************/
@@ -165,29 +188,35 @@ void aux_cmd_info_grn(void) {
 	set_aux_cmd(INFO_GRN, AUX_60MS, true, IDM_OTHER);
 }
 
-//void set_aux_cmd(uint32_t command, AUX_Tick_t delay, bool enable, IDM_Type_t idm_mode) {
-//	as_red.acmd.aux_command = command;
-//	as_red.ubits.enable = enable;
-//	as_red.ubits.idmode = idm_mode;
-//	AUX_Set_Delay(delay);							
-//}
-
+/**
+ * @brief Установка AUX-команды для канала, определённого битами 0..2 параметра command
+ * @param command   32-битная команда: биты 0..2 — канал (RED/GRN/HBL), остальные — параметры
+ * @param delay     задержка перед выполнением (таймер AWU)
+ * @param enable    true — запустить выполнение, false — команда не активна
+ * @param idm_mode  режим индикации (beacon, vwarning, strobe, other)
+ */
 void set_aux_cmd(uint32_t command, awu_tick_t delay, bool enable, IDM_Type_t idm_mode) {
-    // Приводим 32-битный код к union AUX_Cmd_u
-    aux_cmd_red.aux_cmd = command;
+    // Извлекаем номер канала из младших 3 бит команды (биты 0..2 = поле device в AUX_Cmd_u)
+    LED_Bits_t channel = command & 0x07;
 
-    // Устанавливаем контрольные флаги
-    aux_ctl_red.enable = enable;
-    aux_ctl_red.idmode = idm_mode;
-    aux_ctl_red.period = PER_INIT;       // сброс периода на инициализацию
-    aux_ctl_red.current_brightness = 0;  // сброс текущей яркости
-    aux_ctl_red.work_duration = 0;       // сброс оставшейся длительности
-    aux_ctl_red.work_count = 0;          // сброс счётчика повторов
+    // Получаем указатели на структуры команды, контроля и указателя для целевого канала
+    union AUX_Cmd_u *cmd = get_aux_cmd(channel);    // буфер команды (aux_cmd_red/grn/hbl)
+    AUX_Ctr_t *ctl = get_aux_ctl(channel);          // регистр состояния канала
+    union AUX_Cmd_u **ptr = get_aux_ptr(channel);   // указатель на активную команду (p_red/grn/hbl)
 
-    // Устанавливаем указатель на команду
-    p_red = &aux_cmd_red;
+    if (!cmd || !ctl || !ptr) return;
 
-    // Запускаем таймер (если нужно)
+    cmd->aux_cmd = command;
+
+    ctl->enable = enable;
+    ctl->idmode = idm_mode;
+    ctl->period = PER_INIT;
+    ctl->current_brightness = 0;
+    ctl->work_duration = 0;
+    ctl->work_count = 0;
+
+    *ptr = cmd;
+
     if (delay != AUX_15MS) {
         awu_set_delay(delay);
     }
@@ -406,7 +435,7 @@ void start_aux_beacon(void) {
 /************************************************************************/
 void stop_aux_beacon(void) {
 	if (is_aux_beacon(RED_LED))
-		off_aux_cmd(false);
+		off_aux_cmd(RED_LED, false);
 }
 
 #ifdef USE_EX_AUX
@@ -435,7 +464,7 @@ void start_exaux_voltage(WARNING_Fr_t ex_mode) {
 /************************************************************************/
 void stop_aux_voltage(void) {
 	if (is_aux_voltage(RED_LED))
-		off_aux_cmd(false);
+		off_aux_cmd(RED_LED, false);
 }
 
 /************************************************************************/
@@ -454,7 +483,7 @@ void slot_batt_ind(void) /* в массив настраиваемых слот�
 /************************************************************************/
 void stop_aux_strobe(void) {
 //	if (is_aux_strobe())
-//		off_aux_cmd(false);
+//		off_aux_cmd(RED_LED, false);
 }
 
 void aux_on(void) {

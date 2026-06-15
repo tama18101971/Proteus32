@@ -122,7 +122,7 @@ void stop_aux_strobe(void);
 void slot_batt_ind(void);
 void start_aux_beacon(void);
 void start_exaux_voltage(uint8_t beacon_mode);
-void off_aux_cmd(bool stop_wdt);
+void off_aux_cmd(LED_Bits_t channel, bool stop_lsi);
 void set_aux_count(uint8_t count);
 void set_aux_cmd(uint32_t command, awu_tick_t delay, bool enable, IDM_Type_t idm_mode);
 

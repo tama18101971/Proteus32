@@ -20,5 +20,6 @@ typedef enum {
 void AWU_init(void);
 void EXTI_INT_INIT(void);
 bool awu_set_delay(awu_tick_t time_aux);
+void awu_stop(bool stop_lsi);
 
 #endif // AWU_H
