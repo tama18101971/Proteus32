@@ -26,7 +26,8 @@ uint8_t vwarning_old = VWARNING_NONE;
 
 const uint32_t buf_red[5]		= {0b101000000000000010001010001, 0b100010100000000010001010001, 0b101000000000000010001000001, 0b100010100000000010001010001, 0x6};
 const uint32_t buf_grn[3] 		= {0b101000000000000010001011010, 0b100010100000000010001011010, 0};
-const uint32_t buf_sos_red[5]	= {0xA0571, 0x4140A31, 0x4141E31, 0x4140A31, 0x1}; // .=10 -=30
+//const uint32_t buf_sos_red[5]	= {0xA0571, 0x4140A31, 0x4141E31, 0x4140A31, 0x1}; // .=10 -=30
+const uint32_t buf_sos_red[5]	= {0b10100000010101110001, 0b0100000101000000101000110001, 0b0100000101000001111000110001, 0b0100000101000000101000110001, 1};
 
 const uint32_t strobes[3][5]	= {	{0xA0571, 0x4140A31, 0x4141E31, 0x4140A31, 0x1 }, // .=10 -=30 SOS
 									{},
@@ -47,6 +48,42 @@ AUX_Ctr_t aux_ctl_hbl;
 
 bool EnableArrayProcessingRed = false;
 bool EnableArrayProcessingGrn = false;
+
+const uint32_t *current_buf_red = NULL;
+const uint32_t *current_buf_grn = NULL;
+
+void start_aux_array(LED_Bits_t channel, const uint32_t *pArray) {
+	AUX_Ctr_t *ctl;
+	bool *flag;
+
+	switch (channel) {
+	case RED_LED:
+		ctl = &aux_ctl_red;
+		flag = &EnableArrayProcessingRed;
+		break;
+	case GRN_LED:
+		ctl = &aux_ctl_grn;
+		flag = &EnableArrayProcessingGrn;
+		break;
+	default:
+		return;
+	}
+
+	uint32_t *p = (uint32_t*)ctl;
+	*p = 0;
+
+	*flag = true;
+
+	if (channel == RED_LED) {
+		p_red = (union AUX_Cmd_u*)pArray;
+		current_buf_red = pArray;
+	} else {
+		p_grn = (union AUX_Cmd_u*)pArray;
+		current_buf_grn = pArray;
+	}
+
+	ctl->enable = true;
+}
 
 /************************************************************************/
 /*                                                                      */
@@ -380,15 +417,20 @@ union AUX_Cmd_u *handle_aux_array(const uint32_t pArray[], AUX_Ctr_t *ctr) {
 
 void handle_aux(void) {
 	if (EnableArrayProcessingRed) {
-		p_red = handle_aux_array(buf_red, &aux_ctl_red);
-		if (p_red == NULL) EnableArrayProcessingRed = false;
+		p_red = handle_aux_array(current_buf_red, &aux_ctl_red);
+		if (p_red == NULL) { EnableArrayProcessingRed = false; }
+		else { handle_aux_cmd(p_red, &aux_ctl_red); }
+	} else if (p_red) {
+		handle_aux_cmd(p_red, &aux_ctl_red);
 	}
+
 	if (EnableArrayProcessingGrn) {
-		p_grn = handle_aux_array(buf_grn, &aux_ctl_grn);
-		if (p_grn == NULL) EnableArrayProcessingGrn = false;
+		p_grn = handle_aux_array(current_buf_grn, &aux_ctl_grn);
+		if (p_grn == NULL) { EnableArrayProcessingGrn = false; }
+		else { handle_aux_cmd(p_grn, &aux_ctl_grn); }
+	} else if (p_grn) {
+		handle_aux_cmd(p_grn, &aux_ctl_grn);
 	}
-	handle_aux_cmd(p_red, &aux_ctl_red);
-	handle_aux_cmd(p_grn, &aux_ctl_grn);
 }
 
 /************************************************************************/
