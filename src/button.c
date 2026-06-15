@@ -384,7 +384,7 @@ void scan_ui1(void) // Эта функция сканер. Она должна �
 			bt_d_time++; // увеличиваем счетчик времени нажатого состояния если это не переполнит uint8_t
 
 		// if ((bt_d_time == 1) && (driver_mode < MODE_BLOCK_C))
-		// set_aux_cmd(SHORT_BLINK, AUX_15MS, true, IDM_OTHER);// моргаем красным при нажатии на кнопку в режиме блокировки
+		// start_aux_cmd(SHORT_BLINK, AUX_15MS, true, IDM_OTHER);// моргаем красным при нажатии на кнопку в режиме блокировки
 
 		if (bt_d_time == VLPT)
 		{

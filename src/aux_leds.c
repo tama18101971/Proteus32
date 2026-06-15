@@ -201,11 +201,11 @@ void set_aux_count(uint8_t count) {
 #endif
 
 void aux_cmd_info_red(void) {
-	set_aux_cmd(INFO_RED, AUX_60MS, true, IDM_OTHER);
+	start_aux_cmd(INFO_RED, AUX_60MS, true, IDM_OTHER);
 }
 
 void aux_cmd_info_grn(void) {
-	set_aux_cmd(INFO_GRN, AUX_60MS, true, IDM_OTHER);
+	start_aux_cmd(INFO_GRN, AUX_60MS, true, IDM_OTHER);
 }
 
 /**
@@ -215,7 +215,7 @@ void aux_cmd_info_grn(void) {
  * @param enable    true — запустить выполнение, false — команда не активна
  * @param idm_mode  режим индикации (beacon, vwarning, strobe, other)
  */
-void set_aux_cmd(uint32_t command, awu_tick_t delay, bool enable, IDM_Type_t idm_mode) {
+void start_aux_cmd(uint32_t command, awu_tick_t delay, bool enable, IDM_Type_t idm_mode) {
     LED_Bits_t channel = command & 0x07;
 
 	#ifdef AUX_DEBUG
@@ -406,7 +406,7 @@ void start_aux_beacon(void) {
 	uint16_t beacon_mode = (uint16_t) ee.aux.beacon_mode;		// частота моргания
 
 	cmd = (0b00000000000000010000000100001000 | beacon_type | ((beacon_mode + 7) << 12));
-	set_aux_cmd(cmd, AUX_1S, true, IDM_BEACON);
+	start_aux_cmd(cmd, AUX_1S, true, IDM_BEACON);
 }
 
 #ifdef USE_EX_AUX
@@ -426,7 +426,7 @@ void start_exaux_voltage(WARNING_Fr_t ex_mode) {
 		low16 = 0b1001000000001010;	// 8sec
 		break;
 	}
-	set_aux_cmd((0b00000000000000010000000000000000 | low16), AUX_1S, true, IDM_VWARNING);
+	start_aux_cmd((0b00000000000000010000000000000000 | low16), AUX_1S, true, IDM_VWARNING);
 }
 #endif
 
@@ -455,11 +455,11 @@ void slot_batt_ind(void) /* в массив настраиваемых слот�
 }
 
 void aux_on(void) {
-	set_aux_cmd(INFO_GRN, AUX_60MS, true, IDM_OTHER);
+	start_aux_cmd(INFO_GRN, AUX_60MS, true, IDM_OTHER);
 }
 
 void aux_off(void) {
-	set_aux_cmd(INFO_RED, AUX_60MS, true, IDM_OTHER);
+	start_aux_cmd(INFO_RED, AUX_60MS, true, IDM_OTHER);
 }
 
 void aux_count(uint8_t count) {
@@ -468,7 +468,7 @@ void aux_count(uint8_t count) {
 		cmd = 0b00000000000000010100000100000010 | (count << 4);	// зеленые, если не ноль
 	else
 		cmd = 0b00000000000000010010001000010001;					// одна красная, если 0
-	set_aux_cmd(cmd, AUX_250MS, true, IDM_OTHER);
+	start_aux_cmd(cmd, AUX_250MS, true, IDM_OTHER);
 }
 
 /**********************************************************************************************/

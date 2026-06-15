@@ -175,6 +175,6 @@ uint32_t make_my_command(params...) {
 // Запуск обработки
 void start_my_led(void) {
     uint32_t cmd = make_my_command(...);
-    set_aux_cmd(cmd, AUX_60MS, true, IDM_OTHER);
+    start_aux_cmd(cmd, AUX_60MS, true, IDM_OTHER);
 }
 ```

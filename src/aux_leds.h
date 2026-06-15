@@ -138,7 +138,7 @@ void start_aux_beacon(void);
 void start_exaux_voltage(uint8_t beacon_mode);
 void off_aux_cmd(LED_Bits_t channel, bool stop_lsi);
 void set_aux_count(uint8_t count);
-void set_aux_cmd(uint32_t command, awu_tick_t delay, bool enable, IDM_Type_t idm_mode);
+void start_aux_cmd(uint32_t command, awu_tick_t delay, bool enable, IDM_Type_t idm_mode);
 
 void smart_off_leds(LED_Bits_t channel);
 
@@ -178,7 +178,7 @@ void debug_cmd(uint32_t cmd);
  * @param brightness0  яркость 1-го полупериода (0..7)
  * @param brightness1  яркость 2-го полупериода (0..7)
  *
- * @return 32-битная команда для set_aux_cmd() или массива
+ * @return 32-битная команда для start_aux_cmd() или массива
  */
 #define MAKE_CMD(device, cycle, count, duration0, duration1, brightness0, brightness1) \
     ((uint32_t)((device) & 0x7)             | \

@@ -101,8 +101,8 @@ int main(void)
 
     //test_aux_beacon();
     
-    //set_aux_cmd(ERRO_RED, AUX_15MS, true, IDM_BEACON);
-    set_aux_cmd(INFO_GRN, AUX_15MS, true, IDM_BEACON);
+    //start_aux_cmd(ERRO_RED, AUX_15MS, true, IDM_BEACON);
+    start_aux_cmd(INFO_GRN, AUX_15MS, true, IDM_BEACON);
 
     start_aux_array(buf_sos_red);
     //start_aux_array(buf_grn);
