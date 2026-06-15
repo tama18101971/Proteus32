@@ -111,9 +111,11 @@ extern uint8_t vwarning;
 extern uint8_t vwarning_old;
 
 
-bool is_aux_cmd(void);
-bool is_aux_beacon(void);
-bool is_aux_voltage(void);
+bool is_aux_cmd(LED_Bits_t channel);
+bool is_aux_beacon(LED_Bits_t channel);
+bool is_aux_voltage(LED_Bits_t channel);
+bool is_aux_strobe(LED_Bits_t channel);
+bool is_aux_other(LED_Bits_t channel);
 void stop_aux_beacon(void);
 void stop_aux_voltage(void);
 void stop_aux_strobe(void);
@@ -124,8 +126,7 @@ void off_aux_cmd(bool stop_wdt);
 void set_aux_count(uint8_t count);
 void set_aux_cmd(uint32_t command, awu_tick_t delay, bool enable, IDM_Type_t idm_mode);
 
-void smart_off_red(void);
-void smart_off_green(void);
+void smart_off(LED_Bits_t channel);
 
 void aux_on(void);
 void aux_off(void);

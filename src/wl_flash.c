@@ -127,55 +127,6 @@ uint32_t flash_search_address(uint32_t StartAddress, uint32_t *LastValidAddr)
 #define EE_VERSION 1
 
 /* ============================================================
- * INITIALIZE DEFAULTS
- * ============================================================ */
-void init_ee(void)
-{
-    EE_PRINTF("[EEPROM] Init defaults\r\n");
-    memset(&ee, 0, EE_STRUCT_SIZE);
-    ((uint8_t *)&ee)[4] = EE_VERSION;
-
-	// eng menu
-	ee.eng.min_level = 1;
-	ee.eng.vc = 0;
-	ee.eng.tc = 0;
-
-	// select UI
-	ee.uif.ui_index = 1;
-	ee.uif.use_memory = 0;
-
-	// bcklight
-	ee.aux.bcklight_color = BCK_COLOR_RED;
-	ee.aux.bcklight_type = BCK_TYPE_ON;
-
-	// beacon
-	ee.aux.beacon_mode = BCON_2S;
-	ee.aux.beacon_on = true;
-	ee.aux.beacon_type = RED_LED;
-
-	// user menu
-	ee.usr.eaux_onoff = false;
-	ee.usr.id_plus_sid = false;
-	ee.usr.t_calibr = 6;
-
-	// defaults
-	ee.defauil_ui1 = DEFAULT_STEP;
-	ee.defauil_ui2 = DEFAULT_MODE;
-
-	// slots
-	ee.slots[0] = SLOT_BATT_IND;	// 1 кликa + удержание
-	ee.slots[1] = SLOT_BEACON;		// 2 клика + удержание
-	ee.slots[2] = SLOT_STROBE;		// 3 клика
-	ee.slots[3] = SLOT_TACTICAL;	// 3 клика + удержание
-	ee.slots[4] = SLOT_BLOCK;		// 4 клика
-	ee.slots[5] = SLOT_EMPTY;		// 4 клика + удержание
-	ee.slots[6] = SLOT_EMPTY;		// 5 клика
-	ee.slots[7] = SLOT_MEMORY;		// 5 клика + удержание
-	ee.slots[8] = SLOT_BACKLIGHT;	// 6 клика
-	ee.slots[9] = SLOT_IPSMODE;		// 6 клика + удержание
-}
-
-/* ============================================================
  * READ FROM FLASH
  * ============================================================ */
 int read_ee(void)
@@ -264,3 +215,53 @@ int write_ee(void)
     MaxSeq = ee.seq;
     return 1;
 }
+
+/* ============================================================
+ * INITIALIZE DEFAULTS
+ * ============================================================ */
+void init_ee(void)
+{
+    EE_PRINTF("[EEPROM] Init defaults\r\n");
+    memset(&ee, 0, EE_STRUCT_SIZE);
+    ((uint8_t *)&ee)[4] = EE_VERSION;
+
+	// eng menu
+	ee.eng.min_level = 1;
+	ee.eng.vc = 0;
+	ee.eng.tc = 0;
+
+	// select UI
+	ee.uif.ui_index = 1;
+	ee.uif.use_memory = 0;
+
+	// bcklight
+	ee.aux.bcklight_color = BCK_COLOR_RED;
+	ee.aux.bcklight_type = BCK_TYPE_ON;
+
+	// beacon
+	ee.aux.beacon_mode = BCON_2S;
+	ee.aux.beacon_on = true;
+	ee.aux.beacon_type = RED_LED;
+
+	// user menu
+	ee.usr.eaux_onoff = false;
+	ee.usr.id_plus_sid = false;
+	ee.usr.t_calibr = 6;
+
+	// defaults
+	ee.defauil_ui1 = DEFAULT_STEP;
+	ee.defauil_ui2 = DEFAULT_MODE;
+
+	// slots
+	ee.slots[0] = SLOT_BATT_IND;	// 1 кликa + удержание
+	ee.slots[1] = SLOT_BEACON;		// 2 клика + удержание
+	ee.slots[2] = SLOT_STROBE;		// 3 клика
+	ee.slots[3] = SLOT_TACTICAL;	// 3 клика + удержание
+	ee.slots[4] = SLOT_BLOCK;		// 4 клика
+	ee.slots[5] = SLOT_EMPTY;		// 4 клика + удержание
+	ee.slots[6] = SLOT_EMPTY;		// 5 клика
+	ee.slots[7] = SLOT_MEMORY;		// 5 клика + удержание
+	ee.slots[8] = SLOT_BACKLIGHT;	// 6 клика
+	ee.slots[9] = SLOT_IPSMODE;		// 6 клика + удержание
+}
+

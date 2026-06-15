@@ -78,7 +78,7 @@ int main(void)
     USART_Printf_Init(115200);
 #endif
 
-    EE_PRINTF("\r\nBoot...\r\n");
+    EE_PRINTF("\r\n[MAIN] Boot...\r\n");
 
     EXTI_INT_INIT();
 
@@ -118,7 +118,7 @@ int main(void)
                 button_event = 0;
                 idle_ms = 0;
 
-                EE_PRINTF("Button pressed\r\n");
+                EE_PRINTF("[MAIN] Button pressed\r\n");
             }
 
             /***************************************************
@@ -135,7 +135,7 @@ int main(void)
                 idle_ms = 0;
                 mode = MODE_BEACON;
 
-                EE_PRINTF("Return to standby mode\r\n");
+                EE_PRINTF("[MAIN] Return to standby mode\r\n");
             }
         }
     }

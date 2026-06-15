@@ -35,62 +35,75 @@ const uint32_t strobes[3][5]	= {	{0xA0571, 0x4140A31, 0x4141E31, 0x4140A31, 0x1 
 
 union AUX_Cmd_u *p_red;
 union AUX_Cmd_u *p_grn;
+union AUX_Cmd_u *p_hbl;
 
 union AUX_Cmd_u aux_cmd_red;
 union AUX_Cmd_u aux_cmd_grn;
+union AUX_Cmd_u aux_cmd_hbl;
 
 AUX_Ctr_t aux_ctl_red;
 AUX_Ctr_t aux_ctl_grn;
+AUX_Ctr_t aux_ctl_hbl;
 
 bool EnableArrayProcessing = true;
 
 /************************************************************************/
 /*                                                                      */
 /************************************************************************/
-void smart_off_red(void) {
-	if ((ee.aux.bcklight_type == BCK_TYPE_ON) && (ee.aux.bcklight_color == BCK_COLOR_RED))
-		on_red_l();
-	else
-		off_red();
+void smart_off(LED_Bits_t channel) {
+	if (ee.aux.bcklight_type != BCK_TYPE_ON) {
+		if (channel == RED_LED) off_red();
+		else off_grn();
+		return;
+	}
+
+	switch (channel)
+	{
+	case RED_LED:
+		(ee.aux.bcklight_color == BCK_COLOR_RED) ? on_red_l() : off_red();
+		break;
+	case GRN_LED:
+		(ee.aux.bcklight_color == BCK_COLOR_GRN) ? on_grn_l() : off_grn();
+		break;
+	default:
+		break;
+	}
 }
 
-/************************************************************************/
-/*                                                                      */
-/************************************************************************/
-void smart_off_green(void) {
-	if ((ee.aux.bcklight_type == BCK_TYPE_ON) && (ee.aux.bcklight_color == BCK_COLOR_GRN))
-		on_grn_l();
-	else
-		off_grn();
+static AUX_Ctr_t* get_aux_ctl(LED_Bits_t channel) {
+	switch (channel)
+	{
+	case RED_LED:  return &aux_ctl_red;
+	case GRN_LED:  return &aux_ctl_grn;
+	case HBL_LED:  return &aux_ctl_hbl;
+	default:       return NULL;
+	}
 }
 
-/************************************************************************/
-/*                                                                      */
-/************************************************************************/
-//bool is_aux_cmd(void) {
-//	return as_red.ubits.enable;
-//}
+bool is_aux_cmd(LED_Bits_t channel) {
+	AUX_Ctr_t *ctl = get_aux_ctl(channel);
+	return (ctl && ctl->enable);
+}
 
-/************************************************************************/
-/*                                                                      */
-/************************************************************************/
-//bool is_aux_beacon(void) {
-//	return (as_red.ubits.idmode == IDM_BEACON);
-//}
+bool is_aux_beacon(LED_Bits_t channel) {
+	AUX_Ctr_t *ctl = get_aux_ctl(channel);
+	return (ctl && ctl->enable && (ctl->idmode == IDM_BEACON));
+}
 
-/************************************************************************/
-/*                                                                      */
-/************************************************************************/
-//bool is_aux_voltage(void) {
-//	return (as_red.ubits.idmode == IDM_VWARNING);
-//}
+bool is_aux_voltage(LED_Bits_t channel) {
+	AUX_Ctr_t *ctl = get_aux_ctl(channel);
+	return (ctl && ctl->enable && (ctl->idmode == IDM_VWARNING));
+}
 
-/************************************************************************/
-/*                                                                      */
-/************************************************************************/
-//bool is_aux_strobe(void) {
-//	return (as_red.ubits.idmode == IDM_STROBE);
-//}
+bool is_aux_strobe(LED_Bits_t channel) {
+	AUX_Ctr_t *ctl = get_aux_ctl(channel);
+	return (ctl && ctl->enable && (ctl->idmode == IDM_STROBE));
+}
+
+bool is_aux_other(LED_Bits_t channel) {
+	AUX_Ctr_t *ctl = get_aux_ctl(channel);
+	return (ctl && ctl->enable && (ctl->idmode == IDM_OTHER));
+}
 
 /************************************************************************/
 /*                                                                      */
@@ -103,8 +116,8 @@ void smart_off_green(void) {
 //	if (rcc_stop) {
 //		//stop_wakeup();
 //	}
-//	smart_off_red();
-//	smart_off_green();
+//	smart_off(RED_LED);
+//	smart_off(GRN_LED);
 //}
 
 #ifdef USE_BATTIND
@@ -159,15 +172,36 @@ void aux_cmd_info_grn(void) {
 //	AUX_Set_Delay(delay);							
 //}
 
+void set_aux_cmd(uint32_t command, awu_tick_t delay, bool enable, IDM_Type_t idm_mode) {
+    // Приводим 32-битный код к union AUX_Cmd_u
+    aux_cmd_red.aux_cmd = command;
+
+    // Устанавливаем контрольные флаги
+    aux_ctl_red.enable = enable;
+    aux_ctl_red.idmode = idm_mode;
+    aux_ctl_red.period = PER_INIT;       // сброс периода на инициализацию
+    aux_ctl_red.current_brightness = 0;  // сброс текущей яркости
+    aux_ctl_red.work_duration = 0;       // сброс оставшейся длительности
+    aux_ctl_red.work_count = 0;          // сброс счётчика повторов
+
+    // Устанавливаем указатель на команду
+    p_red = &aux_cmd_red;
+
+    // Запускаем таймер (если нужно)
+    if (delay != AUX_15MS) {
+        awu_set_delay(delay);
+    }
+}
+
 static void SetBrightness(LED_Bits_t device, uint8_t brightness) {
 	switch (device) {
 		case RED_LED:
 			if (brightness) on_red_h();
-			else smart_off_red();
+			else smart_off(RED_LED);
 			break;
 		case GRN_LED:
 			if (brightness) on_grn_h();
-			else smart_off_green();
+			else smart_off(GRN_LED);
 			break;
 		case HBL_LED:
 			// TODO: Сделать
@@ -302,8 +336,8 @@ void test_aux_beacon(void) {
 //	aux_cmd_grn.aux.duration1	= 40;//128;
 
 	aux_ctl_grn.idmode			= IDM_BEACON;
-	//aux_ctl_grn.arr_index		= 0;
-	//aux_ctl_grn.enable			= true;
+	aux_ctl_grn.arr_index		= 0;
+	aux_ctl_grn.enable			= true;
 }
 
 union AUX_Cmd_u *handle_aux_array(const uint32_t pArray[], AUX_Ctr_t *ctr) {
@@ -371,7 +405,7 @@ void start_aux_beacon(void) {
 /*                                                                      */
 /************************************************************************/
 void stop_aux_beacon(void) {
-	if (is_aux_beacon())
+	if (is_aux_beacon(RED_LED))
 		off_aux_cmd(false);
 }
 
@@ -400,7 +434,7 @@ void start_exaux_voltage(WARNING_Fr_t ex_mode) {
 /*                                                                      */
 /************************************************************************/
 void stop_aux_voltage(void) {
-	if (is_aux_voltage())
+	if (is_aux_voltage(RED_LED))
 		off_aux_cmd(false);
 }
 
