@@ -88,8 +88,8 @@ void ntc_adc_Init(void)
     // 1. Включаем тактирование GPIOD и ADC1
     RCC->APB2PCENR |= (1 << 5) | (1 << 9);  // GPIOD(bit5) | ADC1(bit9)
 
-    // 2. Делим PCLK2 на 8 для ADC (биты [15:14] = 0b11)
-    RCC->CFGR0 = (RCC->CFGR0 & ~(0x3 << 14)) | (0x3 << 14);
+    // 2. Делим PCLK2 на 4 для ADC (биты [15:14] = 0b01)
+    RCC->CFGR0 = (RCC->CFGR0 & ~(0x3 << 14)) | (0x1 << 14);
 
     // 3. PD2 — аналоговый вход (NTC)
     GPIOD->CFGLR &= ~(0xF << 8);  // 0b0000 = Analog Input
@@ -114,13 +114,15 @@ void ntc_adc_Init(void)
     // 9. RSQR3: SQ1 = канал 3 (NTC на PD2)
     ADC1->RSQR3 = 3;
 
-    // 10. SAMPTR2: SMP3 [11:9] = 0x7 (241 такт) для NTC
-    //     SMP8 [26:24] = 0x7 (241 такт) для Vrefint (канал 8)
-    ADC1->SAMPTR2 = (0x7 << 9) | (0x7 << 24);
+    // 10. SAMPTR2: SMP3 [11:9] = 5 (57 тактов) для NTC
+    //     SMP8 [26:24] = 3 (30 тактов) для Vrefint (внутренний, без паразитной ёмкости)
+    ADC1->SAMPTR2 = (5 << 9) | (3 << 24);
 
     // 11. ISQR: JL=0 (1 инжектированный канал), JSQ4 = 8 (Vrefint на CH32V003)
-    //     SDK пишет канал в JSQ4 (биты [19:15]) для Rank=1, JL=0
     ADC1->ISQR = 8 << 15;
+
+    // 12. SAMPTR1: время семплирования для injected каналов (SDK пишет сюда для Rank 1)
+    ADC1->SAMPTR1 = 3;  // 30 тактов для Vrefint
 
     // 12. Калибровка ADC: CALVOLSELECT=50% (бит 25 в CTLR1)
     ADC1->CTLR1 |= (1 << 25);
