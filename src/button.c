@@ -184,7 +184,7 @@ void step_down_ui1(void)
 
 void on_rumpup_ui1(void)
 {
-	EE_PRINTF("on_rumpup_ui1() called\r\n");
+	EE_PRINTF("[BUTTON] on_rumpup_ui1() called\r\n");
 	on_driver(); // заводим если надо
 	ps.use_prev = false;
 	if (direction)
@@ -195,14 +195,14 @@ void on_rumpup_ui1(void)
 
 void on_rumpdown_ui1(void)
 {
-	EE_PRINTF("on_rump_down_ui1 called\r\n");
+	EE_PRINTF("[BUTTON] on_rump_down_ui1 called\r\n");
 	ps.use_prev = false;
 	step_down_ui1();
 }
 
 void on_xmode_ui1(void)
 {
-	EE_PRINTF("on_xmode_ui1() called\r\n");
+	EE_PRINTF("[BUTTON] on_xmode_ui1() called\r\n");
 	ps.use_prev = false; //! НЕ УБИРАТЬ - НАДО!
 	on_driver();
 	set_current(ee.uif.use_memory ? (step_user ? step_user : step_default) : ee.defauil_ui1, SS_FAST); // если предыдущий шаг = 0 начинаем с яркости по умолчанию, иначе - с яроксти в пред. шаге
@@ -210,7 +210,7 @@ void on_xmode_ui1(void)
 
 void on_turbo_ui1(void)
 {
-	EE_PRINTF("on_turbo_ui1() called\r\n");
+	EE_PRINTF("[BUTTON] on_turbo_ui1() called\r\n");
 	uint8_t start = on_driver();
 
 	if (!ps.use_prev) // включаем турбо. если до этого драйвер был выключен - start будет равен true

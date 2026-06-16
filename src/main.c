@@ -10,6 +10,7 @@
 #include "aux_leds.h"
 #include "wl_flash.h"
 #include "button.h"
+#include "ntc_table.h"
 
 volatile uint8_t button_event = 0;
 volatile driver_mode_t mode = MODE_BEACON;
@@ -39,6 +40,8 @@ int main(void)
 
     led_init();
     button_init();
+
+    ntc_adc_Init();
 
     /* DAC */
     dac_pwrpin_init();
@@ -73,9 +76,11 @@ int main(void)
 #ifdef SLEEP_STANDBY
             AWU_set_delay(AWU_15MS);
 #endif
+            ntc_read();
 
             handle_aux();
             scan_ui1();
+            scan_ss();
 
 #ifdef SLEEP_STANDBY
             AWU_Sleep_Now();
