@@ -2,7 +2,7 @@
  * aux_leds.c
  *
  * Created: 22.02.2020 17:42:26
- * Modified:15.02.2021
+ * Modified:15.06.2026
  *  Author: Tamagotchi
  */
 
@@ -411,7 +411,7 @@ void start_aux_beacon(void) {
 
 #ifdef USE_EX_AUX
 /************************************************************************/
-/*                   �������� ����������� ������������                  */
+/*                                                                      */
 /************************************************************************/
 void start_exaux_voltage(WARNING_Fr_t ex_mode) {
 	uint16_t low16 = 0;
