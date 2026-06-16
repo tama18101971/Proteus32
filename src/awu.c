@@ -117,7 +117,7 @@ void AWU_Sleep_Tick(awu_tick_t tick)
 
 void AWU_Sleep_Now(void)
 {
-#if defined(SLEEP_STANDBY) && (defined(AUX_DEBUG) || defined(WL_FLASH_DEBUG))
+#if defined(SLEEP_STANDBY) && defined(WL_FLASH_DEBUG)
     while (USART_GetFlagStatus(USART1, USART_FLAG_TC) == RESET);
 #endif
 
@@ -129,7 +129,7 @@ void AWU_Sleep_Now(void)
     SystemCoreClockUpdate();
     Delay_Init();
 
-#if defined(WL_FLASH_DEBUG) || defined(AUX_DEBUG)
+#ifdef WL_FLASH_DEBUG 
     USART_Printf_Init(115200);
 #endif
 }

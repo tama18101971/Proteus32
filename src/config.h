@@ -2,10 +2,9 @@
 #define CONFIG_H
 
 // Раскомментировать для отладки через UART
-//#define WL_FLASH_DEBUG
-#define AUX_DEBUG
+#define WL_FLASH_DEBUG
 
-#if defined(WL_FLASH_DEBUG) || defined(AUX_DEBUG)
+#ifdef WL_FLASH_DEBUG 
     #include "mini_printf.h"
     #define EE_PRINTF(...) mini_printf(__VA_ARGS__)
 #else

@@ -1,5 +1,5 @@
 #include "button_gpio.h"
-#include "ch32v00x.h"
+#include "ch32v003_gpio.h"
 #include "awu.h"
 
 /*********************************************************************
@@ -12,7 +12,8 @@ void EXTI7_0_IRQHandler(void)
 {
     if (EXTI_GetITStatus(EXTI_Line3) != RESET)
     {
-        // button_event = 1;
+        button_event = 1;
+        mode= MODE_ON1;
         AWU_set_delay(AWU_15MS);
 
         EXTI_ClearITPendingBit(EXTI_Line3);
@@ -24,30 +25,21 @@ void EXTI7_0_IRQHandler(void)
  *********************************************************************/
 void button_init(void)
 {
-    GPIO_InitTypeDef GPIO_InitStructure = {0};
-    EXTI_InitTypeDef EXTI_InitStructure = {0};
-    NVIC_InitTypeDef NVIC_InitStructure = {0};
+    // 1. Включаем тактирование GPIOC и AFIO
+    RCC->APB2PCENR |= (1 << 4) | (1 << 0);  // RCC_APB2Periph_GPIOC | RCC_APB2Periph_AFIO
 
-    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOC | RCC_APB2Periph_AFIO, ENABLE);
+    // 2. Настраиваем PC3 как вход с подтяжкой (Input Pull-Up)
+    GPIO_PinConfig(GPIOC, GPIO_Pin_3, CFG_IN_PULL);
+    GPIOC->OUTDR |= GPIO_Pin_3;  // подтяжка вверх (Pull-Up)
 
-    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_3;
-    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPU;
+    // 3. Маппим EXTI3 на GPIOC (AFIO_EXTICR1_EXTI3_PC = 0x0080)
+    AFIO->EXTICR = 0x0080;
 
-    GPIO_Init(GPIOC, &GPIO_InitStructure);
+    // 4. Настраиваем EXTI Line3: прерывание по спадающему фронту
+    EXTI->INTENR |= (1 << 3);   // разрешаем прерывание EXTI3
+    EXTI->FTENR |= (1 << 3);    // по спадающему фронту (Falling Edge)
+    EXTI->RTENR &= ~(1 << 3);   // запрещаем по нарастающему
 
-    GPIO_EXTILineConfig(GPIO_PortSourceGPIOC, GPIO_PinSource3);
-
-    EXTI_InitStructure.EXTI_Line = EXTI_Line3;
-    EXTI_InitStructure.EXTI_Mode = EXTI_Mode_Interrupt;
-    EXTI_InitStructure.EXTI_Trigger = EXTI_Trigger_Falling;
-    EXTI_InitStructure.EXTI_LineCmd = ENABLE;
-
-    EXTI_Init(&EXTI_InitStructure);
-
-    NVIC_InitStructure.NVIC_IRQChannel = EXTI7_0_IRQn;
-    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;
-    NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
-    NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
-
-    NVIC_Init(&NVIC_InitStructure);
+    // 5. Включаем NVIC для EXTI7_0_IRQn (IRQn = 20)
+    NVIC->IENR[0] = (1 << 20);
 }

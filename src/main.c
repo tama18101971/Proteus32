@@ -26,7 +26,7 @@ int main(void)
 
     Delay_Ms(3000);
 
-#if defined(WL_FLASH_DEBUG) || defined(AUX_DEBUG)
+#ifdef WL_FLASH_DEBUG 
     USART_Printf_Init(115200);
 #endif
 
@@ -40,9 +40,14 @@ int main(void)
     led_init();
     button_init();
 
+    /* DAC */
+    dac_pwrpin_init();
+    dac_pwrpin_on();
+
     i2c_init(I2C_SPEED_400K);
 
     dac_set_value(1024);
+    /* DAC */
 
     if (read_ee() == FAILED)
     {
