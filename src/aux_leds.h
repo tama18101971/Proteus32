@@ -113,9 +113,11 @@ extern uint8_t vwarning_old;
 
 extern bool EnableArrayProcessingRed;
 extern bool EnableArrayProcessingGrn;
+extern bool EnableArrayProcessingHbl;
 
 extern const uint32_t *current_buf_red;
 extern const uint32_t *current_buf_grn;
+extern const uint32_t *current_buf_hbl;
 
 extern const uint32_t buf_red[];
 extern const uint32_t buf_grn[];

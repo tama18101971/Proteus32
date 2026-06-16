@@ -26,7 +26,6 @@ uint8_t vwarning_old = VWARNING_NONE;
 
 const uint32_t buf_red[5]		= {0b101000000000000010001010001, 0b100010100000000010001010001, 0b101000000000000010001000001, 0b100010100000000010001010001, 0x6};
 const uint32_t buf_grn[3] 		= {0b101000000000000010001011010, 0b100010100000000010001011010, 0};
-//const uint32_t buf_sos_red[5]	= {0xA0571, 0x4140A31, 0x4141E31, 0x4140A31, 0x1}; // .=10 -=30
 const uint32_t buf_sos_red[5]	= {0b10100000010101110001, 0b0100000101000000101000110001, 0b0100000101000001111000110001, 0b0100000101000000101000110001, 1};
 
 union AUX_Cmd_u *p_red;
@@ -43,9 +42,11 @@ AUX_Ctr_t aux_ctl_hbl;
 
 bool EnableArrayProcessingRed = false;
 bool EnableArrayProcessingGrn = false;
+bool EnableArrayProcessingHbl = false;
 
 const uint32_t *current_buf_red = NULL;
 const uint32_t *current_buf_grn = NULL;
+const uint32_t *current_buf_hbl = NULL;
 
 static AUX_Ctr_t *const aux_ctl_table[] = {
 	[RED_LED] = &aux_ctl_red,
@@ -68,24 +69,40 @@ static union AUX_Cmd_u **const aux_ptr_table[] = {
 void start_aux_array(const uint32_t *pArray) {
 	LED_Bits_t channel = (LED_Bits_t)(pArray[0] & 0x07);
 
-	if (channel < RED_LED || channel > GRN_LED) return;
+	AUX_Ctr_t *ctl;
+	bool *flag;
+	const uint32_t **current_buf;
+	union AUX_Cmd_u **ptr;
 
-	AUX_Ctr_t *ctl = aux_ctl_table[channel];
-	bool *flag = (channel == RED_LED) ? &EnableArrayProcessingRed : &EnableArrayProcessingGrn;
+	switch (channel) {
+	case RED_LED:
+		ctl = &aux_ctl_red;
+		flag = &EnableArrayProcessingRed;
+		current_buf = &current_buf_red;
+		ptr = &p_red;
+		break;
+	case GRN_LED:
+		ctl = &aux_ctl_grn;
+		flag = &EnableArrayProcessingGrn;
+		current_buf = &current_buf_grn;
+		ptr = &p_grn;
+		break;
+	case HBL_LED:
+		ctl = &aux_ctl_hbl;
+		flag = &EnableArrayProcessingHbl;
+		current_buf = &current_buf_hbl;
+		ptr = &p_hbl;
+		break;
+	default:
+		return;
+	}
 
 	uint32_t *p = (uint32_t*)ctl;
 	*p = 0;
 
 	*flag = true;
-
-	if (channel == RED_LED) {
-		p_red = (union AUX_Cmd_u*)pArray;
-		current_buf_red = pArray;
-	} else {
-		p_grn = (union AUX_Cmd_u*)pArray;
-		current_buf_grn = pArray;
-	}
-
+	*ptr = (union AUX_Cmd_u*)pArray;
+	*current_buf = pArray;
 	ctl->enable = true;
 }
 
@@ -95,7 +112,8 @@ void start_aux_array(const uint32_t *pArray) {
 void smart_off_leds(LED_Bits_t channel) {
 	if (ee.aux.bcklight_type != BCK_TYPE_ON) {
 		if (channel == RED_LED) off_red();
-		else off_grn();
+		else if (channel == GRN_LED) off_grn();
+		else if (channel == HBL_LED) { /* TODO: off_hbl() */ }
 		return;
 	}
 
@@ -106,8 +124,6 @@ void smart_off_leds(LED_Bits_t channel) {
 		break;
 	case GRN_LED:
 		(ee.aux.bcklight_color == BCK_COLOR_GRN) ? on_grn_l() : off_grn();
-		break;
-	default:
 		break;
 	}
 }
@@ -230,6 +246,7 @@ void start_aux_cmd(uint32_t command, awu_tick_t delay, bool enable, IDM_Type_t i
 
     if (channel == RED_LED) EnableArrayProcessingRed = false;
     else if (channel == GRN_LED) EnableArrayProcessingGrn = false;
+    else if (channel == HBL_LED) EnableArrayProcessingHbl = false;
 
     cmd->aux_cmd = command;
 
@@ -395,6 +412,14 @@ void handle_aux(void) {
 	} else if (p_grn) {
 		handle_aux_cmd(p_grn, &aux_ctl_grn);
 	}
+
+	if (EnableArrayProcessingHbl) {
+		p_hbl = handle_aux_array(current_buf_hbl, &aux_ctl_hbl);
+		if (p_hbl == NULL) { EnableArrayProcessingHbl = false; }
+		else { handle_aux_cmd(p_hbl, &aux_ctl_hbl); }
+	} else if (p_hbl) {
+		handle_aux_cmd(p_hbl, &aux_ctl_hbl);
+	}
 }
 
 /************************************************************************/
@@ -445,11 +470,11 @@ void stop_aux_strobe(LED_Bits_t channel) { stop_aux_mode(channel, IDM_STROBE); }
 /************************************************************************/
 /*                                                                      */
 /************************************************************************/
-void slot_batt_ind(void) /* в массив настраиваемых слотов */
-{
+void slot_batt_ind(void) {
 #ifdef USE_BATTIND
-	stop_aux_beacon(RED_LED);					// 20.03.2021
-	stop_aux_beacon(GRN_LED);					// 15.06.2026
+	stop_aux_beacon(RED_LED);
+	stop_aux_beacon(GRN_LED);
+	stop_aux_beacon(HBL_LED);
 	set_aux_count(bat_get_flashes());
 #endif
 }
