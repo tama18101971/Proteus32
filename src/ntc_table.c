@@ -85,95 +85,99 @@ int16_t calc_temperature(uint16_t adcValue)
  */
 void ntc_adc_Init(void)
 {
-    // 1. Включаем тактирование GPIOD и ADC1
-    RCC->APB2PCENR |= (1 << 5) | (1 << 9);  // RCC_APB2Periph_GPIOD(bit5) | RCC_APB2Periph_ADC1(bit9)
+    ADC_InitTypeDef ADC_InitStructure = {0};
+    GPIO_InitTypeDef GPIO_InitStructure = {0};
 
-    // 2. Делим PCLK2 на 8 для ADC (биты [15:14] в CFGR0 = 0b11)
-    RCC->CFGR0 = (RCC->CFGR0 & ~(0x3 << 14)) | (0x3 << 14);
+    // Включаем периферию: GPIOD и ADC1
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOD | RCC_APB2Periph_ADC1, ENABLE);
 
-    // 3. PD2 — аналоговый вход (NTC терморезистор)
-    GPIOD->CFGLR &= ~(0xF << 8);  // 0b0000 = Analog Input
+    // Делим системную частоту на 8 для ADC (стандартная практика)
+    RCC_ADCCLKConfig(RCC_PCLK2_Div8);
 
-    // 4. PD3 — выход Push-Pull 50MHz (искусственная земля)
-    GPIOD->CFGLR = (GPIOD->CFGLR & ~(0xF << 12)) | (0x3 << 12);
-    GPIOD->BCR = (1 << 3);  // PD3 = 0
+    // Настраиваем PD2 как аналоговый вход (NTC терморезистор)
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_2;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AIN;
+    GPIO_Init(GPIOD, &GPIO_InitStructure);
 
-    // 5. Настраиваем CTLR1:
-    //    - Independent mode (биты [19:16] = 0)
-    //    - Scan mode OFF (бит 8 = 0)
-    //    - Continuous mode OFF (бит 1 = 0)
-    //    - Auto-injected ON (бит 10 = 1)
-    //    - Calibration voltage 50% (биты [26:25] = 0b01)
-    ADC1->CTLR1 = 0;
-    ADC1->CTLR1 |= (1 << 10);   // JAUTO
-    ADC1->CTLR1 |= (1 << 25);   // CALVOLSELECT = 50% (bit 25, НЕ bit 26)
+    // Настраиваем PD3 как искусственную землю
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_3;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_Init(GPIOD, &GPIO_InitStructure);
+    GPIO_ResetBits(GPIOD, GPIO_Pin_3);
 
-    // 6. CTLR2: внешний триггер выключен, выравнивание вправо
-    ADC1->CTLR2 = 0;
+    // Сбрасываем настройки ADC1 к заводским значениям
+    ADC_DeInit(ADC1);
 
-    // 7. Регулярная последовательность: 1 канал
-    ADC1->RSQR1 = 0;
+    // Настройка режима работы ADC
+    ADC_InitStructure.ADC_Mode = ADC_Mode_Independent;                  // Независимый режим (один канал)
+    ADC_InitStructure.ADC_ScanConvMode = DISABLE;                       // Отключаем сканирование каналов
+    ADC_InitStructure.ADC_ContinuousConvMode = DISABLE;                 // Однократное преобразование
+    ADC_InitStructure.ADC_ExternalTrigConv = ADC_ExternalTrigConv_None; // Внутренний триггер
+    ADC_InitStructure.ADC_DataAlign = ADC_DataAlign_Right;              // Правое выравнивание данных (стандарт)
+    ADC_InitStructure.ADC_NbrOfChannel = 1;                             // Один канал в регулярной группе
 
-    // 8. Канал 3 (NTC) на позиции SQ1
-    ADC1->RSQR3 = 3;
+    ADC_Init(ADC1, &ADC_InitStructure);
 
-    // 9. Время семплирования канала 3 (NTC) в SAMPTR2
-    ADC1->SAMPTR2 = (0x7 << 9);  // SMP3 [11:9] = 0b111 (241 такт)
+    // Настройка инъектированной последовательности (Vrefint)
+    ADC_InjectedSequencerLengthConfig(ADC1, 1);
 
-    // 10. Время семплирования Vrefint в SAMPTR1 (SDK пишет injected в SAMPTR1)
-    ADC1->SAMPTR1 = 0x7;  // SMP0 [2:0] = 0b111 (241 такт)
+    // Конфигурация регулярного канала (NTC на PD2)
+    ADC_RegularChannelConfig(ADC1, ADC_Channel_3, 1, ADC_SampleTime_241Cycles);
 
-    // 11. Инжектированная последовательность: 1 канал, JSQ1 = канал 0 (Vrefint)
-    ADC1->ISQR = 0;  // JL=0 (1 канал), JSQ1=0 (Vrefint)
+    // Конфигурация инъектированного канала (Vrefint для расчета Vdd)
+    ADC_InjectedChannelConfig(ADC1, ADC_Channel_Vrefint, 1, ADC_SampleTime_241Cycles);
 
-    // 12. Включаем ADC (ADON = 1)
-    ADC1->CTLR2 |= (1 << 0);
+    // Калибровка ADC (50% отклонение - стандартная настройка CH32)
+    ADC_Calibration_Vol(ADC1, ADC_CALVOL_50PERCENT);
 
-    // 13. Задержка после включения ADC (требуется даташитом)
-    for (volatile int i = 0; i < 1000; i++);
+    // Включение автоматической инъекции после каждого регулярного преобразования
+    ADC_AutoInjectedConvCmd(ADC1, ENABLE);
 
-    // 14. Сброс калибровки (только после ADON!)
-    ADC1->CTLR2 |= (1 << 3);   // RSTCAL = 1
-    while (ADC1->CTLR2 & (1 << 3));
+    // Включение ADC
+    ADC_Cmd(ADC1, ENABLE);
 
-    // 15. Калибровка ADC
-    ADC1->CTLR2 |= (1 << 2);   // CAL = 1
-    while (ADC1->CTLR2 & (1 << 2));
+    // Калибровка ADC (обязательная процедура)
+    ADC_ResetCalibration(ADC1);
+    while (ADC_GetResetCalibrationStatus(ADC1))
+        ;
+    ADC_StartCalibration(ADC1);
+    while (ADC_GetCalibrationStatus(ADC1))
+        ;
 }
 
 void ntc_read(void)
 {
-    // Сбрасываем флаги EOC и JEOC
-    ADC1->STATR = ~(0x02 | 0x04);  // write-0-to-clear: 0xFFF9
+    // ВАЖНО: Сбрасываем флаги перед стартом, чтобы не считать старые данные
+    ADC_ClearFlag(ADC1, ADC_FLAG_EOC | ADC_FLAG_JEOC);
 
-    // Убеждаемся что ADON включен (на случай сброса после калибровки)
-    ADC1->CTLR2 |= (1 << 0);
+    // Запуск программного преобразования ADC (регулярный канал - NTC)
+    ADC_SoftwareStartConvCmd(ADC1, ENABLE);
 
-    // Запуск регулярного преобразования (SWSTART = 1)
-    ADC1->CTLR2 |= (1 << 22);
+    // Ожидание завершения обоих преобразований:
+    // 1. Регулярное (NTC) - флаг EOC
+    // 2. Инжектированное (Vrefint) - флаг JEOC
+    while (!ADC_GetFlagStatus(ADC1, ADC_FLAG_EOC))
+        ;
+    while (!ADC_GetFlagStatus(ADC1, ADC_FLAG_JEOC))
+        ;
 
-    // Ожидаем завершения регулярного преобразования (EOC)
-    while (!(ADC1->STATR & (1 << 1)));
+    // Читаем чистые физические коды из регистров результатов:
+    // raw_temperature_adc - результат преобразования NTC (регулярный канал)
+    uint16_t raw_temperature_adc = ADC_GetConversionValue(ADC1);
 
-    // Ожидаем завершения инжектированного преобразования (JEOC)
-    while (!(ADC1->STATR & (1 << 2)));
+    // vrefint_adc - результат преобразования внутреннего опорного напряжения (инжектированный канал)
+    uint16_t vrefint_adc = ADC_GetInjectedConversionValue(ADC1, ADC_InjectedChannel_1);
 
-    // Читаем результат регулярного преобразования (NTC)
-    uint16_t raw_temperature_adc = ADC1->RDATAR;
+    // Вычисляем точное напряжение питания (для 10 бит 1024 - верно)
+    // Формула: Vdd = Vref * (2^N / ADC_Vrefint_code)
+    uint32_t vbat_mv = __LL_ADC_CALC_VREFANALOG_VOLTAGE(vrefint_adc);
 
-    // Читаем результат инжектированного преобразования (Vrefint)
-    uint16_t vrefint_adc = ADC1->IDATAR1;
-
-    // Вычисляем напряжение питания (мВ)
-    uint32_t vbat_mv = (1200 * 1024) / vrefint_adc;
-
-    // Расчет температуры по таблице
+    // Расчет температуры по таблице NCP18XH103F03RB с линейной интерполяцией
     int16_t temperature = calc_temperature(raw_temperature_adc);
 
-    // Выводим результат
-    EE_PRINTF("%04d, %04d -> Vbat: %ld mV | Temp: %d.%d C\r\n",
-              vrefint_adc, raw_temperature_adc, vbat_mv, temperature / 10, temperature % 10);
-
-    // Задержка 500 мс между измерениями
-    Delay_Ms(500);
+    // Выводим честный результат в терминал:
+    // Формат: Vrefint_code, NTC_code -> Vbat: X mV | Temp: Y.Z C
+    EE_PRINTF("[NTC] %04d, %04d -> Vbat: %ld mV | Temp: %d.%d C\r\n",
+           vrefint_adc, raw_temperature_adc, vbat_mv, temperature / 10, temperature % 10);
 }
