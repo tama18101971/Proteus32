@@ -86,27 +86,28 @@ int16_t calc_temperature(uint16_t adcValue)
 void ntc_adc_Init(void)
 {
     // 1. Включаем тактирование GPIOD и ADC1
-    RCC->APB2PCENR |= (1 << 5) | (1 << 9);  // GPIOD(bit5) | ADC1(bit9)
+    RCC->APB2PCENR |= (1 << 5) | (1 << 9); // GPIOD(bit5) | ADC1(bit9)
 
     // 2. Делим PCLK2 на 4 для ADC (биты [15:14] = 0b01)
     RCC->CFGR0 = (RCC->CFGR0 & ~(0x3 << 14)) | (0x1 << 14);
 
     // 3. PD2 — аналоговый вход (NTC)
-    GPIOD->CFGLR &= ~(0xF << 8);  // 0b0000 = Analog Input
+    GPIOD->CFGLR &= ~(0xF << 8); // 0b0000 = Analog Input
 
     // 4. PD3 — выход Push-Pull 50MHz (искусственная земля)
     GPIOD->CFGLR = (GPIOD->CFGLR & ~(0xF << 12)) | (0x3 << 12);
-    GPIOD->BCR = (1 << 3);  // PD3 = 0
+    //GPIOD->BCR = (1 << 3); // PD3 = 0
+    GPIOD->BSHR = (1 << 3);  // PD3 = 1
 
     // 5. Сброс ADC1 через RCC (как делает SDK)
-    RCC->APB2PRSTR |= (1 << 9);   // ADC1RST = 1
-    RCC->APB2PRSTR &= ~(1 << 9);  // ADC1RST = 0
+    RCC->APB2PRSTR |= (1 << 9);  // ADC1RST = 1
+    RCC->APB2PRSTR &= ~(1 << 9); // ADC1RST = 0
 
     // 6. CTLR1: Independent mode, без сканирования, без continuous, без external trigger
     ADC1->CTLR1 = 0;
 
     // 7. CTLR2: DataAlign=Right, EXTSEL=7 (software trigger only), ContinuousConv=OFF
-    ADC1->CTLR2 = 0x000E0000;  // ADC_ExternalTrigConv_None = EXTSEL[2:0]=111
+    ADC1->CTLR2 = 0x000E0000; // ADC_ExternalTrigConv_None = EXTSEL[2:0]=111
 
     // 8. RSQR1: L[3:0]=0 (1 канал в регулярной последовательности)
     ADC1->RSQR1 = 0;
@@ -122,7 +123,7 @@ void ntc_adc_Init(void)
     ADC1->ISQR = 8 << 15;
 
     // 12. SAMPTR1: время семплирования для injected каналов (SDK пишет сюда для Rank 1)
-    ADC1->SAMPTR1 = 3;  // 30 тактов для Vrefint
+    ADC1->SAMPTR1 = 3; // 30 тактов для Vrefint
 
     // 12. Калибровка ADC: CALVOLSELECT=50% (бит 25 в CTLR1)
     ADC1->CTLR1 |= (1 << 25);
@@ -137,19 +138,25 @@ void ntc_adc_Init(void)
     ADC1->CTLR2 |= (1 << 0);
 
     // 16. Задержка после включения ADC
-    for (volatile int i = 0; i < 1000; i++);
+    for (volatile int i = 0; i < 1000; i++)
+        ;
 
     // 17. Сброс калибровки (RSTCAL = бит 3 в CTLR2)
     ADC1->CTLR2 |= (1 << 3);
-    while (ADC1->CTLR2 & (1 << 3));
+    while (ADC1->CTLR2 & (1 << 3))
+        ;
 
     // 18. Калибровка ADC (CAL = бит 2 в CTLR2)
     ADC1->CTLR2 |= (1 << 2);
-    while (ADC1->CTLR2 & (1 << 2));
+    while (ADC1->CTLR2 & (1 << 2))
+        ;
 }
 
 void ntc_read(void)
 {
+    // Включаем делитель напряжения (PD3 = 0, земля)
+    GPIOD->BCR = (1 << 3);
+
     // Сбрасываем флаги EOC и JEOC (write-0-to-clear)
     ADC1->STATR = ~(0x02 | 0x04);
 
@@ -157,10 +164,12 @@ void ntc_read(void)
     ADC1->CTLR2 |= 0x00500000;
 
     // Ожидаем завершения регулярного преобразования (EOC, бит 1)
-    while (!(ADC1->STATR & (1 << 1)));
+    while (!(ADC1->STATR & (1 << 1)))
+        ;
 
     // Ожидаем завершения инжектированного преобразования (JEOC, бит 2)
-    while (!(ADC1->STATR & (1 << 2)));
+    while (!(ADC1->STATR & (1 << 2)))
+        ;
 
     // Читаем результат регулярного преобразования (NTC)
     uint16_t raw_temperature_adc = ADC1->RDATAR;
@@ -168,14 +177,18 @@ void ntc_read(void)
     // Читаем результат инжектированного преобразования (Vrefint)
     uint16_t vrefint_adc = ADC1->IDATAR1;
 
+    // Отключаем делитель напряжения (PD3 = 1, экономия заряда)
+    GPIOD->BSHR = (1 << 3);
+
     // Вычисляем напряжение питания (мВ): Vrefint=1.2V, 10-бит ADC
     uint32_t vbat_mv = (1200 * 1024) / vrefint_adc;
 
     // Расчет температуры по таблице
     int16_t temperature = calc_temperature(raw_temperature_adc);
 
+#ifdef PRINT_ADC
     // Выводим результат
     EE_PRINTF("%04d, %04d -> Vbat: %ld mV | Temp: %d.%d C\r\n",
               vrefint_adc, raw_temperature_adc, vbat_mv, temperature / 10, temperature % 10);
-
+#endif
 }

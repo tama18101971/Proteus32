@@ -12,5 +12,6 @@
 #endif
 
 //#define SLEEP_STANDBY
+//#define PRINT_ADC
 
 #endif // CONFIG_H
