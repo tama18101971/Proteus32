@@ -70,7 +70,7 @@ void out_set_stc(uint16_t step)
 {
 	// Вычисляем 9-bit значение напрямую
 	uint16_t bright = ((uint32_t)step * step * step + 523520) >> 18;
-	DAC7571_SetValue(bright + get_min_level(step)); // Если DAC7571_SetValue вместо DAC_Set
+	dac_set_value(bright + get_min_level(step)); // Если dac_set_value вместо DAC_Set
 }
 /******************************************************************************************/
 

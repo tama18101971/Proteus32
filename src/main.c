@@ -38,11 +38,11 @@ int main(void)
 #endif
 
     led_init();
-    Button_Init();
+    button_init();
 
-    I2C1_Init(I2C_SPEED_400K);
-    DAC7571_Set100K();
-    DAC7571_SetValue(1024);
+    i2c_init(I2C_SPEED_400K);
+
+    dac_set_value(1024);
 
     if (read_ee() == FAILED)
     {

@@ -22,7 +22,7 @@ void EXTI7_0_IRQHandler(void)
 /*********************************************************************
  * Button initialization (GPIO + EXTI + NVIC)
  *********************************************************************/
-void Button_Init(void)
+void button_init(void)
 {
     GPIO_InitTypeDef GPIO_InitStructure = {0};
     EXTI_InitTypeDef EXTI_InitStructure = {0};

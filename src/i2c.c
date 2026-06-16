@@ -3,7 +3,7 @@
 #include <ch32v00x_rcc.h>
 #include <ch32v00x_gpio.h>
 
-void I2C1_Init(uint32_t bound) {
+void i2c_init(uint32_t bound) {
     GPIO_InitTypeDef GPIO_InitStructure = {0};
     I2C_InitTypeDef  I2C_InitStructure = {0};
 

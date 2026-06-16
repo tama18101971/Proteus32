@@ -25,6 +25,6 @@ extern volatile uint8_t button_event;
 extern volatile driver_mode_t mode;
 extern led_state_t led_state;
 
-void Button_Init(void);
+void button_init(void);
 
 #endif // BUTTON_GPIO_H

@@ -1,7 +1,21 @@
 #include "dac.h"
 #include <ch32v00x_i2c.h>
 
-void DAC7571_SetValue(uint16_t data) {
+void dac_pwrpin_init(void) {
+    RCC->APB2PCENR |= RCC_APB2Periph_GPIOD;
+    DAC_PWR_PORT->OUTDR &= ~DAC_PWR_PIN;
+    GPIO_PinConfig(DAC_PWR_PORT, DAC_PWR_PIN, CFG_OUT_PP_2M);
+}
+
+void dac_pwrpin_on(void) {
+    DAC_PWR_PORT->BSHR = DAC_PWR_PIN;
+}
+
+void dac_pwrpin_off(void) {
+    DAC_PWR_PORT->BCR = DAC_PWR_PIN;
+}
+
+void dac_set_value(uint16_t data) {
     // Ограничиваем данные 12 битами
     data &= 0x0FFF;
 
@@ -26,7 +40,7 @@ void DAC7571_SetValue(uint16_t data) {
     I2C_GenerateSTOP(I2C1, ENABLE);
 }
 
-void DAC7571_Set100K(void) {
+void dac_set_100K(void) {
     // Для перевода в режим Power-Down 100кОм, биты PD1:PD0 устанавливаются в 10 (0x02)
     // Данные (12 бит) в этом режиме игнорируются, запишем нули.
     uint8_t msg_msb = (uint8_t)((DAC7571_MODE_PD_100K << 4) & 0x30); 
