@@ -4,22 +4,24 @@
 #include <stdbool.h>
 
 typedef enum {
-	AUX_15MS = 0,
-	AUX_30MS,
-	AUX_60MS,
-	AUX_120MS,
-	AUX_250MS,
-	AUX_500MS,
-	AUX_1S,
-	AUX_2S,
-	AUX_4S,
-	AUX_8S,
-	AUX_16S
+	AWU_15MS = 0,
+	AWU_30MS,
+	AWU_60MS,
+	AWU_120MS,
+	AWU_250MS,
+	AWU_500MS,
+	AWU_1S,
+	AWU_2S,
+	AWU_4S,
+	AWU_8S,
+	AWU_16S
 } awu_tick_t;
 
 void AWU_init(void);
-void EXTI_INT_INIT(void);
-bool awu_set_delay(awu_tick_t time_aux);
-void awu_stop(bool stop_lsi);
+void AWU_int_init(void);
+bool AWU_set_delay(awu_tick_t time_aux);
+void AWU_stop(bool stop_lsi);
+void AWU_Sleep_Tick(awu_tick_t tick);
+void AWU_Sleep_Now(void);
 
 #endif // AWU_H

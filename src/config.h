@@ -2,7 +2,7 @@
 #define CONFIG_H
 
 // Раскомментировать для отладки через UART
-#define WL_FLASH_DEBUG
+//#define WL_FLASH_DEBUG
 #define AUX_DEBUG
 
 #if defined(WL_FLASH_DEBUG) || defined(AUX_DEBUG)
@@ -11,5 +11,7 @@
 #else
     #define EE_PRINTF(...) ((void)0)
 #endif
+
+//#define SLEEP_STANDBY
 
 #endif // CONFIG_H

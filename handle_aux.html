@@ -121,17 +121,17 @@ while (1) {
         <h3>2.4 Временные интервалы (awu_tick_t)</h3>
         <table>
             <tr><th>Константа</th><th>Значение</th><th>Фактическое время</th></tr>
-            <tr><td><code class="enum-val">AUX_15MS</code></td><td>0</td><td>~15 мс</td></tr>
-            <tr><td><code class="enum-val">AUX_30MS</code></td><td>1</td><td>~30 мс</td></tr>
-            <tr><td><code class="enum-val">AUX_60MS</code></td><td>2</td><td>~60 мс</td></tr>
-            <tr><td><code class="enum-val">AUX_120MS</code></td><td>3</td><td>~120 мс</td></tr>
-            <tr><td><code class="enum-val">AUX_250MS</code></td><td>4</td><td>~250 мс</td></tr>
-            <tr><td><code class="enum-val">AUX_500MS</code></td><td>5</td><td>~500 мс</td></tr>
-            <tr><td><code class="enum-val">AUX_1S</code></td><td>6</td><td>~1 с</td></tr>
-            <tr><td><code class="enum-val">AUX_2S</code></td><td>7</td><td>~2 с</td></tr>
-            <tr><td><code class="enum-val">AUX_4S</code></td><td>8</td><td>~4 с</td></tr>
-            <tr><td><code class="enum-val">AUX_8S</code></td><td>9</td><td>~8 с</td></tr>
-            <tr><td><code class="enum-val">AUX_16S</code></td><td>10</td><td>~16 с</td></tr>
+            <tr><td><code class="enum-val">AWU_15MS</code></td><td>0</td><td>~15 мс</td></tr>
+            <tr><td><code class="enum-val">AWU_30MS</code></td><td>1</td><td>~30 мс</td></tr>
+            <tr><td><code class="enum-val">AWU_60MS</code></td><td>2</td><td>~60 мс</td></tr>
+            <tr><td><code class="enum-val">AWU_120MS</code></td><td>3</td><td>~120 мс</td></tr>
+            <tr><td><code class="enum-val">AWU_250MS</code></td><td>4</td><td>~250 мс</td></tr>
+            <tr><td><code class="enum-val">AWU_500MS</code></td><td>5</td><td>~500 мс</td></tr>
+            <tr><td><code class="enum-val">AWU_1S</code></td><td>6</td><td>~1 с</td></tr>
+            <tr><td><code class="enum-val">AWU_2S</code></td><td>7</td><td>~2 с</td></tr>
+            <tr><td><code class="enum-val">AWU_4S</code></td><td>8</td><td>~4 с</td></tr>
+            <tr><td><code class="enum-val">AWU_8S</code></td><td>9</td><td>~8 с</td></tr>
+            <tr><td><code class="enum-val">AWU_16S</code></td><td>10</td><td>~16 с</td></tr>
         </table>
 
         <hr>
@@ -142,12 +142,12 @@ while (1) {
             <span class="step-num">1</span>
             <strong>Инициализация переменных</strong>
             <pre><code>// Глобальные переменные (уже объявлены в aux_leds.h)
-extern union AUX_Cmd_u aux_cmd_red;   // команда для красного
-extern union AUX_Cmd_u aux_cmd_grn;   // команда для зелёного
-extern AUX_Ctr_t aux_ctl_red;         // состояние красного
-extern AUX_Ctr_t aux_ctl_grn;         // состояние зелёного
-extern union AUX_Cmd_u *p_red;        // текущий указатель красного
-extern union AUX_Cmd_u *p_grn;        // текущий указатель зелёного</code></pre>
+extern union AWU_Cmd_u aux_cmd_red;   // команда для красного
+extern union AWU_Cmd_u aux_cmd_grn;   // команда для зелёного
+extern AWU_Ctr_t aux_ctl_red;         // состояние красного
+extern AWU_Ctr_t aux_ctl_grn;         // состояние зелёного
+extern union AWU_Cmd_u *p_red;        // текущий указатель красного
+extern union AWU_Cmd_u *p_grn;        // текущий указатель зелёного</code></pre>
         </div>
 
         <div class="step">
@@ -184,7 +184,7 @@ cmd |= (0 << 29);          // биты 29..31: brightness1
 //     ((dev) | ((cyc)<<3) | ((cnt)<<4) | ((d0)<<8) | ((d1)<<17) | ((b0)<<26) | ((b1)<<29))
 
 // Запускаем
-start_aux_cmd(cmd, AUX_1S, true, IDM_OTHER);</code></pre>
+start_aux_cmd(cmd, AWU_1S, true, IDM_OTHER);</code></pre>
         </div>
 
         <div class="step">
@@ -206,8 +206,8 @@ const uint32_t my_program[] = {
 };
 
 // Устанавливаем указатель на начало
-p_red = (union AUX_Cmd_u*)my_program;
-p_grn = (union AUX_Cmd_u*)my_program;
+p_red = (union AWU_Cmd_u*)my_program;
+p_grn = (union AWU_Cmd_u*)my_program;
 
 // Сбрасываем индексы
 aux_ctl_red.arr_index = 0;
@@ -247,7 +247,7 @@ void my_blink(void) {
     // Команда: RED, 5 повторов, 10×15мс ЯРКО → 10×15мс ВЫКЛ
     uint32_t cmd = RED_LED | (0 << 3) | (5 << 4) | (10 << 8) | (10 << 17) | (1 << 26) | (0 << 29);
 
-    start_aux_cmd(cmd, AUX_1S, true, IDM_OTHER);
+    start_aux_cmd(cmd, AWU_1S, true, IDM_OTHER);
 }
 
 // В main():
@@ -313,8 +313,8 @@ const uint32_t grn_prog[] = {
     CMD_REP_START
 };
 
-p_red = (union AUX_Cmd_u*)red_prog;
-p_grn = (union AUX_Cmd_u*)grn_prog;
+p_red = (union AWU_Cmd_u*)red_prog;
+p_grn = (union AWU_Cmd_u*)grn_prog;
 aux_ctl_red.arr_index = 0;
 aux_ctl_grn.arr_index = 0;
 aux_ctl_red.enable = true;
@@ -331,13 +331,13 @@ EnableArrayProcessingGrn = true;</code></pre>
         <h3>6.1 <code class="func-name">start_aux_cmd()</code></h3>
         <pre><code>/**
  * @brief Установка однократной команды для красного LED
- * @param command  — 32-битная команда (см. union AUX_Cmd_u)
- * @param delay    — интервал таймера (AUX_15MS, AUX_60MS, AUX_1S и т.д.)
+ * @param command  — 32-битная команда (см. union AWU_Cmd_u)
+ * @param delay    — интервал таймера (AWU_15MS, AWU_60MS, AWU_1S и т.д.)
  * @param enable   — true = начать обработку, false = отложить
  * @param idm_mode — режим индикации (IDM_OTHER, IDM_BEACON и т.д.)
  */
 void start_aux_cmd(uint32_t command, awu_tick_t delay, bool enable, IDM_Type_t idm_mode) {
-    // Приводим 32-битный код к union AUX_Cmd_u
+    // Приводим 32-битный код к union AWU_Cmd_u
     aux_cmd_red.aux_cmd = command;
 
     // Устанавливаем контрольные флаги
@@ -352,8 +352,8 @@ void start_aux_cmd(uint32_t command, awu_tick_t delay, bool enable, IDM_Type_t i
     p_red = &aux_cmd_red;
 
     // Запускаем таймер (если нужно)
-    if (delay != AUX_15MS) {
-        awu_set_delay(delay);
+    if (delay != AWU_15MS) {
+        AWU_set_delay(delay);
     }
 }</code></pre>
 
@@ -378,7 +378,7 @@ void off_aux_cmd(bool stop_wdt) {
 
     // Останавливаем таймер если нужно
     if (stop_wdt) {
-        awu_set_delay(AUX_15MS);  // минимальный интервал
+        AWU_set_delay(AWU_15MS);  // минимальный интервал
     }
 }</code></pre>
 
@@ -452,11 +452,11 @@ bool is_aux_strobe(void) {
         <h3>7.1 Информационное моргание (1 вспышка)</h3>
         <pre><code>// Красный: 1 повтор, 1×15мс ЯРКО → 0×15мс ВЫКЛ
 // Итого: 15мс вспышка
-start_aux_cmd(INFO_RED, AUX_60MS, true, IDM_OTHER);
+start_aux_cmd(INFO_RED, AWU_60MS, true, IDM_OTHER);
 
 // Аналог через MAKE_CMD:
 uint32_t cmd = MAKE_CMD(RED_LED, 1, 1, 1, 0, 2, 0);
-start_aux_cmd(cmd, AUX_60MS, true, IDM_OTHER);</code></pre>
+start_aux_cmd(cmd, AWU_60MS, true, IDM_OTHER);</code></pre>
 
         <h3>7.2 Beacon (бесконечное моргание)</h3>
         <pre><code>// Beacon: красный, бесконечно, 8×15мс ЯРКО → 0×15мс ВЫКЛ
@@ -469,7 +469,7 @@ void start_aux_beacon(void) {
                    | beacon_type
                    | ((beacon_mode + 7) << 12);
 
-    start_aux_cmd(cmd, AUX_1S, true, IDM_BEACON);
+    start_aux_cmd(cmd, AWU_1S, true, IDM_BEACON);
 }</code></pre>
 
         <h3>7.3 Предупреждение о низком напряжении</h3>
@@ -481,7 +481,7 @@ void start_exaux_voltage(WARNING_Fr_t ex_mode) {
         case VWARNING_MEDIUM:  low16 = 0b1000000000001011; break;  // ~4с
         case VWARNING_SLOW:    low16 = 0b1001000000001010; break;  // ~8с
     }
-    start_aux_cmd(0b00000000000000010000000000000000 | low16, AUX_1S, true, IDM_VWARNING);
+    start_aux_cmd(0b00000000000000010000000000000000 | low16, AWU_1S, true, IDM_VWARNING);
 }</code></pre>
 
         <h3>7.4 Счётчик импульсов (индикация заряда)</h3>
@@ -493,7 +493,7 @@ void aux_count(uint8_t count) {
     else
         cmd = 0b00000000000000010010001000010001;  // одна красная если 0
 
-    start_aux_cmd(cmd, AUX_250MS, true, IDM_OTHER);
+    start_aux_cmd(cmd, AWU_250MS, true, IDM_OTHER);
 }</code></pre>
 
         <hr>
@@ -521,7 +521,7 @@ void aux_count(uint8_t count) {
         <h3>8.3 Как расшифровать 32-битную команду</h3>
         <pre><code>// Функция для отладки: вывод полей команды
 void debug_cmd(uint32_t cmd) {
-    union AUX_Cmd_u u;
+    union AWU_Cmd_u u;
     u.aux_cmd = cmd;
 
     EE_PRINTF("CMD: 0x%08lX\n", cmd);

@@ -2,6 +2,10 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "ch32v00x_pwr.h"
+#include "ch32v00x_rcc.h"
+#include "ch32v00x_usart.h"
+#include "debug.h"
+#include "config.h"
 
 // Структура для таблицы настроек AWU
 typedef struct
@@ -39,23 +43,23 @@ typedef struct
 
 // Таблица поиска (размещается в Flash-памяти благодаря const)
 static const awu_cfg_t awu_lut[] = {
-    {PWR_AWU_Prescaler_128, 15},   // AUX_15MS
-    {PWR_AWU_Prescaler_128, 30},   // AUX_30MS
-    {PWR_AWU_Prescaler_256, 30},   // AUX_60MS
-    {PWR_AWU_Prescaler_256, 60},   // AUX_120MS
-    {PWR_AWU_Prescaler_512, 63},   // AUX_250MS
-    {PWR_AWU_Prescaler_1024, 63},  // AUX_500MS
-    {PWR_AWU_Prescaler_2048, 63},  // AUX_1S
-    {PWR_AWU_Prescaler_10240, 25}, // AUX_2S
-    {PWR_AWU_Prescaler_10240, 50}, // AUX_4S
-    {PWR_AWU_Prescaler_61440, 17}, // AUX_8S
-    {PWR_AWU_Prescaler_61440, 33}, // AUX_16S
+    {PWR_AWU_Prescaler_128, 15},   // AWU_15MS
+    {PWR_AWU_Prescaler_128, 30},   // AWU_30MS
+    {PWR_AWU_Prescaler_256, 30},   // AWU_60MS
+    {PWR_AWU_Prescaler_256, 60},   // AWU_120MS
+    {PWR_AWU_Prescaler_512, 63},   // AWU_250MS
+    {PWR_AWU_Prescaler_1024, 63},  // AWU_500MS
+    {PWR_AWU_Prescaler_2048, 63},  // AWU_1S
+    {PWR_AWU_Prescaler_10240, 25}, // AWU_2S
+    {PWR_AWU_Prescaler_10240, 50}, // AWU_4S
+    {PWR_AWU_Prescaler_61440, 17}, // AWU_8S
+    {PWR_AWU_Prescaler_61440, 33}, // AWU_16S
 };
 
 #define AWU_TICKS_COUNT (sizeof(awu_lut) / sizeof(awu_lut[0]))
 
 // Объединили две функции в одну
-bool awu_set_delay(awu_tick_t awu_tick)
+bool AWU_set_delay(awu_tick_t awu_tick)
 {
     // Проверка на выход за пределы таблицы
     if (awu_tick >= AWU_TICKS_COUNT)
@@ -70,7 +74,7 @@ bool awu_set_delay(awu_tick_t awu_tick)
 /*********************************************************************
  * EXTI initialization
  *********************************************************************/
-void EXTI_INT_INIT(void)
+void AWU_int_init(void)
 {
     EXTI_InitTypeDef EXTI_InitStructure = {0};
 
@@ -96,11 +100,36 @@ void AWU_init(void)
         ;
 }
 
-void awu_stop(bool stop_lsi)
+void AWU_stop(bool stop_lsi)
 {
     PWR_AutoWakeUpCmd(DISABLE);
     if (stop_lsi)
     {
         RCC_LSICmd(DISABLE);
     }
+}
+
+void AWU_Sleep_Tick(awu_tick_t tick)
+{
+    AWU_set_delay(tick);
+    AWU_Sleep_Now();
+}
+
+void AWU_Sleep_Now(void)
+{
+#if defined(SLEEP_STANDBY) && (defined(AUX_DEBUG) || defined(WL_FLASH_DEBUG))
+    while (USART_GetFlagStatus(USART1, USART_FLAG_TC) == RESET);
+#endif
+
+    PWR_AutoWakeUpCmd(ENABLE);
+    PWR_EnterSTANDBYMode(PWR_STANDBYEntry_WFE);
+    PWR_AutoWakeUpCmd(DISABLE);
+
+    SystemInit();
+    SystemCoreClockUpdate();
+    Delay_Init();
+
+#if defined(WL_FLASH_DEBUG) || defined(AUX_DEBUG)
+    USART_Printf_Init(115200);
+#endif
 }

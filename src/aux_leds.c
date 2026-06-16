@@ -113,7 +113,6 @@ void smart_off_leds(LED_Bits_t channel) {
 	if (ee.aux.bcklight_type != BCK_TYPE_ON) {
 		if (channel == RED_LED) off_red();
 		else if (channel == GRN_LED) off_grn();
-		else if (channel == HBL_LED) { /* TODO: off_hbl() */ }
 		return;
 	}
 
@@ -125,6 +124,12 @@ void smart_off_leds(LED_Bits_t channel) {
 	case GRN_LED:
 		(ee.aux.bcklight_color == BCK_COLOR_GRN) ? on_grn_l() : off_grn();
 		break;
+	case HBL_LED:
+		;	// пустая заглушка чтобы компилятор не ругался
+		break;
+	default:
+		return; // unknown led
+
 	}
 }
 
@@ -174,7 +179,7 @@ void off_aux_cmd(LED_Bits_t channel, bool stop_lsi) {
 
 	if (stop_lsi) {
 		if (!is_aux_active(RED_LED) && !is_aux_active(GRN_LED) && !is_aux_active(HBL_LED)) {
-			awu_stop(true);
+			AWU_stop(true);
 		}
 	}
 }
@@ -189,8 +194,8 @@ void set_aux_count(uint8_t count) {
 
 	as_red.acmd.aux.brightness0 = 1;
 	as_red.acmd.aux.brightness1 = 0;
-	as_red.acmd.aux.duration0 = AUX_500MS;
-	as_red.acmd.aux.duration1 = AUX_60MS;
+	as_red.acmd.aux.duration0 = AWU_500MS;
+	as_red.acmd.aux.duration1 = AWU_60MS;
 	as_red.acmd.aux.count = count;
 	as_red.acmd.aux.cycle = 0;
 
@@ -212,16 +217,16 @@ void set_aux_count(uint8_t count) {
 	}
 
 	as_red.ubits.enable = true;
-	AUX_Set_Delay(AUX_15MS);								//включаем сторожевой таймер интервалом delay (WDTO_15MS)
+	AUX_Set_Delay(AWU_15MS);								//включаем сторожевой таймер интервалом delay (WDTO_15MS)
 }
 #endif
 
 void aux_cmd_info_red(void) {
-	start_aux_cmd(INFO_RED, AUX_60MS, true, IDM_OTHER);
+	start_aux_cmd(INFO_RED, AWU_60MS, true, IDM_OTHER);
 }
 
 void aux_cmd_info_grn(void) {
-	start_aux_cmd(INFO_GRN, AUX_60MS, true, IDM_OTHER);
+	start_aux_cmd(INFO_GRN, AWU_60MS, true, IDM_OTHER);
 }
 
 /**
@@ -259,8 +264,8 @@ void start_aux_cmd(uint32_t command, awu_tick_t delay, bool enable, IDM_Type_t i
 
     *ptr = cmd;
 
-    if (delay != AUX_15MS) {
-        awu_set_delay(delay);
+    if (delay != AWU_15MS) {
+        AWU_set_delay(delay);
     }
 }
 
@@ -431,7 +436,7 @@ void start_aux_beacon(void) {
 	uint16_t beacon_mode = (uint16_t) ee.aux.beacon_mode;		// частота моргания
 
 	cmd = (0b00000000000000010000000100001000 | beacon_type | ((beacon_mode + 7) << 12));
-	start_aux_cmd(cmd, AUX_1S, true, IDM_BEACON);
+	start_aux_cmd(cmd, AWU_1S, true, IDM_BEACON);
 }
 
 #ifdef USE_EX_AUX
@@ -451,7 +456,7 @@ void start_exaux_voltage(WARNING_Fr_t ex_mode) {
 		low16 = 0b1001000000001010;	// 8sec
 		break;
 	}
-	start_aux_cmd((0b00000000000000010000000000000000 | low16), AUX_1S, true, IDM_VWARNING);
+	start_aux_cmd((0b00000000000000010000000000000000 | low16), AWU_1S, true, IDM_VWARNING);
 }
 #endif
 
@@ -480,11 +485,11 @@ void slot_batt_ind(void) {
 }
 
 void aux_on(void) {
-	start_aux_cmd(INFO_GRN, AUX_60MS, true, IDM_OTHER);
+	start_aux_cmd(INFO_GRN, AWU_60MS, true, IDM_OTHER);
 }
 
 void aux_off(void) {
-	start_aux_cmd(INFO_RED, AUX_60MS, true, IDM_OTHER);
+	start_aux_cmd(INFO_RED, AWU_60MS, true, IDM_OTHER);
 }
 
 void aux_count(uint8_t count) {
@@ -493,7 +498,7 @@ void aux_count(uint8_t count) {
 		cmd = 0b00000000000000010100000100000010 | (count << 4);	// зеленые, если не ноль
 	else
 		cmd = 0b00000000000000010010001000010001;					// одна красная, если 0
-	start_aux_cmd(cmd, AUX_250MS, true, IDM_OTHER);
+	start_aux_cmd(cmd, AWU_250MS, true, IDM_OTHER);
 }
 
 /**********************************************************************************************/
@@ -514,18 +519,3 @@ void debug_cmd(uint32_t cmd) {
 }
 #endif /* AUX_DEBUG */
 
-/************************************************************************/
-/*                                                                      */
-/************************************************************************/
-void test_aux_beacon(void) {
-	uint32_t *p = (uint32_t*)&aux_ctl_red;
-	*p = 0;
-	p = (uint32_t*)&aux_ctl_grn;
-	*p = 0;
-
-	aux_ctl_red.idmode			= IDM_BEACON;
-
-	aux_ctl_grn.idmode			= IDM_BEACON;
-	aux_ctl_grn.arr_index		= 0;
-	aux_ctl_grn.enable			= true;
-}

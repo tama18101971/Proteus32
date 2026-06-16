@@ -147,8 +147,6 @@ void smart_off_leds(LED_Bits_t channel);
 void aux_on(void);
 void aux_off(void);
 
-void test_aux_beacon(void);
-
 void handle_aux(void);
 void handle_aux_cmd(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits);
 union AUX_Cmd_u *handle_aux_array(const uint32_t pBuffer[], AUX_Ctr_t *ubits) ;

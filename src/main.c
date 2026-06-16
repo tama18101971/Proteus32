@@ -16,54 +16,6 @@ volatile driver_mode_t mode = MODE_BEACON;
 
 led_state_t led_state = LED_OFF_STATE;
 
-/*********************************************************************
- * Sleep ~480 ms
- *********************************************************************/
-void Sleep500ms(void)
-{
-    PWR_AWU_SetPrescaler(PWR_AWU_Prescaler_10240);
-    PWR_AWU_SetWindowValue(6);
-
-    PWR_AutoWakeUpCmd(ENABLE);
-
-    PWR_EnterSTANDBYMode(PWR_STANDBYEntry_WFE);
-
-    PWR_AutoWakeUpCmd(DISABLE);
-
-    SystemInit();
-
-    SystemCoreClockUpdate();
-    Delay_Init();
-
-#ifdef WL_FLASH_DEBUG
-    USART_Printf_Init(115200);
-#endif
-}
-
-/*********************************************************************
- * Sleep ~144 ms
- *********************************************************************/
-void Sleep150ms(void)
-{
-    PWR_AWU_SetPrescaler(PWR_AWU_Prescaler_2048);
-    PWR_AWU_SetWindowValue(9);
-
-    PWR_AutoWakeUpCmd(ENABLE);
-
-    PWR_EnterSTANDBYMode(PWR_STANDBYEntry_WFE);
-
-    PWR_AutoWakeUpCmd(DISABLE);
-
-    SystemInit();
-
-    SystemCoreClockUpdate();
-    Delay_Init();
-
-#ifdef WL_FLASH_DEBUG
-    USART_Printf_Init(115200);
-#endif
-}
-
 int main(void)
 {
     uint32_t idle_ms = 0;
@@ -72,7 +24,7 @@ int main(void)
     SystemCoreClockUpdate();
     Delay_Init();
 
-    Delay_Ms(4000);
+    Delay_Ms(3000);
 
 #if defined(WL_FLASH_DEBUG) || defined(AUX_DEBUG)
     USART_Printf_Init(115200);
@@ -80,11 +32,13 @@ int main(void)
 
     EE_PRINTF("\r\n[MAIN] Boot...\r\n");
 
-    EXTI_INT_INIT();
+#ifdef SLEEP_STANDBY
+    AWU_init();
+    AWU_int_init();
+#endif
 
     led_init();
     Button_Init();
-    AWU_init();
 
     I2C1_Init(I2C_SPEED_400K);
     DAC7571_Set100K();
@@ -95,27 +49,34 @@ int main(void)
         init_ee();
     }
 
-    awu_set_delay(AUX_15MS);
-
+#ifdef SLEEP_STANDBY
+    AWU_set_delay(AWU_15MS);
     // здесь дописать усыпание
 
-    //test_aux_beacon();
-    
-    //start_aux_cmd(ERRO_RED, AUX_15MS, true, IDM_BEACON);
-    start_aux_cmd(INFO_GRN, AUX_15MS, true, IDM_BEACON);
+#endif
+
+    // start_aux_cmd(ERRO_RED, AWU_15MS, true, IDM_BEACON);
+    start_aux_cmd(INFO_GRN, AWU_15MS, true, IDM_BEACON);
 
     start_aux_array(buf_sos_red);
-    //start_aux_array(buf_grn);
+    // start_aux_array(buf_grn);
 
     while (1)
     {
         if (mode == MODE_BEACON)
         {
-            handle_aux();
-    		scan_ui1();
+#ifdef SLEEP_STANDBY
+            AWU_set_delay(AWU_15MS);
+#endif
 
-            // Sleep500ms();
+            handle_aux();
+            scan_ui1();
+
+#ifdef SLEEP_STANDBY
+            AWU_Sleep_Now();
+#else
             Delay_Ms(15);
+#endif
         }
         else
         {

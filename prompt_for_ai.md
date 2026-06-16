@@ -8,7 +8,7 @@
 
 ## Описание битовых полей
 
-### 1. Команда AUX_Cmd_u (32 бита)
+### 1. Команда AWU_Cmd_u (32 бита)
 Это основная структура для задания параметров моргания LED.
 
 #### Режим aux (управление LED):
@@ -54,7 +54,7 @@
               Иначе — это параметры LED
 ```
 
-### 2. Контрольная структура AUX_Ctr_t (32 бита)
+### 2. Контрольная структура AWU_Ctr_t (32 бита)
 Внутреннее состояние каждого LED-канала.
 
 ```
@@ -175,6 +175,6 @@ uint32_t make_my_command(params...) {
 // Запуск обработки
 void start_my_led(void) {
     uint32_t cmd = make_my_command(...);
-    start_aux_cmd(cmd, AUX_60MS, true, IDM_OTHER);
+    start_aux_cmd(cmd, AWU_60MS, true, IDM_OTHER);
 }
 ```
