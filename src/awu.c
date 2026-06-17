@@ -1,135 +1,134 @@
 #include "awu.h"
 #include <stdint.h>
 #include <stdbool.h>
-#include "ch32v00x_pwr.h"
-#include "ch32v00x_rcc.h"
-#include "ch32v00x_usart.h"
+#include "system_ch32v00x.h"
 #include "debug.h"
 #include "config.h"
 
-// Структура для таблицы настроек AWU
-typedef struct
-{
-    uint32_t prescaler;
-    uint8_t window;
+/* ============================================================
+ * REGISTER DEFINITIONS (CH32V003 — only PWR AWU registers)
+ * ============================================================
+ * RCC, EXTI, USART registers — already defined in ch32v00x.h
+ * (included via system_ch32v00x.h). We only define PWR AWU
+ * registers that are NOT in the SDK header.
+ */
+
+/* --- PWR AWU registers (not in ch32v00x.h as struct members) --- */
+#define PWR_CTLR            (*(volatile uint32_t *)(PWR_BASE + 0x00))
+#define PWR_AWUCSR_REG      (*(volatile uint32_t *)(PWR_BASE + 0x08))
+#define PWR_AWUWR_REG       (*(volatile uint32_t *)(PWR_BASE + 0x0C))
+#define PWR_AWUPSC_REG      (*(volatile uint32_t *)(PWR_BASE + 0x10))
+
+/*
+ * PWR_BASE, PWR_CTLR_PDDS, PWR_AWUCSR_AWUEN, PWR_AWUPSC_128..61440
+ * — определены в ch32v00x.h
+ */
+
+/* ============================================================
+ * AWU TABLE
+ * ============================================================
+ * LSI = 128 kHz. Formula: Time = (Prescaler * WindowValue) / 128000
+ */
+typedef struct {
+    uint8_t psc;    /* Prescaler value (4 bits for AWUPSC register) */
+    uint8_t window; /* Window value (6 bits for AWUWR register) */
 } awu_cfg_t;
 
-/*----------------------------------------------------------------------------------*/
-// * Преобразует перечисление временных интервалов awu_tick_t в параметры AWU:
-// * - Prescaler: предделитель частоты LSI (128 kHz на CH32V003)
-// * - WindowValue: значение окна сравнения (0-63), определяет длительность сна
-// *
-// * Формула времени сна на CH32V003:
-// *   Time(sleep) = (Prescaler × WindowValue) / LSI_Freq
-// *
-// * Где:
-// *   LSI_Freq = 128000 Гц (внутренний генератор)
-// *   Prescaler - коэффициент из регистра AWU (128, 256, 512, 1024, 2048, 10240, 61440)
-// *   WindowValue - значение счетчика AWU (0-63)
-// *
-// * Алгебраические расчеты для выбранных значений:
-// *   15ms  = (128 × 15) / 128000 = 0.015 с
-// *   30ms  = (128 × 30) / 128000 = 0.03 с
-// *   60ms  = (256 × 30) / 128000 = 0.06 с
-// *   120ms = (256 × 60) / 128000 = 0.12 с
-// *   250ms = (512 × 63) / 128000 = 0.252 с
-// *   500ms = (1024 × 63)/ 128000 = 0.504 с
-// *   1s    = (2048 × 63)/ 128000 = 1.008 с
-// *   2s    = (10240× 25)/ 128000 = 2.0 с
-// *   4s    = (10240× 50)/ 128000 = 4.0 с
-// *   8s    = (61440× 17)/ 128000 = 8.16 с
-// *   16s   = (61440× 33)/ 128000 = 16.32 с
-/*----------------------------------------------------------------------------------*/
-
-// Таблица поиска (размещается в Flash-памяти благодаря const)
 static const awu_cfg_t awu_lut[] = {
-    {PWR_AWU_Prescaler_128, 15},   // AWU_15MS
-    {PWR_AWU_Prescaler_128, 30},   // AWU_30MS
-    {PWR_AWU_Prescaler_256, 30},   // AWU_60MS
-    {PWR_AWU_Prescaler_256, 60},   // AWU_120MS
-    {PWR_AWU_Prescaler_512, 63},   // AWU_250MS
-    {PWR_AWU_Prescaler_1024, 63},  // AWU_500MS
-    {PWR_AWU_Prescaler_2048, 63},  // AWU_1S
-    {PWR_AWU_Prescaler_10240, 25}, // AWU_2S
-    {PWR_AWU_Prescaler_10240, 50}, // AWU_4S
-    {PWR_AWU_Prescaler_61440, 17}, // AWU_8S
-    {PWR_AWU_Prescaler_61440, 33}, // AWU_16S
+    {PWR_AWUPSC_128,  15},  /* AWU_15MS  = (128  * 15) / 128000 = 0.015s  */
+    {PWR_AWUPSC_128,  30},  /* AWU_30MS  = (128  * 30) / 128000 = 0.030s  */
+    {PWR_AWUPSC_256,  30},  /* AWU_60MS  = (256  * 30) / 128000 = 0.060s  */
+    {PWR_AWUPSC_256,  60},  /* AWU_120MS = (256  * 60) / 128000 = 0.120s  */
+    {PWR_AWUPSC_512,  63},  /* AWU_250MS = (512  * 63) / 128000 = 0.252s  */
+    {PWR_AWUPSC_1024, 63},  /* AWU_500MS = (1024 * 63) / 128000 = 0.504s  */
+    {PWR_AWUPSC_2048, 63},  /* AWU_1S    = (2048 * 63) / 128000 = 1.008s  */
+    {PWR_AWUPSC_10240, 25}, /* AWU_2S    = (10240* 25) / 128000 = 2.0s    */
+    {PWR_AWUPSC_10240, 50}, /* AWU_4S    = (10240* 50) / 128000 = 4.0s    */
+    {PWR_AWUPSC_61440, 17}, /* AWU_8S    = (61440* 17) / 128000 = 8.16s   */
+    {PWR_AWUPSC_61440, 33}, /* AWU_16S   = (61440* 33) / 128000 = 16.32s  */
 };
 
 #define AWU_TICKS_COUNT (sizeof(awu_lut) / sizeof(awu_lut[0]))
 
-// Объединили две функции в одну
+/* ============================================================
+ * AWU_set_delay — настройка prescaler и window
+ * ============================================================ */
 bool AWU_set_delay(awu_tick_t awu_tick)
 {
-    // Проверка на выход за пределы таблицы
     if (awu_tick >= AWU_TICKS_COUNT)
         return false;
 
-    PWR_AWU_SetPrescaler(awu_lut[awu_tick].prescaler);
-    PWR_AWU_SetWindowValue(awu_lut[awu_tick].window);
+    PWR_AWUPSC_REG = awu_lut[awu_tick].psc;  /* Запись предделителя (биты 3:0 регистра AWUPSC) */
+    PWR_AWUWR_REG  = awu_lut[awu_tick].window;  /* Запись значения окна (биты 5:0 регистра AWUWR) */
 
     return true;
 }
 
-/*********************************************************************
- * EXTI initialization
- *********************************************************************/
+/* ============================================================
+ * AWU_int_init — настройка EXTI Line 9 (AWU event)
+ * ============================================================ */
 void AWU_int_init(void)
 {
-    EXTI_InitTypeDef EXTI_InitStructure = {0};
+    RCC->APB2PCENR |= RCC_AFIOEN;            /* Включаем тактирование AFIO (обязательно для EXTI) */
 
-    RCC_APB2PeriphClockCmd(RCC_APB2Periph_AFIO, ENABLE);
-
-    EXTI_InitStructure.EXTI_Line = EXTI_Line9;
-    EXTI_InitStructure.EXTI_Mode = EXTI_Mode_Event;
-    EXTI_InitStructure.EXTI_Trigger = EXTI_Trigger_Falling;
-    EXTI_InitStructure.EXTI_LineCmd = ENABLE;
-
-    EXTI_Init(&EXTI_InitStructure);
+    EXTI->EVENR  |=  EXTI_Line9;             /* Line 9 как EVENT (не interrupt) — пробуждение без обработчика */
+    EXTI->RTENR  &= ~EXTI_Line9;             /* Сброс rising trigger для Line 9 */
+    EXTI->FTENR  |=  EXTI_Line9;             /* Falling trigger для Line 9 (активный уровень — LOW) */
 }
 
-/*********************************************************************
- * AWU initialization
- *********************************************************************/
+/* ============================================================
+ * AWU_init — включение PWR тактирования и LSI генератора
+ * ============================================================ */
 void AWU_init(void)
 {
-    RCC_APB1PeriphClockCmd(RCC_APB1Periph_PWR, ENABLE);
-    RCC_LSICmd(ENABLE);
+    RCC->APB1PCENR |= RCC_PWREN;             /* Включаем тактирование PWR (бит 28 APB1PCENR) */
+    RCC->RSTSCKR   |= RCC_LSION;             /* Включаем LSI генератор (бит 0 RSTSCKR) */
 
-    while (RCC_GetFlagStatus(RCC_FLAG_LSIRDY) == RESET)
+    while (!(RCC->RSTSCKR & RCC_LSIRDY))     /* Ждём стабилизации LSI (бит 1 RSTSCKR) */
         ;
 }
 
+/* ============================================================
+ * AWU_stop — выключение AWU и опционально LSI
+ * ============================================================ */
 void AWU_stop(bool stop_lsi)
 {
-    PWR_AutoWakeUpCmd(DISABLE);
-    if (stop_lsi)
-    {
-        RCC_LSICmd(DISABLE);
+    PWR_AWUCSR_REG &= ~PWR_AWUCSR_AWUEN;    /* Выключаем AWU (бит 1 AWUCSR) */
+
+    if (stop_lsi) {
+        RCC->RSTSCKR &= ~RCC_LSION;        /* Выключаем LSI (бит 0 RSTSCKR) */
     }
 }
 
+/* ============================================================
+ * AWU_Sleep_Tick — настройка + сон
+ * ============================================================ */
 void AWU_Sleep_Tick(awu_tick_t tick)
 {
     AWU_set_delay(tick);
     AWU_Sleep_Now();
 }
 
+/* ============================================================
+ * AWU_Sleep_Now — вход в STANDBY и пробуждение
+ * ============================================================ */
 void AWU_Sleep_Now(void)
 {
 #if defined(SLEEP_STANDBY) && defined(WL_FLASH_DEBUG)
-    while (USART_GetFlagStatus(USART1, USART_FLAG_TC) == RESET);
+    while (!(USART1->STATR & USART_FLAG_TC))  /* Ждём окончания передачи USART1 (бит 6 STATR) */
+        ;
 #endif
 
-    PWR_AutoWakeUpCmd(ENABLE);
-    PWR_EnterSTANDBYMode(PWR_STANDBYEntry_WFE);
-    PWR_AutoWakeUpCmd(DISABLE);
+    PWR_AWUCSR_REG |= PWR_AWUCSR_AWUEN;           /* Включаем AWU (таймер стартует) */
+    PWR_CTLR       |= PWR_CTLR_PDDS;              /* Выбираем STANDBY режим (бит 1 CTLR = PDDS) */
+    __WFE();                                       /* Wait For Event — MCU засыпает до события AWU */
+    PWR_AWUCSR_REG &= ~PWR_AWUCSR_AWUEN;          /* Выключаем AWU после пробуждения */
 
-    SystemInit();
-    SystemCoreClockUpdate();
-    Delay_Init();
+    SystemInit();                              /* Восстанавливаем системные часы после пробуждения */
+    SystemCoreClockUpdate();                   /* Обновляем переменную SystemCoreClock */
+    Delay_Init();                              /* Инициализация Delay_us/Delay_ms */
 
-#ifdef WL_FLASH_DEBUG 
-    USART_Printf_Init(115200);
+#ifdef WL_FLASH_DEBUG
+    USART_Printf_Init(115200);                 /* Восстанавливаем UART для отладки */
 #endif
 }
