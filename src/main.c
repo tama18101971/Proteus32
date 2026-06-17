@@ -13,6 +13,7 @@
 #include "ntc_table.h"
 
 volatile uint8_t button_event = 0;
+extern uint8_t need_save;
 volatile driver_mode_t mode = MODE_BEACON;
 
 led_state_t led_state = LED_OFF_STATE;
@@ -27,7 +28,7 @@ int main(void)
 
     Delay_Ms(3000);
 
-#ifdef WL_FLASH_DEBUG 
+#ifdef WL_FLASH_DEBUG
     USART_Printf_Init(115200);
 #endif
 
@@ -49,7 +50,7 @@ int main(void)
 
     i2c_init(I2C_SPEED_400K);
 
-    dac_set_value(1024);
+    // dac_set_value(1024);
     /* DAC */
 
     if (read_ee() == FAILED)
@@ -80,7 +81,13 @@ int main(void)
 
             handle_aux();
             scan_ui1();
-            scan_ss();
+            ss_scan();
+
+            if (need_save)
+            {
+                write_ee();
+                need_save = false;
+            }
 
 #ifdef SLEEP_STANDBY
             AWU_Sleep_Now();

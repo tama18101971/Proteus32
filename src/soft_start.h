@@ -29,7 +29,7 @@ typedef struct {
 	uint16_t position;			// конкретная позиция яркости
 } ss_st;
 
-void scan_ss(void);
+void ss_scan(void);
 void ss_init(uint16_t target, uint16_t previous, SoftStartSpeed_t speed);
 
 #endif /* INC_SOFT_START_H_ */

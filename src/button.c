@@ -123,14 +123,6 @@ void off_driver(uint8_t reset_step, SoftStartSpeed_t ss_speed)
 	stop_aux_voltage(); // отключаем моргания о низкой напруге
 #endif
 
-	/***********************/
-#ifdef USE_EEPROM
-	if (need_save)
-		write_ee();	   // почему бы не записать настройки тут?
-	need_save = false; // сбрасываем флаг.
-#endif
-	/***********************/
-
 	// sleep_remains = SLEEP_DELAY;
 	if (reset_step)
 		step_tc = 0;

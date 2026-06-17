@@ -97,7 +97,7 @@ void ntc_adc_Init(void)
     // 4. PD3 — выход Push-Pull 50MHz (искусственная земля)
     GPIOD->CFGLR = (GPIOD->CFGLR & ~(0xF << 12)) | (0x3 << 12);
     //GPIOD->BCR = (1 << 3); // PD3 = 0
-    GPIOD->BSHR = (1 << 3);  // PD3 = 1
+    GPIOD->BSHR = (1 << 3);  // PD3 = 1 отключаем питание делителя.
 
     // 5. Сброс ADC1 через RCC (как делает SDK)
     RCC->APB2PRSTR |= (1 << 9);  // ADC1RST = 1
