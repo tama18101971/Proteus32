@@ -1,37 +1,69 @@
-#include "wl_flash.h"
-#include "ch32v00x.h"
-#include <string.h>
-#include "aux_leds.h"
-#include "array.h"
-#include "main.h"
-#include "button.h"
+/* ============================================================
+ * wl_flash.c — EEPROM-эмуляция во flash для CH32V003
+ * ============================================================
+ * Файл реализует хранение настроек устройства в flash-памяти микроконтроллера CH32V003.
+ * Используется последние 256 байт flash (0x08003F00..0x08003FFF) как "EEPROM".
+ * Данные хранятся в формате: [seq][version][data...][crc32].
+ * Каждая запись — 32 байта (8 слов по 4 байта). При перезаписи seq увеличивается,
+ * что позволяет выбирать последнюю валидную запись без стирания старых.
+ * При заполнении EEPROM — все страницы стираются и запись начинается сначала.
+ * CRC32 обеспечивает целостность данных (nibble-алгоритм, 16-элементная таблица).
+ * ============================================================ */
+#include "wl_flash.h"       /* Заголовок модуля: структура ee_data, константы flash, API (init_ee, read_ee, write_ee) */
+#include "ch32v00x.h"       /* HAL/регистры CH32V003: FLASH, RCC и другие периферийные регистры */
+#include <string.h>          /* memcpy, memset — для копирования/обнуления структур */
+#include "aux_leds.h"        /* Определения BCK_COLOR_RED, BCK_TYPE_ON, BCON_2S, RED_LED — константы подсветки и маяка */
+#include "array.h"           /* Вспомогательные макросы/функции для работы с массивами */
+#include "main.h"            /* EE_PRINTF — макрос отладочного вывода (printf через UART/USB) */
+#include "button.h"          /* Определения SLOT_BATT_IND, SLOT_BEACON и т.д. — константы функций слотов */
 
 /* ============================================================
  * GLOBAL VARIABLES
  * ============================================================ */
-struct ee_data ee;
-static uint32_t ResAddress;
-static uint32_t MaxSeq;
+struct ee_data ee;                    /* Глобальный экземпляр EEPROM-данных в RAM.
+                                       Все модули программы читают/пишут настройки через эту переменную.
+                                       Заполняется из flash при вызове read_ee() */
+static uint32_t ResAddress;           /* Текущий адрес записи — указывает на следующий свободный слот
+                                       во flash. Обновляется при вызове flash_search_address().
+                                       Используется write_ee() для записи следующей порции данных */
+static uint32_t MaxSeq;               /* Максимальный номер последовательности среди всех записей
+                                       во flash. Используется для генерации seq при записи новой записи.
+                                       Каждая новая запись получает seq = MaxSeq + 1 */
 
 /* ============================================================
  * FLASH helpers (registers only)
  * ============================================================ */
+/* Ожидание завершения операции flash.
+   Регистр STATR флага BSY (Busy) устанавливается flash-контроллером при любой операции
+   (стирание/запись). Пока BSY=1 — нельзя выполнять другие операции.
+   Функция busy-waiting: опрашивает регистр в цикле пока BSY не сбросится */
 static inline void flash_wait_bsy(void)
 {
-    while (FLASH->STATR & FLASH_STATR_BSY);
+    while (FLASH->STATR & FLASH_STATR_BSY);  /* Ждём пока контроллер flash не закончит текущую операцию */
 }
 
+/* Очистка флагов ошибок flash-контроллера.
+   Флаг EOP (End of Operation) — операция завершена успешно.
+   Биты 0x10 и 0x04 — зарезервированные флаги ошибок (WRPERR, PGERR в CH32V003).
+   Запись 1 в эти биты очищает их (write-1-to-clear) */
 static inline void flash_clear_flags(void)
 {
-    FLASH->STATR = FLASH_STATR_EOP | 0x10 | 0x04;
+    FLASH->STATR = FLASH_STATR_EOP | 0x10 | 0x04;  /* Очищаем все флаги состояния flash-контроллера */
 }
 
 /* ============================================================
  * CRC32 (nibble-based, 16 entries)
  * ============================================================ */
-#define EE_STRUCT_SIZE  sizeof(struct ee_data)
-#define EE_DATA_WORDS   (EE_STRUCT_SIZE / DATAWIDTH)
+/* Макросы для вычисления размера структуры и количества 4-байтовых слов.
+   EE_STRUCT_SIZE = sizeof(struct ee_data) — общий размер структуры (32 байта).
+   EE_DATA_WORDS = EE_STRUCT_SIZE / 4 = 8 слов — количество итераций при записи flash */
+#define EE_STRUCT_SIZE  sizeof(struct ee_data)   /* Размер структуры в байтах (32) */
+#define EE_DATA_WORDS   (EE_STRUCT_SIZE / DATAWIDTH) /* Количество 4-байтовых слов (8) */
 
+/* Таблица CRC32 для nibble-алгоритма (16 entries вместо 256).
+   Nibble = полбайта (4 бита). Улучшенный алгоритм: обрабатывает 2 nibble за итерацию
+   вместо 1 байта — в 2 раза быстрее при небольшом увеличении таблицы.
+   Полином: 0xEDB88320 (обратная форма стандартного CRC32 полинома 0x04C11DB7) */
 static const uint32_t crc32_table[16] = {
     0x00000000, 0x1DB71064, 0x3B6E20C8, 0x26D930AC,
     0x76DC4190, 0x6B6B51F4, 0x4DB26158, 0x5005713C,
@@ -39,229 +71,321 @@ static const uint32_t crc32_table[16] = {
     0x9B64C2B0, 0x86D3D2D4, 0xA00AE278, 0xBDBDF21C
 };
 
+/* Вычисление CRC32 по nibble-алгоритму (16-элементная таблица).
+   Принимает: len — длина данных в байтах, data — указатель на данные.
+   Возвращает: CRC32 (полином 0xEDB88320, начальное значение 0xFFFFFFFF).
+   Алгоритм: XOR каждого байта с младшими 4 битами CRC, сдвиг вправо на 4 бита,
+   XOR с элементом таблицы. Повторяется 2 раза за байт (по nibble) */
 static uint32_t crc32_calc(uint32_t len, const void *data)
 {
-    const uint8_t *buf = (const uint8_t *)data;
-    uint32_t crc = 0xFFFFFFFF;
+    const uint8_t *buf = (const uint8_t *)data;  /* Приведение указателя к байтовому для побайтового доступа */
+    uint32_t crc = 0xFFFFFFFF;                    /* Начальное значение CRC (все единицы — стандарт для CRC32) */
     for (uint32_t i = 0; i < len; i++) {
-        crc ^= buf[i];
-        crc = (crc >> 4) ^ crc32_table[crc & 0x0F];
-        crc = (crc >> 4) ^ crc32_table[crc & 0x0F];
+        crc ^= buf[i];                            /* XOR текущего байта с младшими битами CRC */
+        crc = (crc >> 4) ^ crc32_table[crc & 0x0F];  /* Первый nibble: сдвиг 4 бита вправо, XOR с таблицей */
+        crc = (crc >> 4) ^ crc32_table[crc & 0x0F];  /* Второй nibble: ещё 4 бита — обработка целого байта */
     }
-    return crc;
+    return crc;                                   /* Возврат итогового CRC32 */
 }
 
 /* ============================================================
  * FLASH READ / VALIDATE
  * ============================================================ */
+/* Чтение структуры из flash по физическому адресу.
+   addr — физический адрес в flash (0x08003F00..0x08003FFF).
+   dest — указатель на структуру в RAM, куда скопировать данные.
+   Использует memcpy: CH32V003 разрешает прямое чтение flash через указатели
+   (flash подмаплен в адресное пространство CPU) */
 static void flash_read_struct(uint32_t addr, struct ee_data *dest)
 {
-    memcpy(dest, (const void *)addr, EE_STRUCT_SIZE);
+    memcpy(dest, (const void *)addr, EE_STRUCT_SIZE);  /* Копируем EE_STRUCT_SIZE (32) байт из flash в RAM */
 }
 
+/* Проверка валидности слота по адресу addr.
+   Возвращает: 1=слот валиден (данные целы, CRC совпадает), 0=слот пуст или повреждён.
+   Алгоритм:
+   1) Проверка первого байта: если 0xFF — слот пуст (flash после стирания = 0xFF)
+   2) Чтение структуры во временную переменную
+   3) Вычисление CRC32 по всем полям кроме crc (EE_STRUCT_SIZE - 4 = 28 байтов)
+   4) Сравнение вычисленного CRC с сохранённым в поле crc */
 static int is_slot_valid(uint32_t addr)
 {
-    if (*(volatile uint8_t *)addr == 0xFF) return 0;
-    struct ee_data temp = {0};
-    flash_read_struct(addr, &temp);
-    return crc32_calc(EE_STRUCT_SIZE - DATAWIDTH, &temp) == temp.crc;
+    if (*(volatile uint8_t *)addr == 0xFF) return 0;  /* Первый байт 0xFF — слот пуст (flash стёрта) */
+    struct ee_data temp = {0};                         /* Временная структура для чтения */
+    flash_read_struct(addr, &temp);                    /* Чтение данных из flash */
+    return crc32_calc(EE_STRUCT_SIZE - DATAWIDTH, &temp) == temp.crc;  /* Проверка: crc32(28 байтов) == сохранённый crc */
 }
 
 /* ============================================================
  * FLASH ERASE (1KB page via PER register)
  * ============================================================ */
+/* Стирание одной страницы flash (64 байта в CH32V003).
+   page_start — адрес начала страницы (должен быть выровнен по FLASH_PAGE_SIZE=64).
+   Возвращает: 1=успех (всегда — нет обработки ошибок).
+   Алгоритм (регистровый, без HAL):
+   1) Отключение прерываний (__disable_irq) — критическая секция, flash не доступна во время стирания
+   2) Разблокировка flash-контроллера: запись двух ключей FLASH_KEY1 и FLASH_KEY2 в KEYR
+   3) Ожидание завершения предыдущих операций (BSY=0)
+   4) Очистка флагов ошибок
+   5) Включение режима стирания страницы (бит PER в CTLR)
+   6) Запись адреса стираемой страницы в регистр ADDR
+   7) Запуск стирания (бит STRT в CTLR)
+   8) Ожидание завершения стирания (BSY=0)
+   9) Выключение режима стирания (сброс PER)
+   10) Блокировка flash-контроллера (установка LOCK)
+   11) Включение прерываний */
 static int erase_flash_page(uint32_t page_start)
 {
-    EE_PRINTF("[EEPROM] Erasing page 0x%08lX\r\n", page_start);
-    __disable_irq();
+    EE_PRINTF("[EEPROM] Erasing page 0x%08lX\r\n", page_start);  /* Отладочное сообщение: начало стирания */
+    __disable_irq();                        /* Отключаем прерывания — flash-операции атомарны и не терпят прерываний */
 
-    FLASH->KEYR = FLASH_KEY1;
-    FLASH->KEYR = FLASH_KEY2;
-    flash_wait_bsy();
-    flash_clear_flags();
+    FLASH->KEYR = FLASH_KEY1;              /* Первый ключ разблокировки flash (последовательность: KEY1, KEY2) */
+    FLASH->KEYR = FLASH_KEY2;              /* Второй ключ разблокировки flash (контроллер разблокирован только после обеих записей) */
+    flash_wait_bsy();                      /* Ждём завершения всех предыдущих flash-операций */
+    flash_clear_flags();                   /* Очищаем флаги ошибок перед стиранием */
 
-    FLASH->CTLR |= FLASH_CTLR_PER;
-    FLASH->ADDR = page_start;
-    FLASH->CTLR |= FLASH_CTLR_STRT;
-    flash_wait_bsy();
-    FLASH->CTLR &= ~FLASH_CTLR_PER;
+    FLASH->CTLR |= FLASH_CTLR_PER;        /* Включаем режим стирания страницы (Page Erase — PER бит) */
+    FLASH->ADDR = page_start;              /* Записываем адрес стираемой страницы в регистр ADDR */
+    FLASH->CTLR |= FLASH_CTLR_STRT;       /* Запускаем стирание (установка бита STRT — Start) */
+    flash_wait_bsy();                      /* Ждём завершения стирания ( Busy- wait: ~20-50 мкс на страницу) */
+    FLASH->CTLR &= ~FLASH_CTLR_PER;       /* Выключаем режим стирания страницы (сброс PER бита) */
 
-    FLASH->CTLR |= FLASH_CTLR_LOCK;
-    __enable_irq();
-    return 1;
+    FLASH->CTLR |= FLASH_CTLR_LOCK;       /* Блокируем flash-контроллер (защита от случайной записи) */
+    __enable_irq();                        /* Включаем прерывания обратно */
+    return 1;                              /* Возвращаем успех (ошибки стирания не обрабатываются) */
 }
 
+/* Проверка: вытерта ли страница по адресу page_start.
+   После стирания flash все байты = 0xFF. Проверяем первый байт.
+   Возвращает: 1=страница вытерта (все 0xFF), 0=страница содержит данные */
 static int is_page_erased(uint32_t page_start)
 {
-    return (*(volatile uint8_t *)page_start == 0xFF);
+    return (*(volatile uint8_t *)page_start == 0xFF);  /* Если первый байт == 0xFF — страница пуста */
 }
 
 /* ============================================================
  * SLOT SEARCH
  * ============================================================ */
+/* Поиск свободного слота и последней валидной записи во flash.
+   StartAddress — начальный адрес поиска (обычно PAGE_WRITE_START_ADDR).
+   LastValidAddr — указатель, куда записывается адрес последней валидной записи (с max seq).
+   Возвращает: адрес первого свободного слота (куда можно писать), или 0 если EEPROM заполнена.
+   Алгоритм:
+   1) Начинаем с StartAddress, идём вперёд пока не дойдём до конца EEPROM-области
+   2) Для каждого слота проверяем валидность (CRC)
+   3) Если слот валиден — читаем seq, обновляем MaxSeq и LastValidAddr если seq больше текущего max
+   4) Если слот невалиден — это свободное место, возвращаем его адрес
+   5) Если все слоты валидны и мы дошли до конца — возвращаем 0 (EEPROM заполнена) */
 uint32_t flash_search_address(uint32_t StartAddress, uint32_t *LastValidAddr)
 {
-    uint32_t current = StartAddress;
-    *LastValidAddr = 0;
-    MaxSeq = 0;
+    uint32_t current = StartAddress;        /* Текущий адрес для проверки — начинаем с начала EEPROM-области */
+    *LastValidAddr = 0;                     /* Инициализация: последняя валидная запись не найдена */
+    MaxSeq = 0;                             /* Инициализация: максимальный seq = 0 */
 
+    /* Проходим по EEPROM-области пока текущий адрес не выходит за границу.
+       PAGE_WRITE_END_ADDR - EE_STRUCT_SIZE = 0x08003F00 + 256 - 32 = 0x08003FE0 */
     while (current <= PAGE_WRITE_END_ADDR - EE_STRUCT_SIZE) {
-        if (is_slot_valid(current)) {
-            struct ee_data temp = {0};
-            flash_read_struct(current, &temp);
-            if (temp.seq >= MaxSeq) {
-                MaxSeq = temp.seq;
-                *LastValidAddr = current;
+        if (is_slot_valid(current)) {       /* Слот валиден — читаем данные и проверяем seq */
+            struct ee_data temp = {0};      /* Временная структура для чтения seq */
+            flash_read_struct(current, &temp);  /* Читаем запись из flash */
+            if (temp.seq >= MaxSeq) {       /* Если seq этой записи >= текущего максимума */
+                MaxSeq = temp.seq;          /* Обновляем максимальный seq */
+                *LastValidAddr = current;   /* Запоминаем адрес этой записи как последней валидной */
             }
-            current += EE_STRUCT_SIZE;
-        } else {
-            return current;
+            current += EE_STRUCT_SIZE;      /* Переходим к следующему слоту (+32 байта) */
+        } else {                            /* Слот невалиден — нашли свободное место */
+            return current;                 /* Возвращаем адрес свободного слота для записи */
         }
     }
-    return 0;
+    return 0;                               /* Все слоты заняты — EEPROM заполнена, возвращаем 0 */
 }
 
 /* ============================================================
  * STRUCT VERSION
  * ============================================================ */
-#define EE_VERSION 1
+#define EE_VERSION 1  /* Версия структуры EEPROM. При изменении формата данных увеличивайте этот номер.
+                       read_ee() проверяет версию: если не совпадает с текущей прошивкой — данные
+                       считаются несовместимыми и отбрасываются (возвращается 0) */
 
 /* ============================================================
  * READ FROM FLASH
  * ============================================================ */
+/* Чтение последней записи из EEPROM flash в глобальную структуру ee.
+   Возвращает: 1=успех (данные прочитаны и валидны), 0=ошибка (EEPROM пуста, CRC не совпадает, или версия не подходит).
+   Алгоритм:
+   1) Ищем адрес свободного слота (ResAddress) и адрес последней валидной записи (last_data_address)
+   2) Если last_data_address == 0 — EEPROM пуста, выходим с 0
+   3) Читаем данные из последней валидной записи
+   4) Проверяем CRC: crc32(28 байтов) должен совпадать с сохранённым crc.
+      Если crc32 == 0 — ошибка (невозможный случай, т.к. crc32 данных не может быть 0)
+   5) Проверяем версию структуры: байт version на offset 4 должен совпадать с EE_VERSION
+   6) Копируем данные в глобальную структуру ee
+   7) Обновляем MaxSeq для последующей записи */
 int read_ee(void)
 {
-    uint32_t last_data_address = 0;
-    ResAddress = flash_search_address(PAGE_WRITE_START_ADDR, &last_data_address);
-    EE_PRINTF("[EEPROM] Write ptr: 0x%08lX, Last valid: 0x%08lX\r\n", ResAddress, last_data_address);
+    uint32_t last_data_address = 0;         /* Адрес последней валидной записи (инициализация: 0 = не найдена) */
+    ResAddress = flash_search_address(PAGE_WRITE_START_ADDR, &last_data_address);  /* Ищем свободный слот и последнюю запись */
+    EE_PRINTF("[EEPROM] Write ptr: 0x%08lX, Last valid: 0x%08lX\r\n", ResAddress, last_data_address);  /* Отладочный вывод */
 
-    if (last_data_address == 0) {
-        EE_PRINTF("[EEPROM] EMPTY\r\n");
-        return 0;
+    if (last_data_address == 0) {           /* Если последняя валидная запись не найдена — EEPROM пуста */
+        EE_PRINTF("[EEPROM] EMPTY\r\n");    /* Отладочное сообщение: EEPROM пуста */
+        return 0;                           /* Возвращаем 0 — данные не прочитаны */
     }
 
-    struct ee_data temp_ee = {0};
-    flash_read_struct(last_data_address, &temp_ee);
+    struct ee_data temp_ee = {0};           /* Временная структура для проверки перед копированием в ee */
+    flash_read_struct(last_data_address, &temp_ee);  /* Читаем данные из последней валидной записи */
 
-    uint32_t sum = crc32_calc(EE_STRUCT_SIZE, &temp_ee);
-    EE_PRINTF("[EEPROM] CRC: 0x%08lX\r\n", sum);
+    /* Проверка CRC: вычисляем crc32 по всем полям КРОМЕ поля crc (EE_STRUCT_SIZE - 4 = 28 байтов).
+       Если crc32 == 0 — это ошибка (данные повреждены или CRC не записана).
+       Нормальное значение CRC32 не может быть 0 для реальных данных */
+    uint32_t sum = crc32_calc(EE_STRUCT_SIZE, &temp_ee);  /* Вычисляем CRC по всему содержимому (включая crc) */
+    EE_PRINTF("[EEPROM] CRC: 0x%08lX\r\n", sum);  /* Отладочный вывод вычисленного CRC */
 
-    if (sum != 0) {
-        EE_PRINTF("[EEPROM] CRC ERROR\r\n");
-        return 0;
+    if (sum != 0) {                         /* Если CRC не совпадает (crc32(всего) != 0) — данные повреждены */
+        EE_PRINTF("[EEPROM] CRC ERROR\r\n"); /* Отладочное сообщение: ошибка CRC */
+        return 0;                           /* Возвращаем 0 — данные повреждены */
     }
 
-    uint8_t file_version = ((uint8_t *)&temp_ee)[4];
-    if (file_version != EE_VERSION) {
-        EE_PRINTF("[EEPROM] VER MISMATCH %u!=%u\r\n", file_version, EE_VERSION);
-        return 0;
+    /* Проверка версии структуры: байт version находится на offset 4 (после seq).
+       Используем raw byte access из-за бага packed uint8_t на CH32V003 GCC */
+    uint8_t file_version = ((uint8_t *)&temp_ee)[4];  /* Читаем version: ((uint8_t*)&temp_ee)[sizeof(uint32_t)] = байт на offset 4 */
+    if (file_version != EE_VERSION) {       /* Версия в flash не совпадает с версией прошивки */
+        EE_PRINTF("[EEPROM] VER MISMATCH %u!=%u\r\n", file_version, EE_VERSION);  /* Отладочное сообщение: несовпадение версий */
+        return 0;                           /* Возвращаем 0 — данные несовместимы с текущей прошивкой */
     }
 
-    memcpy(&ee, &temp_ee, EE_STRUCT_SIZE);
-    MaxSeq = temp_ee.seq;
-    EE_PRINTF("[EEPROM] OK seq=%lu\r\n", ee.seq);
-    return 1;
+    memcpy(&ee, &temp_ee, EE_STRUCT_SIZE);  /* Копируем проверенные данные в глобальную структуру ee */
+    MaxSeq = temp_ee.seq;                   /* Обновляем MaxSeq для последующей записи новой записи */
+    EE_PRINTF("[EEPROM] OK seq=%lu\r\n", ee.seq);  /* Отладочное сообщение: успех, текущий seq */
+    return 1;                               /* Возвращаем 1 — данные успешно прочитаны */
 }
 
 /* ============================================================
  * WRITE TO FLASH
  * ============================================================ */
+/* Запись текущей структуры ee во flash EEPROM.
+   Возвращает: 1=успех, 0=ошибка (не должна возникать при правильной работе).
+   Алгоритм:
+   1) Генерируем новый seq = MaxSeq + 1 (увеличиваем номер последовательности)
+   2) Вычисляем CRC32 по всем полям кроме crc (28 байтов) и записываем в ee.crc
+   3) Определяем адрес для записи (ResAddress). Если ResAddress == 0 — ищем заново.
+   4) Если ResAddress всё ещё 0 — EEPROM заполнена, стираем все страницы и начинаем с начала.
+   5) Если ResAddress указывает на начало страницы и страница не стёрта — стираем её перед записью.
+   6) Разблокируем flash-контроллер и пишем данные побайтово (словами по 2 байта — halfword).
+   7) Блокируем flash-контроллер и обновляем MaxSeq.
+   Важно: запись flash может только сбросить биты (1→0), но не установить (0→1).
+   Поэтому перед записью страница должна быть стёрта (все байты = 0xFF) */
 int write_ee(void)
 {
-    ee.seq = MaxSeq + 1;
-    ee.crc = crc32_calc(EE_STRUCT_SIZE - DATAWIDTH, &ee);
+    ee.seq = MaxSeq + 1;                   /* Увеличиваем seq: каждая новая запись получает уникальный номер */
+    ee.crc = crc32_calc(EE_STRUCT_SIZE - DATAWIDTH, &ee);  /* Вычисляем CRC32 по 28 байтам (seq..reserved) */
 
-    if (ResAddress == 0) {
-        uint32_t dummy;
-        ResAddress = flash_search_address(PAGE_WRITE_START_ADDR, &dummy);
+    if (ResAddress == 0) {                  /* Если адрес записи не определён — ищем заново */
+        uint32_t dummy;                     /* Временная переменная (не нужна для записи) */
+        ResAddress = flash_search_address(PAGE_WRITE_START_ADDR, &dummy);  /* Ищем свободный слот */
     }
 
-    if (ResAddress == 0) {
+    if (ResAddress == 0) {                  /* Если всё ещё 0 — EEPROM полностью заполнена */
+        /* Стираем все страницы EEPROM-области (4 страницы по 64 байта = 256 байт).
+           Это "сброс" EEPROM — все старые данные теряются, начинаем запись с начала */
         for (uint32_t p = PAGE_WRITE_START_ADDR; p < PAGE_WRITE_END_ADDR; p += FLASH_PAGE_SIZE) {
-            erase_flash_page(p);
+            erase_flash_page(p);           /* Стираем каждую страницу по 64 байта */
         }
-        MaxSeq = 0;
-        ResAddress = PAGE_WRITE_START_ADDR;
-    } else {
-        uint32_t page_start = GET_PAGE_ADDR(ResAddress);
+        MaxSeq = 0;                        /* Сбрасываем seq — начинаем запись с 0 */
+        ResAddress = PAGE_WRITE_START_ADDR; /* Адрес записи — начало EEPROM-области */
+    } else {                                /* Есть свободный слот — проверяем, нужно ли стирать страницу */
+        uint32_t page_start = GET_PAGE_ADDR(ResAddress);  /* Определяем начало страницы для текущего адреса */
+        /* Если ResAddress указывает на НАЧАЛО страницы и страница НЕ стёрта — стираем её.
+           Это нужно потому что запись может идти только в стёртую flash (все байты = 0xFF).
+           Если ResAddress не на начале страницы — значит предыдущая запись уже стёрла эту страницу */
         if ((ResAddress == page_start) && !is_page_erased(page_start)) {
-            erase_flash_page(page_start);
+            erase_flash_page(page_start);  /* Стираем страницу перед записью */
         }
     }
 
-    __disable_irq();
+    __disable_irq();                        /* Отключаем прерывания — критическая секция записи flash */
 
-    FLASH->KEYR = FLASH_KEY1;
-    FLASH->KEYR = FLASH_KEY2;
-    flash_wait_bsy();
-    flash_clear_flags();
+    FLASH->KEYR = FLASH_KEY1;              /* Первый ключ разблокировки flash-контроллера */
+    FLASH->KEYR = FLASH_KEY2;              /* Второй ключ разблокировки flash-контроллера */
+    flash_wait_bsy();                      /* Ждём завершения предыдущих flash-операций */
+    flash_clear_flags();                   /* Очищаем флаги ошибок перед записью */
 
-    uint32_t *p = (uint32_t *)&ee;
-    EE_PRINTF("[EEPROM] Write 0x%08lX seq=%lu\r\n", ResAddress, ee.seq);
+    uint32_t *p = (uint32_t *)&ee;         /* Указатель на структуру как массив 32-битных слов */
+    EE_PRINTF("[EEPROM] Write 0x%08lX seq=%lu\r\n", ResAddress, ee.seq);  /* Отладочный вывод */
 
-    for (uint32_t i = 0; i < EE_DATA_WORDS; i++) {
-        FLASH->CTLR |= FLASH_CTLR_PG;
-        *(volatile uint16_t *)ResAddress = (uint16_t)p[i];
-        flash_wait_bsy();
-        *(volatile uint16_t *)(ResAddress + 2) = (uint16_t)(p[i] >> 16);
-        flash_wait_bsy();
-        FLASH->CTLR &= ~FLASH_CTLR_PG;
-        ResAddress += DATAWIDTH;
+    /* Запись данных побайтово (словами по 2 байта — halfword).
+       CH32V003 flash записывает только halfwords (16 бит).
+       Каждое 32-битное слово разбивается на два halfword: младший и старший байты.
+       Порядок: little-endian (младший байт первым) */
+    for (uint32_t i = 0; i < EE_DATA_WORDS; i++) {  /* EE_DATA_WORDS = 8 итераций (32 байта / 4) */
+        FLASH->CTLR |= FLASH_CTLR_PG;     /* Включаем режим программирования (Programming — PG бит) */
+        *(volatile uint16_t *)ResAddress = (uint16_t)p[i];  /* Записываем младшие 16 бит слова (halfword 1) */
+        flash_wait_bsy();                  /* Ждём завершения записи halfword (~20-50 мкс) */
+        *(volatile uint16_t *)(ResAddress + 2) = (uint16_t)(p[i] >> 16);  /* Записываем старшие 16 бит (halfword 2) */
+        flash_wait_bsy();                  /* Ждём завершения записи halfword */
+        FLASH->CTLR &= ~FLASH_CTLR_PG;    /* Выключаем режим программирования */
+        ResAddress += DATAWIDTH;           /* Переходим к следующему 4-байтовому слову (+4 байта) */
     }
 
-    flash_wait_bsy();
-    FLASH->CTLR |= FLASH_CTLR_LOCK;
-    __enable_irq();
-    MaxSeq = ee.seq;
-    return 1;
+    flash_wait_bsy();                      /* Финальное ожидание завершения всех операций flash */
+    FLASH->CTLR |= FLASH_CTLR_LOCK;       /* Блокируем flash-контроллер (защита от случайной записи) */
+    __enable_irq();                        /* Включаем прерывания обратно */
+    MaxSeq = ee.seq;                       /* Обновляем MaxSeq для следующей записи */
+    return 1;                              /* Возвращаем успех */
 }
 
 /* ============================================================
  * INITIALIZE DEFAULTS
  * ============================================================ */
+/* Инициализация структуры ee значениями по умолчанию.
+   Вызывается при первом запуске (EEPROM пуста) или при сбросе настроек.
+   Заполняет все поля: версию, настройки подсветки, маяка, слоты кнопок и т.д.
+   После вызова этой функции обычно вызывают write_ee() для сохранения во flash */
 void init_ee(void)
 {
-    EE_PRINTF("[EEPROM] Init defaults\r\n");
-    memset(&ee, 0, EE_STRUCT_SIZE);
-    ((uint8_t *)&ee)[4] = EE_VERSION;
+    EE_PRINTF("[EEPROM] Init defaults\r\n");  /* Отладочное сообщение: инициализация значений по умолчанию */
+    memset(&ee, 0, EE_STRUCT_SIZE);           /* Обнуляем всю структуру (32 байта = 0x00) */
+    ((uint8_t *)&ee)[4] = EE_VERSION;         /* Устанавливаем version = 1 (raw byte access из-за бага packed uint8_t на CH32V003) */
 
-	// eng menu
-	ee.eng.min_level = 1;
-	ee.eng.vc = 0;
-	ee.eng.tc = 0;
+	/* Настройки инженерного меню */
+	ee.eng.min_level = 1;    /* Минимальный уровень яркости = 1 (не 0 — чтобы фонарик не выключался полностью) */
+	ee.eng.vc = 0;           /* Поправка напряжения = 0 (без коррекции) */
+	ee.eng.tc = 0;           /* Поправка температуры = 0 (без коррекции) */
 
-	// select UI
-	ee.uif.ui_index = 1;
-	ee.uif.use_memory = 0;
+	/* Выбор интерфейса (UI) */
+	ee.uif.ui_index = 1;     /* Индекс интерфейса = 1 (второй вариант отображения по умолчанию) */
+	ee.uif.use_memory = 0;   /* Использование памяти = 0 (не запоминать последний режим) */
 
-	// bcklight
-	ee.aux.bcklight_color = BCK_COLOR_RED;
-	ee.aux.bcklight_type = BCK_TYPE_ON;
+	/* Настройки подсветки */
+	ee.aux.bcklight_color = BCK_COLOR_RED;   /* Цвет подсветки = красный */
+	ee.aux.bcklight_type = BCK_TYPE_ON;      /* Тип подсветки = всегда включена */
 
-	// beacon
-	ee.aux.beacon_mode = BCON_2S;
-	ee.aux.beacon_on = true;
-	ee.aux.beacon_type = RED_LED;
+	/* Настройки маяка */
+	ee.aux.beacon_mode = BCON_2S;            /* Режим маяка = 2 секунды (интервал мигания) */
+	ee.aux.beacon_on = true;                 /* Маяк включен по умолчанию */
+	ee.aux.beacon_type = RED_LED;            /* Тип маяка = красный LED */
 
-	// user menu
-	ee.usr.eaux_onoff = false;
-	ee.usr.id_plus_sid = false;
-	ee.usr.t_calibr = 6;
+	/* Пользовательские настройки */
+	ee.usr.eaux_onoff = false;               /* Дополнительный экран = выключен */
+	ee.usr.id_plus_sid = false;              /* Режим ID + SID = выключен (обычный режим) */
+	ee.usr.t_calibr = 6;                     /* Калибровка температуры = 6 (среднее значение 0..15) */
 
-	// defaults
-	ee.defauil_ui1 = DEFAULT_STEP;
-	ee.defauil_ui2 = DEFAULT_MODE;
+	/* Значения UI по умолчанию (defaults) */
+	ee.defauil_ui1 = DEFAULT_STEP;           /* Значение UI 1 = шаг регулировки по умолчанию */
+	ee.defauil_ui2 = DEFAULT_MODE;           /* Значение UI 2 = режим по умолчанию */
 
-	// slots
-	ee.slots[0] = SLOT_BATT_IND;	// 1 кликa + удержание
-	ee.slots[1] = SLOT_BEACON;		// 2 клика + удержание
-	ee.slots[2] = SLOT_STROBE;		// 3 клика
-	ee.slots[3] = SLOT_TACTICAL;	// 3 клика + удержание
-	ee.slots[4] = SLOT_BLOCK;		// 4 клика
-	ee.slots[5] = SLOT_EMPTY;		// 4 клика + удержание
-	ee.slots[6] = SLOT_EMPTY;		// 5 клика
-	ee.slots[7] = SLOT_MEMORY;		// 5 клика + удержание
-	ee.slots[8] = SLOT_BACKLIGHT;	// 6 клика
-	ee.slots[9] = SLOT_IPSMODE;		// 6 клика + удержание
+	/* Распределение функций по слотам (10 слотов для 10 кнопочных комбинаций).
+	   Каждый слот определяет функцию при определённой комбинации кликов/удержаний:
+	   1 клик + удержание, 2 клика + удержание, 3 клика, 3+удержание и т.д. */
+	ee.slots[0] = SLOT_BATT_IND;    /* Слот 1: индикатор батареи (1 клик + удержание) */
+	ee.slots[1] = SLOT_BEACON;      /* Слот 2: маяк (2 клика + удержание) */
+	ee.slots[2] = SLOT_STROBE;      /* Слот 3: стробоскоп (3 клика) */
+	ee.slots[3] = SLOT_TACTICAL;    /* Слот 4: тактический режим (3 клика + удержание) */
+	ee.slots[4] = SLOT_BLOCK;       /* Слот 5: блокировка (4 клика) */
+	ee.slots[5] = SLOT_EMPTY;       /* Слот 6: пусто (4 клика + удержание) */
+	ee.slots[6] = SLOT_EMPTY;       /* Слот 7: пусто (5 кликов) */
+	ee.slots[7] = SLOT_MEMORY;      /* Слот 8: память (5 кликов + удержание) */
+	ee.slots[8] = SLOT_BACKLIGHT;   /* Слот 9: подсветка (6 кликов) */
+	ee.slots[9] = SLOT_IPSMODE;     /* Слот 10: режим IPS (6 кликов + удержание) */
 }
 
