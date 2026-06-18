@@ -3,19 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Инструкция: Подготовка данных и запуск handle_aux()</title>
+    <title>Инструкция: AUX LED — handle_aux() и формат команд</title>
     <style>
         :root {
-            --bg: #0d1117;
-            --surface: #161b22;
-            --border: #30363d;
-            --text: #c9d1d9;
-            --heading: #58a6ff;
-            --accent: #1f6feb;
-            --green: #3fb950;
-            --red: #f85149;
-            --yellow: #d29922;
-            --code-bg: #1c2128;
+            --bg: #0d1117; --surface: #161b22; --border: #30363d;
+            --text: #c9d1d9; --heading: #58a6ff; --accent: #1f6feb;
+            --green: #3fb950; --red: #f85149; --yellow: #d29922; --code-bg: #1c2128;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; padding: 20px; }
@@ -51,19 +44,20 @@
 </head>
 <body>
     <div class="container">
-        <h1>Инструкция: Подготовка данных и запуск handle_aux()</h1>
+        <h1>AUX LED — handle_aux() и формат команд</h1>
 
         <div class="toc">
             <strong>Содержание</strong>
             <ol>
                 <li><a href="#overview">Обзор системы</a></li>
+                <li><a href="#format">Формат 32-битной команды (AWU)</a></li>
                 <li><a href="#struct">Структуры данных</a></li>
                 <li><a href="#workflow">Пошаговый алгоритм</a></li>
-                <li><a href="#quick">Быстрый старт (одна команда)</a></li>
-                <li><a href="#advanced">Продвинутое использование (массив команд)</a></li>
-                <li><a href="#missing">Недостающие функции</a></li>
-                <li><a href="#examples">Примеры из жизни</a></li>
-                <li><a href="#troubleshoot">Диагностика проблем</a></li>
+                <li><a href="#make_cmd">Макрос MAKE_CMD</a></li>
+                <li><a href="#quick">Быстрый старт</a></li>
+                <li><a href="#arrays">Массивы команд</a></li>
+                <li><a href="#examples">Примеры</a></li>
+                <li><a href="#troubleshoot">Диагностика</a></li>
             </ol>
         </div>
 
@@ -71,478 +65,240 @@
 
         <h2 id="overview">1. Обзор системы</h2>
 
-        <p>Функция <code class="func-name">handle_aux()</code> — это главный обработчик вспомогательных LED (красный/зелёный). Она вызывается каждые 15мс из главного цикла <code>main()</code>.</p>
+        <p>Модуль <code class="func-name">aux_leds</code> управляет вспомогательными LED (красный/зелёный) через функцию <code>handle_aux()</code>.</p>
 
-        <pre><code>// main.c — цикл обработки
+        <p><strong>Два режима работы:</strong></p>
+        <ul>
+            <li><strong>Одиночная команда</strong> (<code>start_aux_cmd</code>) — одно мигание с заданными параметрами</li>
+            <li><strong>Массив команд</strong> (<code>start_aux_array</code>) — последовательность команд из Flash</li>
+        </ul>
+
+        <pre><code>// main.c — главный цикл
 while (1) {
     if (mode == MODE_BEACON) {
-        handle_aux();    // ← обработка каждые 15мс
+        ntc_read();
+        handle_aux();          // обработка AUX LED (задаёт интервал AWU)
         scan_ui1();
-        Delay_Ms(15);   // ← интервал вызова
+        ss_scan();
+        AWU_Sleep_Now();       // MCU спит до следующего события AWU
     }
 }</code></pre>
 
         <div class="success">
-            <strong>Ключевое:</strong> Длительности <code>duration0</code> и <code>duration1</code> измеряются в количестве повторов по ~15мс.
-            <br>Например: <code>duration0 = 10</code> → 10 × 15мс = 150мс
+            <strong>Ключевое:</strong> Тайминг задаётся параметрами AWU (prescaler + window) в самой команде.
+            <br>Время полупериода = <code>(psc_значение × win) / 128000</code> секунд.
+            <br>MCU спит в STANDBY между полупериодами — энергопотребление ~2-5 мкА.
         </div>
 
         <hr>
 
-        <h2 id="struct">2. Структуры данных</h2>
+        <h2 id="format">2. Формат 32-битной команды (AWU)</h2>
 
-        <h3>2.1 Типы LED</h3>
+        <table>
+            <tr><th>Биты</th><th>Поле</th><th>Описание</th></tr>
+            <tr><td>0..2</td><td><code>device</code></td><td>Канал: 1=RED, 2=GRN, 4=HBL (комбинации: 3=RED+GRN)</td></tr>
+            <tr><td>3</td><td><code>cycle</code></td><td>0=зациклено (бесконечно), 1=однократно</td></tr>
+            <tr><td>4..7</td><td><code>count</code></td><td>Количество повторов (0..15). При cycle=0 не уменьшается</td></tr>
+            <tr><td>8..10</td><td><code>psc0</code></td><td>Индекс предделителя AWU для 1-го полупериода (0..7)</td></tr>
+            <tr><td>11..16</td><td><code>win0</code></td><td>Окно AWU для 1-го полупериода (0..63)</td></tr>
+            <tr><td>17..19</td><td><code>psc1</code></td><td>Индекс предделителя AWU для 2-го полупериода (0..7)</td></tr>
+            <tr><td>20..25</td><td><code>win1</code></td><td>Окно AWU для 2-го полупериода (0..63)</td></tr>
+            <tr><td>26..28</td><td><code>brightness0</code></td><td>Яркость 1-го полупериода (0=выкл, 1=ярко)</td></tr>
+            <tr><td>29..31</td><td><code>brightness1</code></td><td>Яркость 2-го полупериода (0=выкл, 1=ярко)</td></tr>
+        </table>
+
+        <h3>Таблица предделителей AWU</h3>
+        <table>
+            <tr><th>Индекс</th><th>Константа</th><th>Делитель</th><th>win=1</th><th>win=50</th><th>win=63</th></tr>
+            <tr><td>0</td><td><code class="enum-val">AWU_PSC_128</code></td><td>128</td><td>1мс</td><td>50мс</td><td>63мс</td></tr>
+            <tr><td>1</td><td><code class="enum-val">AWU_PSC_256</code></td><td>256</td><td>2мс</td><td>100мс</td><td>126мс</td></tr>
+            <tr><td>2</td><td><code class="enum-val">AWU_PSC_512</code></td><td>512</td><td>4мс</td><td>200мс</td><td>252мс</td></tr>
+            <tr><td>3</td><td><code class="enum-val">AWU_PSC_1024</code></td><td>1024</td><td>8мс</td><td>400мс</td><td>504мс</td></tr>
+            <tr><td>4</td><td><code class="enum-val">AWU_PSC_2048</code></td><td>2048</td><td>16мс</td><td>800мс</td><td>1.0с</td></tr>
+            <tr><td>5</td><td><code class="enum-val">AWU_PSC_4096</code></td><td>4096</td><td>32мс</td><td>1.6с</td><td>2.0с</td></tr>
+            <tr><td>6</td><td><code class="enum-val">AWU_PSC_10240</code></td><td>10240</td><td>80мс</td><td>4.0с</td><td>5.0с</td></tr>
+            <tr><td>7</td><td><code class="enum-val">AWU_PSC_61440</code></td><td>61440</td><td>480мс</td><td>24с</td><td>30с</td></tr>
+        </table>
+
+        <hr>
+
+        <h2 id="struct">3. Структуры данных</h2>
+
+        <h3>3.1 Каналы LED (<code>LED_Bits_t</code>)</h3>
         <table>
             <tr><th>Константа</th><th>Значение</th><th>Описание</th></tr>
             <tr><td><code class="enum-val">RED_LED</code></td><td>0b001 (1)</td><td>Красный LED</td></tr>
             <tr><td><code class="enum-val">GRN_LED</code></td><td>0b010 (2)</td><td>Зелёный LED</td></tr>
-            <tr><td><code class="enum-val">HBL_LED</code></td><td>0b100 (4)</td><td>Подсветка (backlight)</td></tr>
-            <tr><td>RED + GRN</td><td>0b011 (3)</td><td>Оба LED одновременно</td></tr>
+            <tr><td><code class="enum-val">HBL_LED</code></td><td>0b100 (4)</td><td>Подсветка</td></tr>
+            <tr><td>RED + GRN</td><td>0b011 (3)</td><td>Оба одновременно</td></tr>
         </table>
 
-        <h3>2.2 Яркость</h3>
+        <h3>3.2 Этапы автомата (<code>PER_Step_t</code>)</h3>
         <table>
-            <tr><th>Значение</th><th>Действие</th></tr>
-            <tr><td>0</td><td>Выключен (<code>smart_off_red()</code> / <code>smart_off_green()</code>)</td></tr>
-            <tr><td>1</td><td>Полная яркость (<code>on_red_h()</code> / <code>on_grn_h()</code>)</td></tr>
-            <tr><td>2</td><td>Слабая (подсветка)</td></tr>
-            <tr><td>3..7</td><td>Зарезервировано</td></tr>
+            <tr><th>Этап</th><th>Значение</th><th>Действие</th></tr>
+            <tr><td><code class="enum-val">PER_INIT</code></td><td>0</td><td>Загрузка count из команды → переход в PER_FIRST</td></tr>
+            <tr><td><code class="enum-val">PER_FIRST</code></td><td>1</td><td>Яркость0 + AWU per0 → MCU спит per0 → переход в PER_SECOND</td></tr>
+            <tr><td><code class="enum-val">PER_SECOND</code></td><td>2</td><td>Яркость1 + AWU per1 → MCU спит per1 → переход в PER_END</td></tr>
+            <tr><td><code class="enum-val">PER_END</code></td><td>3</td><td>Обработка счётчика → PER_FIRST (следующий цикл) или PER_NEXT</td></tr>
+            <tr><td><code class="enum-val">PER_NEXT</code></td><td>4</td><td>Команда завершена → загрузка следующей из массива</td></tr>
         </table>
 
-        <h3>2.3 Режим индикации (IDM_Type_t)</h3>
+        <h3>3.3 Системные команды массива (<code>Array_Cmd_t</code>)</h3>
         <table>
-            <tr><th>Константа</th><th>Значение</th><th>Описание</th></tr>
-            <tr><td><code class="enum-val">IDM_OTHER</code></td><td>0</td><td>Обычное моргание</td></tr>
-            <tr><td><code class="enum-val">IDM_BEACON</code></td><td>1</td><td>Маячок (beacon)</td></tr>
-            <tr><td><code class="enum-val">IDM_VWARNING</code></td><td>2</td><td>Предупреждение о напряжении</td></tr>
-            <tr><td><code class="enum-val">IDM_STROBE</code></td><td>3</td><td>Стробоскоп</td></tr>
-        </table>
-
-        <h3>2.4 Временные интервалы (awu_tick_t)</h3>
-        <table>
-            <tr><th>Константа</th><th>Значение</th><th>Фактическое время</th></tr>
-            <tr><td><code class="enum-val">AWU_15MS</code></td><td>0</td><td>~15 мс</td></tr>
-            <tr><td><code class="enum-val">AWU_30MS</code></td><td>1</td><td>~30 мс</td></tr>
-            <tr><td><code class="enum-val">AWU_60MS</code></td><td>2</td><td>~60 мс</td></tr>
-            <tr><td><code class="enum-val">AWU_120MS</code></td><td>3</td><td>~120 мс</td></tr>
-            <tr><td><code class="enum-val">AWU_250MS</code></td><td>4</td><td>~250 мс</td></tr>
-            <tr><td><code class="enum-val">AWU_500MS</code></td><td>5</td><td>~500 мс</td></tr>
-            <tr><td><code class="enum-val">AWU_1S</code></td><td>6</td><td>~1 с</td></tr>
-            <tr><td><code class="enum-val">AWU_2S</code></td><td>7</td><td>~2 с</td></tr>
-            <tr><td><code class="enum-val">AWU_4S</code></td><td>8</td><td>~4 с</td></tr>
-            <tr><td><code class="enum-val">AWU_8S</code></td><td>9</td><td>~8 с</td></tr>
-            <tr><td><code class="enum-val">AWU_16S</code></td><td>10</td><td>~16 с</td></tr>
+            <tr><th>Команда</th><th>Значение</th><th>Описание</th></tr>
+            <tr><td><code class="enum-val">AC_STOP</code></td><td>0x00000000</td><td>Остановить обработку массива</td></tr>
+            <tr><td><code class="enum-val">AC_REP_ATSTART</code></td><td>0x00000001</td><td>Повторить с начала массива</td></tr>
+            <tr><td><code class="enum-val">AC_REP_ATSTEPS</code></td><td>0x00000005</td><td>Повторить с шагом (поле steps)</td></tr>
         </table>
 
         <hr>
 
-        <h2 id="workflow">3. Пошаговый алгоритм запуска</h2>
+        <h2 id="workflow">4. Пошаговый алгоритм</h2>
 
         <div class="step">
             <span class="step-num">1</span>
-            <strong>Инициализация переменных</strong>
-            <pre><code>// Глобальные переменные (уже объявлены в aux_leds.h)
-extern union AWU_Cmd_u aux_cmd_red;   // команда для красного
-extern union AWU_Cmd_u aux_cmd_grn;   // команда для зелёного
-extern AWU_Ctr_t aux_ctl_red;         // состояние красного
-extern AWU_Ctr_t aux_ctl_grn;         // состояние зелёного
-extern union AWU_Cmd_u *p_red;        // текущий указатель красного
-extern union AWU_Cmd_u *p_grn;        // текущий указатель зелёного</code></pre>
+            <strong>Запуск массива команд</strong>
+            <pre><code>// Определяем массив и запускаем
+start_aux_array(buf_sos_red);
+// Внутри: определяет канал из 1-го элемента, сбрасывает состояние,
+// устанавливает EnableArrayProcessing = true</code></pre>
         </div>
 
         <div class="step">
             <span class="step-num">2</span>
-            <strong>Сброс состояния (перед запуском новой программы)</strong>
-            <pre><code>// Обнуляем контрольные структуры
-uint32_t *p = (uint32_t*)&aux_ctl_red;
-*p = 0;
-p = (uint32_t*)&aux_ctl_grn;
-*p = 0;
-
-// Включаем обработку массивов
-EnableArrayProcessingRed = true;
-EnableArrayProcessingGrn = true;</code></pre>
+            <strong>handle_aux() вызывается из main loop</strong>
+            <pre><code>// handle_aux() для каждого канала:
+if (EnableArrayProcessing) {
+    p = handle_aux_array(buf, &ctl);  // загружает команду из массива
+    if (p == NULL) disable;           // AC_STOP — отключаем
+    else handle_aux_cmd(p, &ctl);     // выполняем один переход автомата
+} else if (p) {
+    handle_aux_cmd(p, &ctl);          // одиночная команда
+}</code></pre>
         </div>
 
         <div class="step">
             <span class="step-num">3</span>
-            <strong>Способ A: Однократная команда (без массива)</strong>
-            <pre><code>// Формируем 32-битную команду
-uint32_t cmd = 0;
-
-// Поля команды:
-cmd |= RED_LED;            // биты 0..2: RED=1, GRN=2, HBL=4
-cmd |= (0 << 3);           // бит 3: cycle (0=зациклено, 1=однократно)
-cmd |= (5 << 4);           // биты 4..7: count (количество повторов)
-cmd |= (10 << 8);          // биты 8..16: duration0 (в ×15мс)
-cmd |= (5 << 17);          // биты 17..25: duration1 (в ×15мс)
-cmd |= (1 << 26);          // биты 26..28: brightness0 (0=выкл, 1=ярко)
-cmd |= (0 << 29);          // биты 29..31: brightness1
-
-// Или короче через макрос:
-// #define MAKE_CMD(dev, cyc, cnt, d0, d1, b0, b1) \
-//     ((dev) | ((cyc)<<3) | ((cnt)<<4) | ((d0)<<8) | ((d1)<<17) | ((b0)<<26) | ((b1)<<29))
-
-// Запускаем
-start_aux_cmd(cmd, AWU_1S, true, IDM_OTHER);</code></pre>
+            <strong>handle_aux_cmd() — один переход автомата</strong>
+            <pre><code>// PER_INIT: загружаем count из команды
+// PER_FIRST: устанавливаем яркость0, настраиваем AWU per0 → MCU спит
+// PER_SECOND: устанавливаем яркость1, настраиваем AWU per1 → MCU спит
+// PER_END: обрабатываем счётчик, запускаем следующий цикл</code></pre>
         </div>
 
         <div class="step">
             <span class="step-num">4</span>
-            <strong>Способ B: Программа из массива команд</strong>
-            <pre><code>// Определяем массив команд
-const uint32_t my_program[] = {
-    // Команда 1: Красный, 10×15мс ЯРКО → 5×15мс ВЫКЛ, 3 повтора
-    MAKE_CMD(RED_LED, 0, 3, 10, 5, 1, 0),
-
-    // Команда 2: Зелёный, 5×15мс ЯРКО → 5×15мс ВЫКЛ, 2 повтора
-    MAKE_CMD(GRN_LED, 0, 2, 5, 5, 1, 0),
-
-    // Команда 3: Оба, бесконечно (cycle=0, count=0)
-    MAKE_CMD(RED_LED | GRN_LED, 0, 0, 3, 3, 1, 0),
-
-    // Конец: системная команда AC_STOP (все 32 бита == 0)
-    0
-};
-
-// Устанавливаем указатель на начало
-p_red = (union AWU_Cmd_u*)my_program;
-p_grn = (union AWU_Cmd_u*)my_program;
-
-// Сбрасываем индексы
-aux_ctl_red.arr_index = 0;
-aux_ctl_grn.arr_index = 0;
-aux_ctl_red.period = PER_INIT;
-aux_ctl_grn.period = PER_INIT;
-aux_ctl_red.enable = true;
-aux_ctl_grn.enable = true;
-
-// Включаем обработку массивов
-EnableArrayProcessingRed = true;
-EnableArrayProcessingGrn = true;</code></pre>
-        </div>
-
-        <div class="step">
-            <span class="step-num">5</span>
-            <strong>Вызов handle_aux() в цикле</strong>
-            <pre><code>// handle_aux() должна вызываться каждые ~15мс
-while (1) {
-    handle_aux();
-    Delay_Ms(15);
-}</code></pre>
+            <strong>MCU спит в STANDBY</strong>
+            <pre><code>// После handle_aux() main loop вызывает:
+AWU_Sleep_Now();
+// MCU засыпает на время, заданное AWU per0 или per1
+// Просыпается по событию AWU → следующий вызов handle_aux()</code></pre>
         </div>
 
         <hr>
 
-        <h2 id="quick">4. Быстрый старт</h2>
+        <h2 id="make_cmd">5. Макрос MAKE_CMD</h2>
 
-        <p>Минимальный пример — моргание красным 5 раз:</p>
-        <pre><code>#include "aux_leds.h"
+        <pre><code>// Формирование 32-битной команды из параметров:
+MAKE_CMD(device, cycle, count, psc0, win0, psc1, win1, brightness0, brightness1)
 
-void my_blink(void) {
-    // Сброс
-    uint32_t *p = (uint32_t*)&aux_ctl_red;
-    *p = 0;
-
-    // Команда: RED, 5 повторов, 10×15мс ЯРКО → 10×15мс ВЫКЛ
-    uint32_t cmd = RED_LED | (0 << 3) | (5 << 4) | (10 << 8) | (10 << 17) | (1 << 26) | (0 << 29);
-
-    start_aux_cmd(cmd, AWU_1S, true, IDM_OTHER);
-}
-
-// В main():
-// while (1) { handle_aux(); Delay_Ms(15); }</code></pre>
-
-        <hr>
-
-        <h2 id="advanced">5. Продвинутое использование</h2>
-
-        <h3>5.1 Системные команды массива</h3>
-        <table>
-            <tr><th>Команда</th><th>Значение (32 бита)</th><th>Описание</th></tr>
-            <tr><td><code class="enum-val">AC_STOP</code></td><td>0x00000000</td><td>Остановить обработку массива</td></tr>
-            <tr><td><code class="enum-val">AC_REP_ATSTART</code></td><td>см. ниже</td><td>Повторить с начала массива</td></tr>
-            <tr><td><code class="enum-val">AC_REP_ATSTEPS</code></td><td>см. ниже</td><td>Повторить с шагом</td></tr>
-        </table>
-
-        <p>Формат системной команды:</p>
-        <pre><code>// Биты 0..1: command (0=STOP, 1=REP_ATSTART, 2=REP_ATSTEPS)
-// Биты 2..4: steps (отступ от начала для REP_ATSTEPS)
-// Биты 5..31: ДОЛЖНЫ БЫТЬ = 0 (иначе это команда LED)
-
-// Примеры:
-#define CMD_STOP        0x00000000  // Остановить
-#define CMD_REP_START   0x00000001  // Повторить с начала
-#define CMD_REP_STEP2   0x00000005  // Повторить с шагом 2 (0b101)</code></pre>
-
-        <h3>5.2 Цепочка команд (SOS-паттерн)</h3>
-        <pre><code>// SOS на красном: . . . — — — . . .
-// . = короткая (5×15мс), — = длинная (15×15мс)
-const uint32_t sos_program[] = {
-    // Точка 1
-    MAKE_CMD(RED_LED, 0, 1, 5, 5, 1, 0),
-    // Точка 2
-    MAKE_CMD(RED_LED, 0, 1, 5, 5, 1, 0),
-    // Точка 3
-    MAKE_CMD(RED_LED, 0, 1, 5, 15, 1, 0),
-    // Тире 1
-    MAKE_CMD(RED_LED, 0, 1, 15, 5, 1, 0),
-    // Тире 2
-    MAKE_CMD(RED_LED, 0, 1, 15, 5, 1, 0),
-    // Тире 3
-    MAKE_CMD(RED_LED, 0, 1, 15, 15, 1, 0),
-    // Точка 1
-    MAKE_CMD(RED_LED, 0, 1, 5, 5, 1, 0),
-    // Точка 2
-    MAKE_CMD(RED_LED, 0, 1, 5, 5, 1, 0),
-    // Точка 3 + пауза
-    MAKE_CMD(RED_LED, 0, 1, 5, 50, 1, 0),
-    // Повторить с начала (AC_REP_ATSTART)
-    CMD_REP_START
-};</code></pre>
-
-        <h3>5.3 Два независимых канала</h3>
-        <pre><code>// Красный моргает быстро, зелёный — медленно
-const uint32_t red_prog[] = {
-    MAKE_CMD(RED_LED, 0, 0, 3, 3, 1, 0),  // бесконечно, 45мс на/45мс off
-    CMD_REP_START
-};
-
-const uint32_t grn_prog[] = {
-    MAKE_CMD(GRN_LED, 0, 0, 20, 20, 1, 0),  // бесконечно, 300мс на/300мс off
-    CMD_REP_START
-};
-
-p_red = (union AWU_Cmd_u*)red_prog;
-p_grn = (union AWU_Cmd_u*)grn_prog;
-aux_ctl_red.arr_index = 0;
-aux_ctl_grn.arr_index = 0;
-aux_ctl_red.enable = true;
-aux_ctl_grn.enable = true;
-EnableArrayProcessingRed = true;
-EnableArrayProcessingGrn = true;</code></pre>
-
-        <hr>
-
-        <h2 id="missing">6. Недостающие функции</h2>
-
-        <p>Ниже — реализации функций, которые отсутствуют или закомментированы в проекте.</p>
-
-        <h3>6.1 <code class="func-name">start_aux_cmd()</code></h3>
-        <pre><code>/**
- * @brief Установка однократной команды для красного LED
- * @param command  — 32-битная команда (см. union AWU_Cmd_u)
- * @param delay    — интервал таймера (AWU_15MS, AWU_60MS, AWU_1S и т.д.)
- * @param enable   — true = начать обработку, false = отложить
- * @param idm_mode — режим индикации (IDM_OTHER, IDM_BEACON и т.д.)
- */
-void start_aux_cmd(uint32_t command, awu_tick_t delay, bool enable, IDM_Type_t idm_mode) {
-    // Приводим 32-битный код к union AWU_Cmd_u
-    aux_cmd_red.aux_cmd = command;
-
-    // Устанавливаем контрольные флаги
-    aux_ctl_red.enable = enable;
-    aux_ctl_red.idmode = idm_mode;
-    aux_ctl_red.period = PER_INIT;       // сброс периода на инициализацию
-    aux_ctl_red.current_brightness = 0;  // сброс текущей яркости
-    aux_ctl_red.work_duration = 0;       // сброс оставшейся длительности
-    aux_ctl_red.work_count = 0;          // сброс счётчика повторов
-
-    // Устанавливаем указатель на команду
-    p_red = &aux_cmd_red;
-
-    // Запускаем таймер (если нужно)
-    if (delay != AWU_15MS) {
-        AWU_set_delay(delay);
-    }
-}</code></pre>
-
-        <h3>6.2 <code class="func-name">off_aux_cmd()</code></h3>
-        <pre><code>/**
- * @brief Остановка обработки AUX команд
- * @param stop_wdt — true = остановить таймер, false = оставить работать
- */
-void off_aux_cmd(bool stop_wdt) {
-    // Отключаем обработку
-    aux_ctl_red.enable = false;
-    aux_ctl_red.period = PER_INIT;
-    aux_ctl_red.idmode = IDM_OTHER;
-
-    // Обнуляем команду
-    aux_cmd_red.aux_cmd = 0;
-    p_red = &aux_cmd_red;
-
-    // Выключаем LED
-    smart_off_red();
-    smart_off_green();
-
-    // Останавливаем таймер если нужно
-    if (stop_wdt) {
-        AWU_set_delay(AWU_15MS);  // минимальный интервал
-    }
-}</code></pre>
-
-        <h3>6.3 <code class="func-name">is_aux_cmd()</code></h3>
-        <pre><code>/**
- * @brief Проверка: активна ли сейчас какая-либо команда AUX
- * @return true — команда выполняется, false — нет
- */
-bool is_aux_cmd(void) {
-    return aux_ctl_red.enable;
-}</code></pre>
-
-        <h3>6.4 <code class="func-name">is_aux_beacon()</code></h3>
-        <pre><code>/**
- * @brief Проверка: работает ли сейчас режим beacon
- * @return true — beacon активен
- */
-bool is_aux_beacon(void) {
-    return (aux_ctl_red.idmode == IDM_BEACON);
-}</code></pre>
-
-        <h3>6.5 <code class="func-name">is_aux_voltage()</code></h3>
-        <pre><code>/**
- * @brief Проверка: работает ли сейчас режим предупреждения о напряжении
- * @return true — предупреждение активно
- */
-bool is_aux_voltage(void) {
-    return (aux_ctl_red.idmode == IDM_VWARNING);
-}</code></pre>
-
-        <h3>6.6 <code class="func-name">is_aux_strobe()</code></h3>
-        <pre><code>/**
- * @brief Проверка: работает ли сейчас режим стробоскопа
- * @return true — стробоскоп активен
- */
-bool is_aux_strobe(void) {
-    return (aux_ctl_red.idmode == IDM_STROBE);
-}</code></pre>
-
-        <h3>6.7 Макрос <code class="func-name">MAKE_CMD()</code></h3>
-        <pre><code>/**
- * @brief Макрос для формирования 32-битной команды
- * 
- * @param dev   — тип LED: RED_LED(1), GRN_LED(2), HBL_LED(4), RED|GRN(3)
- * @param cyc   — зацикленность: 0=бесконечно, 1=однократно
- * @param cnt   — количество повторов: 0..15 (0=бесконечно если cyc=0)
- * @param d0    — длительность 1-го полупериода: 0..511 (в ×15мс)
- * @param d1    — длительность 2-го полупериода: 0..511 (в ×15мс)
- * @param b0    — яркость 1-го полупериода: 0=выкл, 1=ярко, 2=слабо
- * @param b1    — яркость 2-го полупериода: 0=выкл, 1=ярко, 2=слабо
- * 
- * @return 32-битная команда для start_aux_cmd() или массива
- */
-#define MAKE_CMD(dev, cyc, cnt, d0, d1, b0, b1) \
-    ((uint32_t)((dev) & 0x7)          | \
-     ((uint32_t)((cyc) & 0x1) << 3)   | \
-     ((uint32_t)((cnt) & 0xF) << 4)   | \
-     ((uint32_t)((d0) & 0x1FF) << 8)  | \
-     ((uint32_t)((d1) & 0x1FF) << 17) | \
-     ((uint32_t)((b0) & 0x7) << 26)   | \
-     ((uint32_t)((b1) & 0x7) << 29))</code></pre>
+// Пример: красный, бесконечно, 100мс ON / 100мс OFF, ярко
+MAKE_CMD(RED_LED, 0, 0, AWU_PSC_256, 50, AWU_PSC_256, 50, 1, 0)
+// psc=1(256), win=50 → 256×50/128000 = 100мс</code></pre>
 
         <div class="warning">
-            <strong>Важно:</strong> Макрос <code>MAKE_CMD()</code> нужно добавить в <code>aux_leds.h</code> перед <code>#endif</code>.
+            <strong>Формула времени:</strong> <code>time_ms = (psc_значение × win) / 128</code>
+            <br>Где psc_значение = (psc_idx + 8) × 128, т.е. psc_idx=0 → 128, psc_idx=5 → 4096
         </div>
 
         <hr>
 
-        <h2 id="examples">7. Примеры из жизни</h2>
+        <h2 id="quick">6. Быстрый старт</h2>
 
-        <h3>7.1 Информационное моргание (1 вспышка)</h3>
-        <pre><code>// Красный: 1 повтор, 1×15мс ЯРКО → 0×15мс ВЫКЛ
-// Итого: 15мс вспышка
-start_aux_cmd(INFO_RED, AWU_60MS, true, IDM_OTHER);
+        <h3>6.1 Одиночная команда</h3>
+        <pre><code>// Красный мигает 5 раз: 100мс ON, 100мс OFF
+start_aux_cmd(
+    MAKE_CMD(RED_LED, 0, 5, AWU_PSC_256, 50, AWU_PSC_256, 50, 1, 0),
+    true, IDM_OTHER
+);</code></pre>
 
-// Аналог через MAKE_CMD:
-uint32_t cmd = MAKE_CMD(RED_LED, 1, 1, 1, 0, 2, 0);
-start_aux_cmd(cmd, AWU_60MS, true, IDM_OTHER);</code></pre>
-
-        <h3>7.2 Beacon (бесконечное моргание)</h3>
-        <pre><code>// Beacon: красный, бесконечно, 8×15мс ЯРКО → 0×15мс ВЫКЛ
-// Итого: 120мс вспышка каждые 120мс
-void start_aux_beacon(void) {
-    uint8_t beacon_type = ee.aux.beacon_type;
-    uint16_t beacon_mode = ee.aux.beacon_mode;
-
-    uint32_t cmd = 0b00000000000000010000000100001000
-                   | beacon_type
-                   | ((beacon_mode + 7) << 12);
-
-    start_aux_cmd(cmd, AWU_1S, true, IDM_BEACON);
-}</code></pre>
-
-        <h3>7.3 Предупреждение о низком напряжении</h3>
-        <pre><code>// Быстрое моргание: 2×15мс ЯРКО → 7×15мс ВЫКЛ
-void start_exaux_voltage(WARNING_Fr_t ex_mode) {
-    uint16_t low16 = 0;
-    switch (ex_mode) {
-        case VWARNING_FAST:    low16 = 0b0111000000001001; break;  // ~2с
-        case VWARNING_MEDIUM:  low16 = 0b1000000000001011; break;  // ~4с
-        case VWARNING_SLOW:    low16 = 0b1001000000001010; break;  // ~8с
-    }
-    start_aux_cmd(0b00000000000000010000000000000000 | low16, AWU_1S, true, IDM_VWARNING);
-}</code></pre>
-
-        <h3>7.4 Счётчик импульсов (индикация заряда)</h3>
-        <pre><code>// Зелёный: count импульсов по 2×15мс
-void aux_count(uint8_t count) {
-    uint32_t cmd;
-    if (count)
-        cmd = 0b00000000000000010100000100000010 | (count << 4);
-    else
-        cmd = 0b00000000000000010010001000010001;  // одна красная если 0
-
-    start_aux_cmd(cmd, AWU_250MS, true, IDM_OTHER);
-}</code></pre>
+        <h3>6.2 Массив команд</h3>
+        <pre><code>// SOS на красном: . . . — — — . . .
+const uint32_t sos[] = {
+    MAKE_CMD(RED_LED, 0, 0, AWU_PSC_256, 50, AWU_PSC_256, 50, 1, 0),  // S: 100мс ON, 100мс OFF
+    MAKE_CMD(RED_LED, 0, 0, AWU_PSC_1024, 38, AWU_PSC_256, 50, 1, 0), // O: 304мс ON, 100мс OFF
+    MAKE_CMD(RED_LED, 0, 0, AWU_PSC_256, 50, AWU_PSC_256, 50, 1, 0),  // S: 100мс ON, 100мс OFF
+    MAKE_CMD(RED_LED, 0, 0, AWU_PSC_2048, 44, AWU_PSC_256, 50, 1, 0), // Пауза: 704мс OFF
+    0x6  /* AC_REP_ATSTART — повторить с начала */
+};
+start_aux_array(sos);</code></pre>
 
         <hr>
 
-        <h2 id="troubleshoot">8. Диагностика проблем</h2>
+        <h2 id="arrays">7. Массивы команд</h2>
 
-        <h3>8.1 LED не моргает</h3>
+        <p>Массивы хранятся в Flash (<code>const uint32_t[]</code>). Каждый элемент — либо LED-команда (MAKE_CMD), либо системная команда (0=STOP, 1=REP_ATSTART).</p>
+
+        <h3>Текущие массивы в проекте</h3>
+        <table>
+            <tr><th>Массив</th><th>Описание</th><th>Элементов</th></tr>
+            <tr><td><code>buf_red</code></td><td>Красный+подсветка: 4 паттерна, зациклен</td><td>5</td></tr>
+            <tr><td><code>buf_grn</code></td><td>Зелёный: 2 паттерна, зациклен</td><td>3</td></tr>
+            <tr><td><code>buf_sos_red</code></td><td>SOS на красном, зациклен</td><td>5</td></tr>
+            <tr><td><code>buf_test_blink</code></td><td>Тестовое мигание</td><td>3</td></tr>
+        </table>
+
+        <hr>
+
+        <h2 id="examples">8. Примеры</h2>
+
+        <h3>8.1 Beacon (бесконечное моргание)</h3>
+        <pre><code>// Красный: cycle=1 (бесконечно), ON 100мс, OFF 100мс
+uint32_t cmd = MAKE_CMD(RED_LED, 1, 0, AWU_PSC_256, 50, AWU_PSC_256, 50, 1, 0);
+start_aux_cmd(cmd, true, IDM_BEACON);</code></pre>
+
+        <h3>8.2 Предупреждение о напряжении</h3>
+        <pre><code>// Быстрое: ON 100мс, OFF 1900мс → ~2с周期
+uint32_t cmd = MAKE_CMD(RED_LED, 0, 0, AWU_PSC_256, 50, AWU_PSC_4096, 60, 1, 0);
+start_aux_cmd(cmd, true, IDM_VWARNING);</code></pre>
+
+        <h3>8.3 Два независимых канала</h3>
+        <pre><code>// Красный быстро, зелёный медленно — параллельно
+const uint32_t red[] = { MAKE_CMD(RED_LED, 0, 0, AWU_PSC_256, 25, AWU_PSC_256, 25, 1, 0), 0x6 };
+const uint32_t grn[] = { MAKE_CMD(GRN_LED, 0, 0, AWU_PSC_2048, 32, AWU_PSC_2048, 32, 1, 0), 0x6 };
+start_aux_array(red);
+start_aux_array(grn);  // оба работают параллельно</code></pre>
+
+        <hr>
+
+        <h2 id="troubleshoot">9. Диагностика</h2>
+
+        <h3>LED не моргает</h3>
         <table>
             <tr><th>Проверка</th><th>Как</th></tr>
-            <tr><td><code>enable == 1</code>?</td><td><code>EE_PRINTF("en=%d\n", aux_ctl_red.enable);</code></td></tr>
-            <tr><td><code>period == PER_INIT</code>?</td><td>После вызова <code>start_aux_cmd()</code> period должен быть PER_INIT</td></tr>
+            <tr><td><code>enable == 1</code>?</td><td><code>EE_PRINTF("en=%d\n", ctl.enable);</code></td></tr>
+            <tr><td><code>period != PER_NEXT</code>?</td><td>PER_NEXT = команда завершена, нужна новая</td></tr>
             <tr><td><code>device != 0</code>?</td><td>Проверить биты 0..2 команды</td></tr>
-            <tr><td><code>brightness0 != 0</code>?</td><td>Проверить биты 26..28 команды</td></tr>
+            <tr><td><code>brightness0 != 0</code>?</td><td>Яркость должна быть > 0</td></tr>
         </table>
 
-        <h3>8.2 Моргает неправильно</h3>
+        <h3>Моргает неправильно</h3>
         <table>
             <tr><th>Проблема</th><th>Причина</th><th>Решение</th></tr>
-            <tr><td>Слишком быстро</td><td>duration слишком мал</td><td>Увеличить duration0/duration1</td></tr>
-            <tr><td>Не зацикливается</td><td>cycle=1, count=0</td><td>cycle=0 для бесконечного цикла</td></tr>
-            <tr><td>Останавливается</td><td>count исчерпан</td><td>Увеличить count или установить count=0</td></tr>
-            <tr><td>Моргает 1 раз</td><td>count=1, cycle=1</td><td>Изменить параметры</td></tr>
+            <tr><td>Слишком быстро</td><td>psc/win малы</td><td>Увеличить psc и/или win</td></tr>
+            <tr><td>Не зацикливается</td><td>AC_REP_ATSTART нет</td><td>Добавить 0x6 в конец массива</td></tr>
+            <tr><td>Останавливается</td><td>count исчерпан</td><td>Увеличить count или cycle=0</td></tr>
         </table>
-
-        <h3>8.3 Как расшифровать 32-битную команду</h3>
-        <pre><code>// Функция для отладки: вывод полей команды
-void debug_cmd(uint32_t cmd) {
-    union AWU_Cmd_u u;
-    u.aux_cmd = cmd;
-
-    EE_PRINTF("CMD: 0x%08lX\n", cmd);
-    EE_PRINTF("  device    = %d\n", u.aux.device);
-    EE_PRINTF("  cycle     = %d\n", u.aux.cycle);
-    EE_PRINTF("  count     = %d\n", u.aux.count);
-    EE_PRINTF("  duration0 = %d (%d ms)\n", u.aux.duration0, u.aux.duration0 * 15);
-    EE_PRINTF("  duration1 = %d (%d ms)\n", u.aux.duration1, u.aux.duration1 * 15);
-    EE_PRINTF("  bright0   = %d\n", u.aux.brightness0);
-    EE_PRINTF("  bright1   = %d\n", u.aux.brightness1);
-}</code></pre>
 
         <hr>
 
         <div class="success">
-            <strong>Готово!</strong> Теперь вы знаете:
+            <strong>Готово!</strong> Ключевые моменты:
             <ul>
-                <li>Как формировать 32-битные команды</li>
-                <li>Как использовать <code>start_aux_cmd()</code> для однократных команд</li>
-                <li>Как создавать массивы команд для сложных паттернов</li>
-                <li>Как диагностировать проблемы</li>
+                <li>Тайминг задаётся AWU prescaler + window (а не тиками ×15мс)</li>
+                <li>MCU спит в STANDBY — энергопотребление ~2-5 мкА</li>
+                <li>MAKE_CMD(device, cycle, count, psc0, win0, psc1, win1, brightness0, brightness1)</li>
+                <li>handle_aux() обрабатывает ОДИН переход автомата за вызов</li>
             </ul>
         </div>
     </div>

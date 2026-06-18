@@ -57,7 +57,7 @@ int main(void)
     }
 
     //start_aux_cmd(ERRO_RED, true, IDM_BEACON);
-    //start_aux_cmd(INFO_GRN, true, IDM_BEACON);
+    start_aux_cmd(INFO_GRN, true, IDM_BEACON);
 
     start_aux_array(buf_test_blink);
 

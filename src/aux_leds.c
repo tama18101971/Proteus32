@@ -441,7 +441,7 @@ void handle_aux_cmd(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits) {
 
 	LED_Bits_t device = (LED_Bits_t) aux->aux.device;
 
-	EE_PRINTF("[AUX] cmd dev=%d per=%d cnt=%d\r\n", device, ubits->period, ubits->work_count);
+	//EE_PRINTF("[AUX] cmd dev=%d per=%d cnt=%d\r\n", device, ubits->period, ubits->work_count);
 
 	/* Инициализация: загружаем количество повторов */
 	if (ubits->period == PER_INIT) {
@@ -455,7 +455,7 @@ void handle_aux_cmd(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits) {
 			SetBrightness(device, aux->aux.brightness0);
 			ubits->current_brightness = aux->aux.brightness0;
 		}
-		EE_PRINTF("[AUX] P0 psc=%d win=%d br=%d\r\n", aux->aux.psc0, aux->aux.win0, aux->aux.brightness0);
+		//EE_PRINTF("[AUX] P0 psc=%d win=%d br=%d\r\n", aux->aux.psc0, aux->aux.win0, aux->aux.brightness0);
 		AWU_set_raw(aux->aux.psc0, aux->aux.win0);
 		ubits->period = PER_SECOND;
 	}
@@ -465,7 +465,7 @@ void handle_aux_cmd(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits) {
 			SetBrightness(device, aux->aux.brightness1);
 			ubits->current_brightness = aux->aux.brightness1;
 		}
-		EE_PRINTF("[AUX] P1 psc=%d win=%d br=%d\r\n", aux->aux.psc1, aux->aux.win1, aux->aux.brightness1);
+		//EE_PRINTF("[AUX] P1 psc=%d win=%d br=%d\r\n", aux->aux.psc1, aux->aux.win1, aux->aux.brightness1);
 		AWU_set_raw(aux->aux.psc1, aux->aux.win1);
 		ubits->period = PER_END;
 	}
