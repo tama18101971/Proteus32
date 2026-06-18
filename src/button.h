@@ -99,7 +99,7 @@ typedef enum {
 	DIR_UP
 } RUMP_Dir_t;
 
-#define MAX_STEP			511
+#define MAX_STEP			4095
 #define POW_THRD			120
 
 /************************************************************************/

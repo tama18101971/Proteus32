@@ -68,48 +68,29 @@ uint16_t get_min_level(uint16_t step)
 
 /******************************************************************************************/
 
-/*
 #include <stdint.h>
 
-uint16_t getBrightLED_CH32V003(uint16_t val) {
-    if (val > 511) val = 511;
+uint16_t getBrightLED_CH32V003_12Bit(uint16_t val) {
+    if (val > 4095) val = 4095;
     
     uint32_t x = val;
     
-    // 1. Чистая кубическая часть (дает ровно 383 в пике)
-    // Максимум при 511: 511^3 * 16 = 2 134 925 296 (влезает в uint32_t!)
-    uint32_t cubic = (x * x * x * 16) >> 22; 
+    // 1. КУБИЧЕСКАЯ ЧАСТЬ (~85% в пике, должна дать 3480 при val = 4095)
+    // Максимум при 4095: (4095 * 4095) >> 12 = 4094.
+    // 4094 * 4095 = 16 764 930.
+    // 16 764 930 * 217 = 3 637 989 810 (Влезает в uint32_t!)
+    // И теперь сдвигаем на 20 бит (вместо 10): 3 637 989 810 >> 20 = 3469
+    uint32_t cubic = (((x * x) >> 12) * x * 217) >> 20;
     
-    // 2. Линейная часть (дает ровно 128 в пике)
-    uint32_t linear = x >> 2;
+    // 2. КВАДРАТИЧНАЯ ЧАСТЬ (~15% в пике, должна дать 614 при val = 4095)
+    // Максимум при 4095: 4095 * 4095 * 38 = 637 232 550 (Влезает в uint32_t).
+    // Сдвигаем на 20 бит: 637 232 550 >> 20 = 607
+    uint32_t quadratic = (x * x * 38) >> 20;
     
-    // Суммируем составляющие
-    uint32_t result = cubic + linear;
+    uint32_t result = cubic + quadratic;
     
-    // Идеальная подгонка под полный диапазон ШИМ
-    if (val == 511) return 511;
-    if (val > 0 && result == 0) result = 1;
-
-    return (uint16_t)result;
-}
-*/
-
-uint16_t getBrightLED_Fixed9Bit(uint16_t val) {
-    if (val > MAX_STEP) val = MAX_STEP;
-    
-    uint32_t x = val;
-    
-    // Кубическая часть: (x^3 * 3) >> 20 — при x=511 даёт 381 (75% от 511)
-    // Максимум перед сдвигом: 511^3 * 3 = 400,298,493 — не переполняет uint32_t
-    uint32_t cubic = (x * x * x * 3) >> 20; 
-    
-    // Линейная часть: x >> 2 — при x=511 даёт 127 (25% от 511)
-    uint32_t linear = x >> 2;
-    
-    uint32_t result = cubic + linear;
-    
-    // Гарантируем чистый максимум на финише и четкий старт с единицы
-    if (val == MAX_STEP) return MAX_STEP;
+    // Жесткая посадка на края диапазона
+    if (val == 4095) return 4095;
     if (val > 0 && result == 0) result = 1;
 
     return (uint16_t)result;
@@ -120,7 +101,7 @@ void out_set_stc(uint16_t step)
 	// Вычисляем 9-bit значение напрямую
 //	uint16_t bright = ((uint32_t)step * step * step + 523520) >> 18;
 
-	uint16_t bright = getBrightLED_Fixed9Bit(step);
+	uint16_t bright = getBrightLED_CH32V003_12Bit(step);
 	uint16_t out = bright + get_min_level(step);
 	if(out > MAX_STEP) out = MAX_STEP;
 	EE_PRINTF("[BTN] out_set_stc step=%u bright=%u out=%u\r\n", step, bright, out);

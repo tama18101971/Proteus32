@@ -3,7 +3,7 @@
 
 // Раскомментировать для отладки через UART
 //#define PRINT_ADC
-#define WL_FLASH_DEBUG
+//#define WL_FLASH_DEBUG
 
 // раскоментировать для использования режима standby вместо Delay_Ms
 //#define SLEEP_STANDBY
