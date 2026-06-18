@@ -72,6 +72,12 @@ const uint32_t buf_sos_red[5] = {
 	0x6  /* AC_REP_ATSTART */
 };
 
+/* Тестовый массив: простое мигание RED 512ms ON / 512ms OFF */
+const uint32_t buf_test_blink[2] = {
+	MAKE_CMD(RED_LED, 0, 0, AWU_PSC_4096, 16, AWU_PSC_4096, 16, 1, 0),  /* ON 512ms, OFF 512ms */
+	0x6  /* AC_REP_ATSTART */
+};
+
 /* Указатели на текущую команду для каждого канала.
  * Используются в handle_aux() для вызова handle_aux_cmd().
  * Если NULL — канал неактивен.
@@ -516,7 +522,7 @@ union AUX_Cmd_u *handle_aux_array(const uint32_t pArray[], AUX_Ctr_t *ctr) {
 			break;
 		case AC_REP_ATSTART:					// зациклить с начала массива
 			ctr->arr_index = 0;					// сбрасываем индекс на начало
-			p = (union AUX_Cmd_u*) pArray;		// указатель тоже на начало
+			p = NULL;							// NULL — команда загрузится на следующем вызове
 			ctr->period = PER_INIT;				// сбрасываем период для новой команды
 			ctr->enable = true;					// включаем обработку
 			break;
@@ -558,10 +564,15 @@ union AUX_Cmd_u *handle_aux_array(const uint32_t pArray[], AUX_Ctr_t *ctr) {
 void handle_aux(void) {
 	// === Красный канал ===
 	if (EnableArrayProcessingRed) {
-		// Загружаем команду из массива (только если предыдущая завершена)
-		if (aux_ctl_red.period == PER_NEXT) {
+		// Загружаем команду при PER_NEXT (конец команды) или PER_INIT (после AC_REP_ATSTART)
+		if (aux_ctl_red.period == PER_NEXT || aux_ctl_red.period == PER_INIT) {
 			p_red = handle_aux_array(current_buf_red, &aux_ctl_red);
-			if (p_red == NULL) { EnableArrayProcessingRed = false; return; }
+			if (p_red == NULL) {
+				if (aux_ctl_red.period != PER_INIT) {
+					EnableArrayProcessingRed = false;
+				}
+				return;  // AC_REP_ATSTART: перезагрузка, MCU спит с предыдущим AWU
+			}
 		}
 		handle_aux_cmd(p_red, &aux_ctl_red);
 		return;
@@ -572,9 +583,14 @@ void handle_aux(void) {
 
 	// === Зелёный канал ===
 	if (EnableArrayProcessingGrn) {
-		if (aux_ctl_grn.period == PER_NEXT) {
+		if (aux_ctl_grn.period == PER_NEXT || aux_ctl_grn.period == PER_INIT) {
 			p_grn = handle_aux_array(current_buf_grn, &aux_ctl_grn);
-			if (p_grn == NULL) { EnableArrayProcessingGrn = false; return; }
+			if (p_grn == NULL) {
+				if (aux_ctl_grn.period != PER_INIT) {
+					EnableArrayProcessingGrn = false;
+				}
+				return;
+			}
 		}
 		handle_aux_cmd(p_grn, &aux_ctl_grn);
 		return;
@@ -585,9 +601,14 @@ void handle_aux(void) {
 
 	// === Подсветка (HBL) ===
 	if (EnableArrayProcessingHbl) {
-		if (aux_ctl_hbl.period == PER_NEXT) {
+		if (aux_ctl_hbl.period == PER_NEXT || aux_ctl_hbl.period == PER_INIT) {
 			p_hbl = handle_aux_array(current_buf_hbl, &aux_ctl_hbl);
-			if (p_hbl == NULL) { EnableArrayProcessingHbl = false; return; }
+			if (p_hbl == NULL) {
+				if (aux_ctl_hbl.period != PER_INIT) {
+					EnableArrayProcessingHbl = false;
+				}
+				return;
+			}
 		}
 		handle_aux_cmd(p_hbl, &aux_ctl_hbl);
 		return;

@@ -144,6 +144,7 @@ extern const uint32_t *current_buf_hbl;
 extern const uint32_t buf_red[];
 extern const uint32_t buf_grn[];
 extern const uint32_t buf_sos_red[];
+extern const uint32_t buf_test_blink[];
 
 
 bool is_aux_active(LED_Bits_t channel);
@@ -186,7 +187,7 @@ void debug_cmd(uint32_t cmd);
 
 //#define SHORT_BLINK 		MAKE_CMD(RED_LED, 0, 1, 30, 60, 1, 0)
 #define INFO_RED			MAKE_CMD(RED_LED, 0, 1, AWU_PSC_1024, 56, AWU_PSC_2048, 56, 1, 0)
-#define INFO_GRN			MAKE_CMD(GRN_LED, 0, 1, AWU_PSC_512, 56, AWU_PSC_4096, 35, 1, 0)
+#define INFO_GRN			MAKE_CMD(GRN_LED, 0, 5, AWU_PSC_512, 56, AWU_PSC_4096, 35, 1, 0)
 #define ERRO_RED			MAKE_CMD(RED_LED, 0, 3, AWU_PSC_128, 15, AWU_PSC_256, 45, 1, 0)
 
 /**

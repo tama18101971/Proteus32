@@ -56,11 +56,10 @@ int main(void)
         init_ee();
     }
 
-    // start_aux_cmd(ERRO_RED, true, IDM_BEACON);
-    start_aux_cmd(INFO_GRN, true, IDM_BEACON);
+    //start_aux_cmd(ERRO_RED, true, IDM_BEACON);
+    //start_aux_cmd(INFO_GRN, true, IDM_BEACON);
 
-    start_aux_array(buf_sos_red);
-    // start_aux_array(buf_grn);
+    start_aux_array(buf_test_blink);
 
     while (1)
     {
