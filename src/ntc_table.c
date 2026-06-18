@@ -6,9 +6,25 @@
 #include "debug.h"
 #include "config.h"
 
-// Макрос расчета напряжения питания (Vdd) в милливольтах на основе кода Vrefint (встроенный источник 1.2В)
-#define __LL_ADC_CALC_VREFANALOG_VOLTAGE(__VREFINT_ADC_DATA__) \
-    (1200 * 1024 / (__VREFINT_ADC_DATA__))
+/* ============================================================
+ * EMA-фильтр (Exponential Moving Average)
+ * ============================================================
+ * Формула: avg += (raw - avg) >> shift
+ * Размер: 2 байта (static uint16_t), без буфера.
+ * Скорость: 1 вычитание + 1 сдвиг + 1 сложение на отсчёт.
+ * Погрешность: max ошибка = 2^shift (±16 при shift=4). */
+static uint16_t ema_avg;
+
+void ema_init(uint16_t seed)
+{
+    ema_avg = seed;
+}
+
+uint16_t ema_update(uint16_t raw)
+{
+    ema_avg += (raw - ema_avg) >> EMA_SHIFT;
+    return ema_avg;
+}
 
 /* Таблица ADC-кодов для NCP18XH103F03RB (схема D с Rpar=77.3k) */
 /* Диапазон: -20...+80°C, шаг 1°C, значения возрастают при нагреве */
@@ -150,6 +166,9 @@ void ntc_adc_Init(void)
     ADC1->CTLR2 |= (1 << 2);
     while (ADC1->CTLR2 & (1 << 2))
         ;
+
+    // 19. Инициализация EMA-фильтра: (1200*1024)/3800 = 323 при Vdd=3.8V
+    ema_init(323);
 }
 
 void ntc_read(void)
@@ -175,7 +194,7 @@ void ntc_read(void)
     uint16_t raw_temperature_adc = ADC1->RDATAR;
 
     // Читаем результат инжектированного преобразования (Vrefint)
-    uint16_t vrefint_adc = ADC1->IDATAR1;
+    uint16_t vrefint_adc = ema_update(ADC1->IDATAR1);
 
     // Отключаем делитель напряжения (PD3 = 1, экономия заряда)
     GPIOD->BSHR = (1 << 3);

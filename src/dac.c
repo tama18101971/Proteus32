@@ -1,5 +1,6 @@
 #include "dac.h"
 #include <ch32v00x_i2c.h>
+#include "config.h"
 
 void dac_pwrpin_init(void) {
     RCC->APB2PCENR |= RCC_APB2Periph_GPIOD;
@@ -16,6 +17,8 @@ void dac_pwrpin_off(void) {
 }
 
 void dac_set_value(uint16_t data) {
+    EE_PRINTF("[DAC] set_value: %u\r\n", data);
+
     // Ограничиваем данные 12 битами
     data &= 0x0FFF;
 

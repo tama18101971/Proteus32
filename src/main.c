@@ -50,7 +50,7 @@ int main(void)
 
     i2c_init(I2C_SPEED_400K);
 
-    // dac_set_value(1024);
+     dac_set_value(0);
     /* DAC */
 
     if (read_ee() == FAILED)

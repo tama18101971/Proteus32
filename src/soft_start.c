@@ -8,11 +8,13 @@
 #include "stdbool.h"
 #include "soft_start.h"
 #include "button.h"
+#include "config.h"
 
 ss_st ss;
 
 void ss_init(uint16_t target, uint16_t previous, SoftStartSpeed_t speed) //  target - куда идем, step - текущее положение
 {
+	EE_PRINTF("[SS] init target=%u prev=%u speed=%u\r\n", target, previous, speed);
 	if (target == previous)
 		return;
 
@@ -22,15 +24,15 @@ void ss_init(uint16_t target, uint16_t previous, SoftStartSpeed_t speed) //  tar
 	{
 		ss.target = get_step_tc(target);
 		uint16_t count = ABS((int16_t)(ss.target - previous));
-		ss.step_count = count ? count / speed : 1; // вычисляем количество шагов
+		ss.step_count = count ? count / speed : 1;
 		ss.position = previous;
 	}
-
-	if (s_size < 0)
+	else if (s_size < 0)
 	{
 		ss.target = target;
 		uint16_t tc_prev = get_step_tc(previous);
-		ss.step_count = ABS((int16_t)((target - tc_prev)) / speed); // вычисляем количество шагов
+		uint16_t count = ABS((int16_t)(target - tc_prev));
+		ss.step_count = count ? count / speed : 1;
 		ss.position = tc_prev;
 	}
 
@@ -43,12 +45,12 @@ void ss_scan(void)
 	if (ss.enable) // Тут все ясно
 	{
 		if (ss.step_count)
-		{ // Если не 0 - начинаем
-
-			if (ss.step_size > 0)
-				if (ABS(ss.position + ss.step_size) < ABS(ss.target))
-					ss.position += ss.step_size; // Прибавляем шаг
-			ss.step_count--;					 // Уменьшаем оставшееся количество шагов
+		{
+			if (ss.step_size > 0 && ss.position + ss.step_size <= ss.target)
+				ss.position += ss.step_size;
+			else if (ss.step_size < 0 && ss.position + ss.step_size >= ss.target)
+				ss.position += ss.step_size;
+			ss.step_count--;
 		}
 
 		if (!ss.step_count)
