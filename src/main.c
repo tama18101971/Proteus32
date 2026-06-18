@@ -34,10 +34,8 @@ int main(void)
 
     EE_PRINTF("\r\n[MAIN] Boot...\r\n");
 
-#ifdef SLEEP_STANDBY
     AWU_init();
     AWU_int_init();
-#endif
 
     led_init();
     button_init();
@@ -58,14 +56,8 @@ int main(void)
         init_ee();
     }
 
-#ifdef SLEEP_STANDBY
-    AWU_set_delay(AWU_15MS);
-    // здесь дописать усыпание
-
-#endif
-
-    // start_aux_cmd(ERRO_RED, AWU_15MS, true, IDM_BEACON);
-    start_aux_cmd(INFO_GRN, AWU_15MS, true, IDM_BEACON);
+    // start_aux_cmd(ERRO_RED, true, IDM_BEACON);
+    start_aux_cmd(INFO_GRN, true, IDM_BEACON);
 
     start_aux_array(buf_sos_red);
     // start_aux_array(buf_grn);
@@ -74,9 +66,6 @@ int main(void)
     {
         if (mode == MODE_BEACON)
         {
-#ifdef SLEEP_STANDBY
-            AWU_set_delay(AWU_15MS);
-#endif
             ntc_read();
 
             handle_aux();
@@ -89,11 +78,7 @@ int main(void)
                 need_save = false;
             }
 
-#ifdef SLEEP_STANDBY
             AWU_Sleep_Now();
-#else
-            Delay_Ms(15);
-#endif
         }
         else
         {

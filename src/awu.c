@@ -64,6 +64,15 @@ bool AWU_set_delay(awu_tick_t awu_tick)
     return true;
 }
 
+/* Установка AWU напрямую по индексу предделителя и значению окна.
+ * psc_idx: 0..7 → PWR_AWUPSC 0x08..0x0F (делители 128..61440)
+ * win:     0..63 → PWR_AWUWR (значение окна) */
+void AWU_set_raw(uint8_t psc_idx, uint8_t win)
+{
+    PWR_AWUPSC_REG = psc_idx + 0x08;
+    PWR_AWUWR_REG  = win;
+}
+
 /* ============================================================
  * AWU_int_init — настройка EXTI Line 9 (AWU event)
  * ============================================================ */
@@ -114,7 +123,7 @@ void AWU_Sleep_Tick(awu_tick_t tick)
  * ============================================================ */
 void AWU_Sleep_Now(void)
 {
-#if defined(SLEEP_STANDBY) && defined(WL_FLASH_DEBUG)
+#ifdef WL_FLASH_DEBUG
     while (!(USART1->STATR & USART_FLAG_TC))  /* Ждём окончания передачи USART1 (бит 6 STATR) */
         ;
 #endif

@@ -49,15 +49,35 @@ typedef enum {
 	AC_RESERVED
 } Array_Cmd_t;
 
+/* Параметры одного полупериода AWU (prescaler + window).
+ * psc: индекс предделителя 0..7 → PWR_AWUPSC 0x08..0x0F (делители 128..61440)
+ * win: значение окна 0..63 → PWR_AWUWR
+ * Время: (psc_значение × win) / 128000 секунд */
+
+/* Макросы для индексов предделителя (для читаемости в MAKE_CMD и массивах) */
+#define AWU_PSC_128   0
+#define AWU_PSC_256   1
+#define AWU_PSC_512   2
+#define AWU_PSC_1024  3
+#define AWU_PSC_2048  4
+#define AWU_PSC_4096  5
+#define AWU_PSC_10240 6
+#define AWU_PSC_61440 7
+
+/* Расчёт времени полупериода в миллисекундах */
+#define AWU_PERIOD_MS(psc_idx, win) (((uint32_t)((psc_idx) + 8) * (win) * 1000) / 128000)
+
 union AUX_Cmd_u {
     struct __attribute__((packed)) {
         uint32_t device      : 3;  // биты 0..2   - чем управляем
         uint32_t cycle       : 1;  // бит 3       - зациклено (1) или нет (0)
         uint32_t count       : 4;  // биты 4..7   - кол-во повторов
-        uint32_t duration0   : 9;  // биты 8..16  - длительность 1-го периода
-        uint32_t duration1   : 9;  // биты 17..25 - длительность 2-го периода
-        uint32_t brightness0 : 3;  // биты 26..28 - яркость 1-го периода
-        uint32_t brightness1 : 3;  // биты 29..31 - яркость 2-го периода
+        uint32_t psc0        : 3;  // биты 8..10  - предделитель 1-го полупериода (0..7)
+        uint32_t win0        : 6;  // биты 11..16 - окно 1-го полупериода (0..63)
+        uint32_t psc1        : 3;  // биты 17..19 - предделитель 2-го полупериода (0..7)
+        uint32_t win1        : 6;  // биты 20..25 - окно 2-го полупериода (0..63)
+        uint32_t brightness0 : 3;  // биты 26..28 - яркость 1-го полупериода
+        uint32_t brightness1 : 3;  // биты 29..31 - яркость 2-го полупериода
     } aux;
 
     struct __attribute__((packed)) {
@@ -69,15 +89,17 @@ union AUX_Cmd_u {
     uint32_t aux_cmd; // Полноценное 32-битное слово для Flash
 };
 
+/* Compile-time проверки layout */
+_Static_assert(sizeof(union AUX_Cmd_u) == 4, "AUX_Cmd_u must be 32 bits");
+
 typedef struct {
     uint32_t enable             : 1;  // бит 0      - активно или нет
     uint32_t period             : 3;  // биты 1..3  - 0: инит, 1: первый период, 2: второй период, 3: малый цикл завершен
     uint32_t current_brightness : 3;  // биты 4..6  - яркость для внутренних нужд
-    uint32_t work_duration      : 9;  // биты 7..15 - длительность
-    uint32_t idmode             : 2;  // биты 16..17- режим индикации, работающей в данный момент
-    uint32_t arr_index          : 4;  // биты 18..21- индекс в массиве AUX команд
-    uint32_t work_count         : 4;  // биты 22..25- количество повторов/оставшаяся работа
-    uint32_t reserved           : 6;  // биты 26..31- резерв до полного 32-битного слова
+    uint32_t idmode             : 2;  // биты 7..8  - режим индикации, работающей в данный момент
+    uint32_t arr_index          : 4;  // биты 9..12 - индекс в массиве AUX команд
+    uint32_t work_count         : 4;  // биты 13..16- количество повторов/оставшаяся работа
+    uint32_t reserved           : 15; // биты 17..31- резерв
 } __attribute__((packed, aligned(4))) AUX_Ctr_t;
 
 typedef enum {
@@ -140,7 +162,7 @@ void start_aux_beacon(void);
 void start_exaux_voltage(uint8_t beacon_mode);
 void off_aux_cmd(LED_Bits_t channel, bool stop_lsi);
 void set_aux_count(uint8_t count);
-void start_aux_cmd(uint32_t command, awu_tick_t delay, bool enable, IDM_Type_t idm_mode);
+void start_aux_cmd(uint32_t command, bool enable, IDM_Type_t idm_mode);
 
 void smart_off_leds(LED_Bits_t channel);
 
@@ -163,30 +185,32 @@ void debug_cmd(uint32_t cmd);
 
 
 //#define SHORT_BLINK 		MAKE_CMD(RED_LED, 0, 1, 30, 60, 1, 0)
-#define INFO_RED			MAKE_CMD(RED_LED, 0, 1, 30, 60, 1, 0)
-#define INFO_GRN			MAKE_CMD(GRN_LED, 0, 1, 15, 75, 1, 0)
-#define ERRO_RED			MAKE_CMD(RED_LED, 0, 3, 1, 6, 1, 0)
+#define INFO_RED			MAKE_CMD(RED_LED, 0, 1, AWU_PSC_1024, 56, AWU_PSC_2048, 56, 1, 0)
+#define INFO_GRN			MAKE_CMD(GRN_LED, 0, 1, AWU_PSC_512, 56, AWU_PSC_4096, 35, 1, 0)
+#define ERRO_RED			MAKE_CMD(RED_LED, 0, 3, AWU_PSC_128, 15, AWU_PSC_256, 45, 1, 0)
 
 /**
- * @brief Формирует 32-битную AUX-команду из полей структуры AUX_Cmd_u
+ * @brief Формирует 32-битную AUX-команду
  *
- * @param device       канал управления (RED_LED=1, GRN_LED=2, HBL_LED=4)
- * @param cycle        зацикливание (0 — однократно, 1 — повторять)
- * @param count        количество повторов (0..15)
- * @param duration0    длительность 1-го полупериода в тиках AWU (0..511)
- * @param duration1    длительность 2-го полупериода в тиках AWU (0..511)
+ * @param device       канал (RED_LED=1, GRN_LED=2, HBL_LED=4)
+ * @param cycle        зацикливание (0/1)
+ * @param count        повторов (0..15)
+ * @param psc0         предделитель 1-го полупериода (AWU_PSC_128..AWU_PSC_61440)
+ * @param win0         окно 1-го полупериода (0..63)
+ * @param psc1         предделитель 2-го полупериода
+ * @param win1         окно 2-го полупериода (0..63)
  * @param brightness0  яркость 1-го полупериода (0..7)
  * @param brightness1  яркость 2-го полупериода (0..7)
- *
- * @return 32-битная команда для start_aux_cmd() или массива
  */
-#define MAKE_CMD(device, cycle, count, duration0, duration1, brightness0, brightness1) \
-    ((uint32_t)((device) & 0x7)             | \
-     ((uint32_t)((cycle) & 0x1) << 3)       | \
-     ((uint32_t)((count) & 0xF) << 4)       | \
-     ((uint32_t)((duration0) & 0x1FF) << 8) | \
-     ((uint32_t)((duration1) & 0x1FF) << 17)| \
-     ((uint32_t)((brightness0) & 0x7) << 26)| \
+#define MAKE_CMD(device, cycle, count, psc0, win0, psc1, win1, brightness0, brightness1) \
+    ((uint32_t)((device) & 0x7)              | \
+     ((uint32_t)((cycle) & 0x1) << 3)        | \
+     ((uint32_t)((count) & 0xF) << 4)        | \
+     ((uint32_t)((psc0) & 0x7) << 8)         | \
+     ((uint32_t)((win0) & 0x3F) << 11)       | \
+     ((uint32_t)((psc1) & 0x7) << 17)        | \
+     ((uint32_t)((win1) & 0x3F) << 20)       | \
+     ((uint32_t)((brightness0) & 0x7) << 26) | \
      ((uint32_t)((brightness1) & 0x7) << 29))
 
 #endif /* AUX_LEDS_H_ */

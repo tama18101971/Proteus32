@@ -13,7 +13,7 @@ void EXTI7_0_IRQHandler(void)
     if (EXTI_GetITStatus(EXTI_Line3) != RESET)
     {
         button_event = 1;
-        //mode= MODE_ON1;
+        mode= MODE_ON1;
         AWU_set_delay(AWU_15MS);
 
         EXTI_ClearITPendingBit(EXTI_Line3);

@@ -15,8 +15,10 @@
  *   [2:0]   device    — канал: 1=RED, 2=GRN, 4=HBL
  *   [3]     cycle     — 0=однократно, 1=зациклено
  *   [7:4]   count     — количество повторов (0..15)
- *   [16:8]  duration0 — длительность 1-го полупериода в тиках AWU (×15мс)
- *   [25:17] duration1 — длительность 2-го полупериода в тиках AWU (×15мс)
+ *   [10:8]  p0.psc    — предделитель 1-го полупериода (0..7 → 128..61440)
+ *   [16:11] p0.win    — окно 1-го полупериода (0..63)
+ *   [19:17] p1.psc    — предделитель 2-го полупериода
+ *   [25:20] p1.win    — окно 2-го полупериода (0..63)
  *   [28:26] brightness0 — яркость 1-го полупериода (0=выкл, 1=ярко)
  *   [31:29] brightness1 — яркость 2-го полупериода (0=выкл, 1=ярко)
  *
@@ -46,13 +48,29 @@ extern struct ee_data ee;
 uint8_t vwarning = VWARNING_NONE;			// Текущий уровень предупреждения о напряжении
 uint8_t vwarning_old = VWARNING_NONE;		// Предыдущий уровень (для отслеживания изменений)
 
-/* Массивы команд для пошаговой обработки (хранятся в Flash)
- * Каждый элемент — 32-битная команда в формате AUX_Cmd_u.
- * Последний элемент массива — системная команда (AC_REP_ATSTART для зацикливания)
+/* Массивы команд для пошаговой обработки (хранятся в Flash).
+ * Формат: MAKE_CMD(device, cycle, count, psc0, win0, psc1, win1, brightness0, brightness1)
+ * Время полупериода = (psc_значение × win) / 128 секунд.
  */
-const uint32_t buf_red[5]		= {0b101000000000000010001010001, 0b100010100000000010001010001, 0b101000000000000010001000001, 0b100010100000000010001010001, 0x6};
-const uint32_t buf_grn[3] 		= {0b101000000000000010001011010, 0b100010100000000010001011010, 0};
-const uint32_t buf_sos_red[5]	= {0b10100000010101110001, 0b0100000101000000101000110001, 0b0100000101000001111000110001, 0b0100000101000000101000110001, 1};
+const uint32_t buf_red[5] = {
+	MAKE_CMD(RED_LED|HBL_LED, 0, 8, AWU_PSC_128, 45, AWU_PSC_4096, 60, 1, 0),   /* ON 45ms, OFF 1920ms × 8 */
+	MAKE_CMD(RED_LED|HBL_LED, 0, 4, AWU_PSC_4096, 60, AWU_PSC_128, 45, 1, 0),   /* ON 1920ms, OFF 45ms × 4 */
+	MAKE_CMD(RED_LED|HBL_LED, 0, 4, AWU_PSC_128, 45, AWU_PSC_4096, 60, 1, 0),   /* ON 45ms, OFF 1920ms × 4 */
+	MAKE_CMD(RED_LED|HBL_LED, 0, 4, AWU_PSC_4096, 60, AWU_PSC_128, 45, 1, 0),   /* ON 1920ms, OFF 45ms × 4 */
+	0x6  /* AC_REP_ATSTART */
+};
+const uint32_t buf_grn[3] = {
+	MAKE_CMD(GRN_LED, 0, 1, AWU_PSC_128, 45, AWU_PSC_256, 30, 1, 0),             /* ON 45ms, OFF 60ms */
+	MAKE_CMD(GRN_LED, 0, 1, AWU_PSC_256, 30, AWU_PSC_256, 30, 1, 0),             /* ON 60ms, OFF 60ms */
+	0  /* AC_REP_ATSTART */
+};
+const uint32_t buf_sos_red[5] = {
+	MAKE_CMD(RED_LED, 0, 0, AWU_PSC_256, 50, AWU_PSC_256, 50, 1, 0),             /* S: ON 100ms, OFF 100ms */
+	MAKE_CMD(RED_LED, 0, 0, AWU_PSC_1024, 38, AWU_PSC_256, 50, 1, 0),            /* O: ON 304ms, OFF 100ms */
+	MAKE_CMD(RED_LED, 0, 0, AWU_PSC_256, 50, AWU_PSC_256, 50, 1, 0),             /* S: ON 100ms, OFF 100ms */
+	MAKE_CMD(RED_LED, 0, 0, AWU_PSC_2048, 44, AWU_PSC_256, 50, 1, 0),            /* Пауза: OFF 704ms */
+	0x6  /* AC_REP_ATSTART */
+};
 
 /* Указатели на текущую команду для каждого канала.
  * Используются в handle_aux() для вызова handle_aux_cmd().
@@ -287,15 +305,16 @@ void off_aux_cmd(LED_Bits_t channel, bool stop_lsi) {
  * @param count — количество вспышек (0 = одна красная, иначе зелёные)
  *
  * Используется в slot_batt_ind() для отображения заряда батареи.
- * Формат команды: device | (count << 4) | duration0 | duration1 | brightness
  */
 void set_aux_count(uint8_t count) {
 	stop_wakeup();																		// для уверенности
 
 	as_red.acmd.aux.brightness0 = 1;		// яркость 1-го полупериода = включено
 	as_red.acmd.aux.brightness1 = 0;		// яркость 2-го полупериода = выключено
-	as_red.acmd.aux.duration0 = AWU_500MS;	// длительность включения (500мс)
-	as_red.acmd.aux.duration1 = AWU_60MS;	// длительность выключения (60мс)
+	as_red.acmd.aux.p0.psc = AWU_PSC_1024;	// предделитель для 500мс
+	as_red.acmd.aux.p0.win = 63;			// окно для 500мс (1024×63/128000 = 504ms)
+	as_red.acmd.aux.p1.psc = AWU_PSC_256;	// предделитель для 60мс
+	as_red.acmd.aux.p1.win = 30;			// окно для 60мс (256×30/128000 = 60ms)
 	as_red.acmd.aux.count = count;			// количество повторов
 	as_red.acmd.aux.cycle = 0;				// без зацикливания
 
@@ -327,7 +346,7 @@ void set_aux_count(uint8_t count) {
  * Используется при выключении (aux_off)
  */
 void aux_cmd_info_red(void) {
-	start_aux_cmd(INFO_RED, AWU_60MS, true, IDM_OTHER);
+	start_aux_cmd(INFO_RED, true, IDM_OTHER);
 }
 
 /**
@@ -335,186 +354,135 @@ void aux_cmd_info_red(void) {
  * Используется при включении (aux_on)
  */
 void aux_cmd_info_grn(void) {
-	start_aux_cmd(INFO_GRN, AWU_60MS, true, IDM_OTHER);
+	start_aux_cmd(INFO_GRN, true, IDM_OTHER);
 }
 
 /**
  * @brief Запуск одиночной AUX-команды
- * @param command   — 32-битная команда (биты 0..2 определяют канал)
- * @param delay     — интервал таймера AWU (AWU_15MS, AWU_60MS, AWU_1S и т.д.)
+ * @param command   — 32-битная команда (тайминг задан в per0/per1)
  * @param enable    — true = начать обработку немедленно
  * @param idm_mode  — режим индикации (IDM_BEACON, IDM_VWARNING, IDM_STROBE, IDM_OTHER)
  *
- * Копирует команду в буфер канала (aux_cmd_red/grn/hbl), сбрасывает структуру
- * состояния, устанавливает указатель активной команды (p_red/grn/hbl).
- * Если канал имел активный массив — отключает его (сбрасывает EnableArrayProcessing).
+ * Таймер AWU настраивается в handle_aux_cmd при обработке PER_FIRST.
  */
-void start_aux_cmd(uint32_t command, awu_tick_t delay, bool enable, IDM_Type_t idm_mode) {
-    LED_Bits_t channel = command & 0x07;	// извлекаем канал из младших 3 бит
+void start_aux_cmd(uint32_t command, bool enable, IDM_Type_t idm_mode) {
+    LED_Bits_t channel = command & 0x07;
 
 	#ifdef AUX_DEBUG
-	debug_cmd(command);		// выводим отладочную информацию о команде
+	debug_cmd(command);
 	#endif
 
-    // Получаем указатели на структуры канала через таблицы
-    union AUX_Cmd_u *cmd = get_aux_cmd(channel);    // буфер команды
-    AUX_Ctr_t *ctl = get_aux_ctl(channel);          // контроллер состояния
-    union AUX_Cmd_u **ptr = get_aux_ptr(channel);   // указатель на p_red/grn/hbl
+    union AUX_Cmd_u *cmd = get_aux_cmd(channel);
+    AUX_Ctr_t *ctl = get_aux_ctl(channel);
+    union AUX_Cmd_u **ptr = get_aux_ptr(channel);
 
-    if (!cmd || !ctl || !ptr) return;	// невалидный канал — выходим
+    if (!cmd || !ctl || !ptr) return;
 
-    // Отключаем пошаговую обработку массива для данного канала,
-    // т.к. теперь используется одиночная команда
     if (channel == RED_LED) EnableArrayProcessingRed = false;
     else if (channel == GRN_LED) EnableArrayProcessingGrn = false;
     else if (channel == HBL_LED) EnableArrayProcessingHbl = false;
 
-    cmd->aux_cmd = command;			// копируем команду в буфер канала
+    cmd->aux_cmd = command;
 
-    ctl->enable = enable;			// включаем/отключаем обработку
-    ctl->idmode = idm_mode;			// устанавливаем режим индикации
-    ctl->period = PER_INIT;			// сбрасываем в начальное состояние
-    ctl->current_brightness = 0;	// сбрасываем текущую яркость
-    ctl->work_duration = 0;			// сбрасываем оставшуюся длительность
-    ctl->work_count = 0;			// сбрасываем счётчик повторов
+    ctl->enable = enable;
+    ctl->idmode = idm_mode;
+    ctl->period = PER_INIT;
+    ctl->current_brightness = 0;
+    ctl->work_count = 0;
 
-    *ptr = cmd;						// p_red/grn/hbl = указатель на буфер команды
-
-    // Устанавливаем интервал AWU (если не 15мс — таймер уже может быть настроен)
-    if (delay != AWU_15MS) {
-        AWU_set_delay(delay);
-    }
+    *ptr = cmd;
 }
 
 /**
  * @brief Установка яркости светодиода
  * @param device — канал (RED_LED, GRN_LED, HBL_LED)
  * @param brightness — яркость (0=выкл, 1=ярко)
- *
- * Вызывается из handle_half_period() при смене яркости в полупериоде.
- * Если brightness > 0 — включает на полную яркость (on_*_h).
- * Если brightness == 0 — умное выключение с учётом подсветки (smart_off_leds).
  */
 static void SetBrightness(LED_Bits_t device, uint8_t brightness) {
 	switch (device) {
 		case RED_LED:
-			if (brightness) on_red_h();		// полная яркость
-			else smart_off_leds(RED_LED);	// умное выключение
+			if (brightness) on_red_h();
+			else smart_off_leds(RED_LED);
 			break;
 		case GRN_LED:
 			if (brightness) on_grn_h();
 			else smart_off_leds(GRN_LED);
 			break;
 		case HBL_LED:
-			// TODO: Реализовать управление подсветкой
 			break;
 		default:
 			break;
 	}
 }
 
-/*
- * Формат команды (старые комментарии):
- *  24-31 биты  - step 2. Яркость в шагах (0=выкл, 1=полная, 2=подтяжка)
- *  16-23 биты  - step 1. Яркость в шагах
- *  12-15 биты  - длительность в WDT0 2
- *   8-11 биты  - длительность в WDT0 1
- *   4-7  биты  - количество повторов (0=бесконечно)
- *   3    бит   - зацикливание (1=вечно)
- *   0-2  биты  - канал управления
- */
-
 /**
- * @brief Обработка одного полупериода (включение или выключение)
- * @param aux          — указатель на команду
- * @param ubits        — указатель на структуру состояния
- * @param brightness   — яркость для данного полупериода
- * @param next_duration — длительность следующего полупериода (загружается при переходе)
- * @param next_period  — следующий период (PER_SECOND или PER_END)
- * @return true если полупериод завершён (длительность достигла 0), false если ещё работает
- *
- * Общая логика для PER_FIRST и PER_SECOND:
- *   1. Если яркость изменилась — установить новую яркость
- *   2. Уменьшить счётчик длительности
- *   3. Если длительность == 0 — перейти к следующему периоду
- */
-static bool handle_half_period(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits,
-								uint8_t brightness, uint16_t next_duration, PER_Step_t next_period) {
-	LED_Bits_t device = (LED_Bits_t) aux->aux.device;	// определяем канал из команды
-
-	// Устанавливаем яркость только если она изменилась (оптимизация)
-	if (brightness != ubits->current_brightness) {
-		SetBrightness(device, brightness);
-		ubits->current_brightness = brightness;
-	}
-
-	uint16_t duration = (uint16_t)(ubits->work_duration);	// читаем оставшуюся длительность
-
-	if (--duration) {				// уменьшаем и проверяем (постинкремент)
-		ubits->work_duration = duration;	// ещё не 0 — сохраняем новую длительность
-		return false;						// полупериод продолжается
-	}
-
-	// Длительность достигла 0 — переход к следующему периоду
-	ubits->period = next_period;		// устанавливаем следующий период
-	ubits->work_duration = next_duration;	// загружаем длительность следующего полупериода
-	return true;							// полупериод завершён
-}
-
-/**
- * @brief Пошаговая обработка одной AUX-команды
+ * @brief Пошаговая обработка одной AUX-команды (AWU-режим)
  * @param aux   — указатель на команду
  * @param ubits — указатель на структуру состояния
  *
- * Автомат:
- *   PER_INIT    → загрузка duration0, count → переход в PER_FIRST
- *   PER_FIRST   → яркость0, duration0 тиков → переход в PER_SECOND
- *   PER_SECOND  → яркость1, duration1 тиков → переход в PER_END
- *   PER_END     → уменьшение счётчика, переход в PER_FIRST (или PER_NEXT если count==0)
+ * Каждый вызов обрабатывает ОДИН переход автомата:
+ *   PER_INIT    → загрузка count → PER_FIRST
+ *   PER_FIRST   → яркость0, AWU per0 → PER_SECOND (MCU спит per0)
+ *   PER_SECOND  → яркость1, AWU per1 → PER_END (MCU спит per1)
+ *   PER_END     → счётчик, яркость0, AWU per0 → PER_SECOND (без паузы)
  *
- * Вызывается каждые 15мс из handle_aux().
- * Структура else-if гарантирует что за один вызов выполнится только один период.
+ * Вызывается из handle_aux() после пробуждения MCU.
+ * AWU таймер задаёт длительность сна между вызовами.
  */
 void handle_aux_cmd(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits) {
+	if (!ubits->enable) return;
 
-	if (ubits->enable) {
+	LED_Bits_t device = (LED_Bits_t) aux->aux.device;
 
-		// Инициализация: загружаем параметры из команды
-		if (ubits->period == PER_INIT) {
-			ubits->work_duration = aux->aux.duration0;	// загружаем длительность 1-го полупериода
-			ubits->work_count = aux->aux.count;			// загружаем количество повторов
-			ubits->period = PER_FIRST;					// переходим к первому полупериоду
+	EE_PRINTF("[AUX] cmd dev=%d per=%d cnt=%d\r\n", device, ubits->period, ubits->work_count);
+
+	/* Инициализация: загружаем количество повторов */
+	if (ubits->period == PER_INIT) {
+		ubits->work_count = aux->aux.count;
+		ubits->period = PER_FIRST;
+	}
+
+	/* Первый полупериод: яркость0, AWU per0 */
+	if (ubits->period == PER_FIRST) {
+		if (aux->aux.brightness0 != ubits->current_brightness) {
+			SetBrightness(device, aux->aux.brightness0);
+			ubits->current_brightness = aux->aux.brightness0;
 		}
-
-		// Первый полупериод: яркость0 на duration0 тиков
-		if (ubits->period == PER_FIRST) {
-			handle_half_period(aux, ubits, aux->aux.brightness0, aux->aux.duration1, PER_SECOND);
+		EE_PRINTF("[AUX] P0 psc=%d win=%d br=%d\r\n", aux->aux.psc0, aux->aux.win0, aux->aux.brightness0);
+		AWU_set_raw(aux->aux.psc0, aux->aux.win0);
+		ubits->period = PER_SECOND;
+	}
+	/* Второй полупериод: яркость1, AWU per1 */
+	else if (ubits->period == PER_SECOND) {
+		if (aux->aux.brightness1 != ubits->current_brightness) {
+			SetBrightness(device, aux->aux.brightness1);
+			ubits->current_brightness = aux->aux.brightness1;
 		}
+		EE_PRINTF("[AUX] P1 psc=%d win=%d br=%d\r\n", aux->aux.psc1, aux->aux.win1, aux->aux.brightness1);
+		AWU_set_raw(aux->aux.psc1, aux->aux.win1);
+		ubits->period = PER_END;
+	}
+	/* Конец полного цикла: обработка счётчика + запуск следующего цикла */
+	else if (ubits->period == PER_END) {
 
-		// Второй полупериод: яркость1 на duration1 тиков
-		else if (ubits->period == PER_SECOND) {
-			handle_half_period(aux, ubits, aux->aux.brightness1, 0, PER_END);
-		}
-
-		// Конец полного цикла: обработка счётчика повторов
-		else if (ubits->period == PER_END) {
-
-			ubits->work_duration = aux->aux.duration0;	// загружаем duration0 для следующего цикла
-			ubits->period = PER_FIRST;					// возвращаемся к первому полупериоду
-
-			uint8_t cycle = (uint8_t) aux->aux.cycle;		// флаг зацикливания
-			uint8_t counter = (uint8_t) ubits->work_count;	// текущий счётчик
-
-			if (!cycle) {			// если зацикливание выключено — уменьшаем счётчик
-				counter--;
-				ubits->work_count = counter;
-
-				if (!counter) {		// счётчик достиг 0 — команда завершена
-					ubits->enable = false;		// отключаем обработку
-					ubits->period = PER_NEXT;	// сигнализируем массиву: пора загружать следующую команду
-				}
+		/* Обработка зацикливания и счётчика повторов */
+		if (!aux->aux.cycle) {
+			if (ubits->work_count > 0) ubits->work_count--;
+			if (ubits->work_count == 0) {
+				ubits->enable = false;
+				ubits->period = PER_NEXT;
+				smart_off_leds(device);
+				return;
 			}
 		}
+
+		/* Запуск следующего цикла: яркость0 + AWU per0 (без паузы) */
+		if (aux->aux.brightness0 != ubits->current_brightness) {
+			SetBrightness(device, aux->aux.brightness0);
+			ubits->current_brightness = aux->aux.brightness0;
+		}
+		AWU_set_raw(aux->aux.psc0, aux->aux.win0);
+		ubits->period = PER_SECOND;
 	}
 }
 
@@ -576,60 +544,93 @@ union AUX_Cmd_u *handle_aux_array(const uint32_t pArray[], AUX_Ctr_t *ctr) {
 /**
  * @brief Главная функция обработки AUX-светодиодов
  *
- * Вызывается каждые ~15мс из main loop.
- * Для каждого канала (RED, GRN, HBL):
- *   1. Если включена пошаговая обработка массива — вызывает handle_aux_array()
- *   2. Если массив вернул NULL (AC_STOP) — отключает флаг массива
- *   3. Если массив вернул команду — вызывает handle_aux_cmd()
- *   4. Если массив не используется, но указатель валиден — вызывает handle_aux_cmd()
- *      (для одиночных команд из start_aux_cmd)
+ * Обрабатывает ОДИН переход автомата за вызов:
+ *   - Загружает команду из массива (если массив активен)
+ *   - Вызывает handle_aux_cmd (один переход: PER_FIRST, PER_SECOND, или PER_END)
+ *   - Если команда завершилась (PER_NEXT) — НЕ загружает следующую
+ *     (следующая загрузится на следующем вызове handle_aux)
+ *
+ * После return main loop вызывает AWU_Sleep_Now() — MCU спит ровно столько,
+ * сколько задано в текущем полупериоде.
+ *
+ * Приоритет каналов: RED → GRN → HBL (первый активный).
  */
 void handle_aux(void) {
 	// === Красный канал ===
 	if (EnableArrayProcessingRed) {
-		p_red = handle_aux_array(current_buf_red, &aux_ctl_red);	// обрабатываем массив
-		if (p_red == NULL) { EnableArrayProcessingRed = false; }	// AC_STOP — отключаем массив
-		else { handle_aux_cmd(p_red, &aux_ctl_red); }			// выполняем команду
-	} else if (p_red) {
-		handle_aux_cmd(p_red, &aux_ctl_red);	// одиночная команда
+		// Загружаем команду из массива (только если предыдущая завершена)
+		if (aux_ctl_red.period == PER_NEXT) {
+			p_red = handle_aux_array(current_buf_red, &aux_ctl_red);
+			if (p_red == NULL) { EnableArrayProcessingRed = false; return; }
+		}
+		handle_aux_cmd(p_red, &aux_ctl_red);
+		return;
+	} else if (p_red && aux_ctl_red.enable) {
+		handle_aux_cmd(p_red, &aux_ctl_red);
+		return;
 	}
 
 	// === Зелёный канал ===
 	if (EnableArrayProcessingGrn) {
-		p_grn = handle_aux_array(current_buf_grn, &aux_ctl_grn);
-		if (p_grn == NULL) { EnableArrayProcessingGrn = false; }
-		else { handle_aux_cmd(p_grn, &aux_ctl_grn); }
-	} else if (p_grn) {
+		if (aux_ctl_grn.period == PER_NEXT) {
+			p_grn = handle_aux_array(current_buf_grn, &aux_ctl_grn);
+			if (p_grn == NULL) { EnableArrayProcessingGrn = false; return; }
+		}
 		handle_aux_cmd(p_grn, &aux_ctl_grn);
+		return;
+	} else if (p_grn && aux_ctl_grn.enable) {
+		handle_aux_cmd(p_grn, &aux_ctl_grn);
+		return;
 	}
 
 	// === Подсветка (HBL) ===
 	if (EnableArrayProcessingHbl) {
-		p_hbl = handle_aux_array(current_buf_hbl, &aux_ctl_hbl);
-		if (p_hbl == NULL) { EnableArrayProcessingHbl = false; }
-		else { handle_aux_cmd(p_hbl, &aux_ctl_hbl); }
-	} else if (p_hbl) {
+		if (aux_ctl_hbl.period == PER_NEXT) {
+			p_hbl = handle_aux_array(current_buf_hbl, &aux_ctl_hbl);
+			if (p_hbl == NULL) { EnableArrayProcessingHbl = false; return; }
+		}
 		handle_aux_cmd(p_hbl, &aux_ctl_hbl);
+		return;
+	} else if (p_hbl && aux_ctl_hbl.enable) {
+		handle_aux_cmd(p_hbl, &aux_ctl_hbl);
+		return;
 	}
+
+	// Все каналы неактивны
 }
 
 /**
  * @brief Запуск режима маяка (beacon)
  *
  * Формирует команду из настроек EEPROM:
- *   - beacon_type: тип моргания (задаёт duration0/duration1)
+ *   - beacon_type: тип моргания (задаёт psc0/win0 и psc1/win1)
  *   - beacon_mode: частота моргания (задаёт задержку между циклами)
- *
- * Команда: RED_LED | cycle=1 | count=0 | duration=beacon_type | delay=beacon_mode+7
  */
 void start_aux_beacon(void) {
-	uint32_t cmd = 0;
-	uint8_t beacon_type = ee.aux.beacon_type;					// тип моргания из EEPROM
-	uint16_t beacon_mode = (uint16_t) ee.aux.beacon_mode;		// частота моргания из EEPROM
+	uint8_t beacon_type = ee.aux.beacon_type;
 
-	// Формируем команду: device=RED(1), cycle=1, count=0, duration0=beacon_type, delay=(beacon_mode+7)<<12
-	cmd = (0b00000000000000010000000100001000 | beacon_type | ((beacon_mode + 7) << 12));
-	start_aux_cmd(cmd, AWU_1S, true, IDM_BEACON);
+	/* Маппинг beacon_type (0..7) на пары ON/OFF:
+	 * 0: ON 100ms OFF 100ms   (быстрое моргание)
+	 * 1: ON 100ms OFF 200ms
+	 * 2: ON 200ms OFF 300ms
+	 * 3: ON 300ms OFF 300ms
+	 * 4: ON 200ms OFF 800ms
+	 * 5: ON 300ms OFF 1200ms
+	 * 6: ON 500ms OFF 1500ms
+	 * 7: ON 500ms OFF 3500ms  (медленное моргание) */
+	static const uint8_t bcon_psc0[] = {AWU_PSC_256,  AWU_PSC_256,  AWU_PSC_256,  AWU_PSC_256, AWU_PSC_256, AWU_PSC_256, AWU_PSC_4096, AWU_PSC_4096};
+	static const uint8_t bcon_win0[] = {50,           50,           100,          150,         100,         150,          16,           16};
+	static const uint8_t bcon_psc1[] = {AWU_PSC_256,  AWU_PSC_256,  AWU_PSC_256,  AWU_PSC_256, AWU_PSC_4096, AWU_PSC_4096, AWU_PSC_4096, AWU_PSC_4096};
+	static const uint8_t bcon_win1[] = {50,           100,          150,          150,         26,           38,           48,           112};
+
+	if (beacon_type > 7) beacon_type = 7;
+
+	uint32_t cmd = MAKE_CMD(RED_LED, 1, 0,
+		bcon_psc0[beacon_type], bcon_win0[beacon_type],
+		bcon_psc1[beacon_type], bcon_win1[beacon_type],
+		1, 0);
+
+	start_aux_cmd(cmd, true, IDM_BEACON);
 }
 
 #ifdef USE_EX_AUX
@@ -637,23 +638,23 @@ void start_aux_beacon(void) {
  * @brief Запуск индикации предупреждения о напряжении
  * @param ex_mode — скорость моргания (VWARNING_FAST=2с, MEDIUM=4с, SLOW=8с)
  *
- * Формирует команду с нужной длительностью для красного канала.
- * Используется при низком напряжении батареи.
+ * Формат команды: RED_LED, без зацикливания, 0 повторов, яркость1=ярко.
+ * ON/OFF задаются AWU prescaler+window.
  */
 void start_exaux_voltage(WARNING_Fr_t ex_mode) {
-	uint16_t low16 = 0;
+	uint32_t cmd = 0;
 	switch (ex_mode) {
-	case VWARNING_FAST:
-		low16 = 0b0111000000001001;	// duration0=7, duration1=0, brightness=1 — 2с
+	case VWARNING_FAST:   /* ON 100ms, OFF 1900ms → ~2с */
+		cmd = MAKE_CMD(RED_LED, 0, 0, AWU_PSC_256, 50, AWU_PSC_4096, 60, 1, 0);
 		break;
-	case VWARNING_MEDIUM:
-		low16 = 0b1000000000001011;	// duration0=8, duration1=0, brightness=3 — 4с
+	case VWARNING_MEDIUM: /* ON 200ms, OFF 3800ms → ~4с */
+		cmd = MAKE_CMD(RED_LED, 0, 0, AWU_PSC_256, 100, AWU_PSC_4096, 60, 3, 0);
 		break;
-	case VWARNING_SLOW:
-		low16 = 0b1001000000001010;	// duration0=9, duration1=0, brightness=2 — 8с
+	case VWARNING_SLOW:   /* ON 300ms, OFF 7700ms → ~8с */
+		cmd = MAKE_CMD(RED_LED, 0, 0, AWU_PSC_1024, 38, AWU_PSC_61440, 16, 2, 0);
 		break;
 	}
-	start_aux_cmd((0b00000000000000010000000000000000 | low16), AWU_1S, true, IDM_VWARNING);
+	start_aux_cmd(cmd, true, IDM_VWARNING);
 }
 #endif
 
@@ -693,23 +694,19 @@ void slot_batt_ind(void) {
  * @brief Включение (одна зелёная вспышка)
  */
 void aux_on(void) {
-	start_aux_cmd(INFO_GRN, AWU_60MS, true, IDM_OTHER);
+	start_aux_cmd(INFO_GRN, true, IDM_OTHER);
 }
 
 /**
  * @brief Выключение (одна красная вспышка)
  */
 void aux_off(void) {
-	start_aux_cmd(INFO_RED, AWU_60MS, true, IDM_OTHER);
+	start_aux_cmd(INFO_RED, true, IDM_OTHER);
 }
 
 /**
  * @brief Индикация числа (зелёные вспышки или одна красная)
  * @param count — количество (0 = одна красная, иначе count зелёных)
- *
- * Формат команды:
- *   count > 0: GRN_LED | (count << 4) | duration0=1 | duration1=1 | brightness0=1
- *   count == 0: RED_LED | count=2 | duration0=2 | duration1=0 | brightness0=1,1
  */
 void aux_count(uint8_t count) {
 	uint32_t cmd;
@@ -717,7 +714,7 @@ void aux_count(uint8_t count) {
 		cmd = 0b00000000000000010100000100000010 | (count << 4);	// зеленые, если не ноль
 	else
 		cmd = 0b00000000000000010010001000010001;					// одна красная, если 0
-	start_aux_cmd(cmd, AWU_250MS, true, IDM_OTHER);
+	start_aux_cmd(cmd, true, IDM_OTHER);
 }
 
 /**********************************************************************************************/
@@ -727,7 +724,7 @@ void aux_count(uint8_t count) {
  * @param cmd — 32-битная команда
  *
  * Разбивает команду на поля и выводит их значения.
- * Время в миллисекундах = duration × 15мс (интервал AWU).
+ * Время в миллисекундах = (psc_значение × win) / 128.
  */
 void debug_cmd(uint32_t cmd) {
     union AUX_Cmd_u u;
@@ -737,8 +734,10 @@ void debug_cmd(uint32_t cmd) {
     EE_PRINTF("  device    = %d\n", u.aux.device);
     EE_PRINTF("  cycle     = %d\n", u.aux.cycle);
     EE_PRINTF("  count     = %d\n", u.aux.count);
-    EE_PRINTF("  duration0 = %d (%d ms)\n", u.aux.duration0, u.aux.duration0 * 15);
-    EE_PRINTF("  duration1 = %d (%d ms)\n", u.aux.duration1, u.aux.duration1 * 15);
+    EE_PRINTF("  psc0/win0 = %d/%d (%ld ms)\n", u.aux.psc0, u.aux.win0,
+              (long)AWU_PERIOD_MS(u.aux.psc0, u.aux.win0));
+    EE_PRINTF("  psc1/win1 = %d/%d (%ld ms)\n", u.aux.psc1, u.aux.win1,
+              (long)AWU_PERIOD_MS(u.aux.psc1, u.aux.win1));
     EE_PRINTF("  bright0   = %d\n", u.aux.brightness0);
     EE_PRINTF("  bright1   = %d\n", u.aux.brightness1);
 }

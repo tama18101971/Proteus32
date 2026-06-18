@@ -2,12 +2,8 @@
 #define CONFIG_H
 
 // Раскомментировать для отладки через UART
-//#define PRINT_ADC
-//#define WL_FLASH_DEBUG
-
-// раскоментировать для использования режима standby вместо Delay_Ms
-//#define SLEEP_STANDBY
-
+#define WL_FLASH_DEBUG
+#define PRINT_ADC
 
 #if defined(WL_FLASH_DEBUG) || defined(PRINT_ADC)
     #include "mini_printf.h"
