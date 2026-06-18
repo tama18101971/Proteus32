@@ -23,7 +23,7 @@ typedef struct {
 } PSTEP_t;
 
 #define BASE_MOON_LEVEL 4
-#define DEFAULT_STEP 500			// Шаг для УИ1.  Применяется при начальной инициализации.
+#define DEFAULT_STEP 250			// Шаг для УИ1.  Применяется при начальной инициализации.
 #define DEFAULT_MODE CMODE_MID		// Моде для УИ2. Применяется при начальной инициализации.
 
 #define KEY_PORT	GPIOC

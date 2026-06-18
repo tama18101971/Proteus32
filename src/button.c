@@ -68,7 +68,31 @@ uint16_t get_min_level(uint16_t step)
 
 /******************************************************************************************/
 
-//#include <stdint.h>
+/*
+#include <stdint.h>
+
+uint16_t getBrightLED_CH32V003(uint16_t val) {
+    if (val > 511) val = 511;
+    
+    uint32_t x = val;
+    
+    // 1. Чистая кубическая часть (дает ровно 383 в пике)
+    // Максимум при 511: 511^3 * 16 = 2 134 925 296 (влезает в uint32_t!)
+    uint32_t cubic = (x * x * x * 16) >> 22; 
+    
+    // 2. Линейная часть (дает ровно 128 в пике)
+    uint32_t linear = x >> 2;
+    
+    // Суммируем составляющие
+    uint32_t result = cubic + linear;
+    
+    // Идеальная подгонка под полный диапазон ШИМ
+    if (val == 511) return 511;
+    if (val > 0 && result == 0) result = 1;
+
+    return (uint16_t)result;
+}
+*/
 
 uint16_t getBrightLED_Fixed9Bit(uint16_t val) {
     if (val > MAX_STEP) val = MAX_STEP;

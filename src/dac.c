@@ -17,7 +17,7 @@ void dac_pwrpin_off(void) {
 }
 
 void dac_set_value(uint16_t data) {
-    EE_PRINTF("[DAC] set_value: %u\r\n", data);
+    //EE_PRINTF("[DAC] set_value: %u\r\n", data);
 
     // Ограничиваем данные 12 битами
     data &= 0x0FFF;
