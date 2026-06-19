@@ -36,6 +36,7 @@ int main(void)
 
     AWU_init();
     AWU_int_init();
+    AWU_set_delay(AWU_15MS);
 
     led_init();
     button_init();
@@ -48,7 +49,7 @@ int main(void)
 
     i2c_init(I2C_SPEED_400K);
 
-     dac_set_value(0);
+    dac_set_value(0);
     /* DAC */
 
     if (read_ee() == FAILED)
@@ -56,7 +57,7 @@ int main(void)
         init_ee();
     }
 
-    //start_aux_cmd(ERRO_RED, true, IDM_BEACON);
+    // start_aux_cmd(ERRO_RED, true, IDM_BEACON);
     start_aux_cmd(INFO_GRN, true, IDM_BEACON);
 
     start_aux_array(buf_test_blink);
@@ -98,7 +99,7 @@ int main(void)
 
             idle_ms += 10;
 
-            if (idle_ms >= 3000)
+            if (idle_ms >= 4000)
             {
                 idle_ms = 0;
                 mode = MODE_BEACON;
