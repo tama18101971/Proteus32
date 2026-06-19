@@ -14,11 +14,14 @@ void EXTI7_0_IRQHandler(void)
     if (EXTI_GetITStatus(EXTI_Line3) != RESET)
     {
         EE_PRINTF("[BG] WAKEUP Source: BUTTON PRESS\r\n");
+        #ifdef WL_FLASH_DEBUG
         /* Ждём завершения передачи UART */
         while (USART_GetFlagStatus(USART1, USART_FLAG_TC) == RESET) {}
-        button_event = 1;
+        #endif
 
+        button_event = 1;
         mode= MODE_ON1;
+        
         AWU_set_delay(AWU_15MS);
 
         EXTI_ClearITPendingBit(EXTI_Line3);

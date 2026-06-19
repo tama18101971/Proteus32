@@ -62,22 +62,17 @@ void AWU_set_raw(uint8_t psc_idx, uint8_t win)
  * ============================================================ */
 void AWU_int_init(void)
 {
-    EXTI_InitTypeDef exti = {0};
-    NVIC_InitTypeDef nvic = {0};
+    /* Включаем тактирование AFIO (обязательно для EXTI) */
+    RCC->APB2PCENR |= RCC_AFIOEN;
 
-    /* Включаем EXTI Line9 (AWU внутренне подключён к EXTI9) */
-    exti.EXTI_Line = EXTI_Line9;
-    exti.EXTI_Mode = EXTI_Mode_Interrupt;
-    exti.EXTI_Trigger = EXTI_Trigger_Rising; /* AWU генерирует rising edge */
-    exti.EXTI_LineCmd = ENABLE;
-    EXTI_Init(&exti);
+    /* EXTI Line9 — interrupt mode, rising trigger
+     * AWU внутренне подключён к EXTI9 (RM табл. 6-2) */
+    EXTI->INTENR |= (1 << 9);   /* Маска прерывания для Line 9 */
+    EXTI->RTENR  |= (1 << 9);   /* Rising trigger для Line 9 */
 
-    /* Включаем AWU прерывание в PFIC (вектор №21, таблица 6-1 RM) */
-    nvic.NVIC_IRQChannel = AWU_IRQn;
-    nvic.NVIC_IRQChannelPreemptionPriority = 1;
-    nvic.NVIC_IRQChannelSubPriority = 1;
-    nvic.NVIC_IRQChannelCmd = ENABLE;
-    NVIC_Init(&nvic);
+    /* PFIC — включаем AWU IRQ (вектор 21) */
+    NVIC->IENR[0] = (1 << 21);
+    NVIC->IPRIOR[21] = (1 << 7) | (1 << 6);  /* preemption=1, sub=1 */
 }
 
 /* ============================================================
@@ -169,8 +164,10 @@ void AWU_IRQHandler(void)
         SystemCoreClockUpdate(); /* Обновляем переменную SystemCoreClock */
 
         EE_PRINTF("[AWU] WAKEUP Source: AWU TIMER\r\n");
+        #ifdef WL_FLASH_DEBUG
         /* Ждём завершения передачи UART */
         while (USART_GetFlagStatus(USART1, USART_FLAG_TC) == RESET) {}
+        #endif
 
         mode = MODE_BEACON;
 
