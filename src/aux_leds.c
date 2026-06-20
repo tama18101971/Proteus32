@@ -32,16 +32,12 @@
 
 
 #include "aux_leds.h"
-//#include "eeprom.h"
-//#include "soft_start.h"
 #include "main.h"
 #include "button_gpio.h"
-
 #include "led_gpio.h"
-//#include "macros.h"
-//#include "adc.h"
 #include "wl_flash.h"
-
+#include "ch32v00x.h"
+#include "system_ch32v00x.h"
 
 extern struct ee_data ee;
 
@@ -563,6 +559,8 @@ union AUX_Cmd_u *handle_aux_array(const uint32_t pArray[], AUX_Ctr_t *ctr) {
  * Приоритет каналов: RED → GRN → HBL (первый активный).
  */
 void handle_aux(void) {
+	PWR->AWUCSR &= ~PWR_AWUCSR_AWUEN; /* Выключаем AWU */
+
 	// === Красный канал ===
 	if (EnableArrayProcessingRed) {
 		p_red = handle_aux_array(current_buf_red, &aux_ctl_red);	// обрабатываем массив
@@ -589,6 +587,8 @@ void handle_aux(void) {
 	} else if (p_hbl) {
 		handle_aux_cmd(p_hbl, &aux_ctl_hbl);
 	}
+
+	PWR->AWUCSR |= PWR_AWUCSR_AWUEN; /* Включаем AWU (таймер стартует) */
 }
 
 /**

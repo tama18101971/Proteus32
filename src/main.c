@@ -12,15 +12,14 @@
 #include "button.h"
 #include "ntc_table.h"
 
+volatile wakeup_source_t wakeup_source = WS_NONE;
+volatile uint8_t awu_event = 0;
 volatile uint8_t button_event = 0;
-extern uint8_t need_save;
-volatile driver_mode_t mode = MODE_BEACON;
 
-led_state_t led_state = LED_OFF_STATE;
+extern uint8_t need_save;
 
 int main(void)
 {
-    uint32_t idle_ms = 0;
 
     NVIC_PriorityGroupConfig(NVIC_PriorityGroup_1);
     SystemCoreClockUpdate();
@@ -46,9 +45,7 @@ int main(void)
     /* DAC */
     dac_pwrpin_init();
     dac_pwrpin_on();
-
     i2c_init(I2C_SPEED_400K);
-
     dac_set_value(0);
     /* DAC */
 
@@ -58,54 +55,23 @@ int main(void)
     }
 
     // start_aux_cmd(ERRO_RED, true, IDM_BEACON);
-    start_aux_cmd(INFO_GRN, true, IDM_BEACON);
+    // start_aux_cmd(INFO_GRN, true, IDM_BEACON);
 
     start_aux_array(buf_test_blink);
 
     while (1)
     {
-        if (mode == MODE_BEACON)
+        handle_aux();
+        AWU_Sleep_Now();
+
+        ntc_read();
+        scan_ui1();
+        ss_scan();
+
+        if (need_save)
         {
-            ntc_read();
-
-            handle_aux();
-            scan_ui1();
-            ss_scan();
-
-            if (need_save)
-            {
-                write_ee();
-                need_save = false;
-            }
-
-            AWU_Sleep_Now();
-        }
-        else
-        {
-            if (button_event)
-            {
-                button_event = 0;
-                idle_ms = 0;
-
-                EE_PRINTF("[MAIN] Button pressed\r\n");
-            }
-
-            /***************************************************
-             * USER CODE
-             ***************************************************/
-            Delay_Ms(10);
-
-            /***************************************************/
-
-            idle_ms += 10;
-
-            if (idle_ms >= 4000)
-            {
-                idle_ms = 0;
-                mode = MODE_BEACON;
-
-                EE_PRINTF("[MAIN] Return to standby mode\r\n");
-            }
+            write_ee();
+            need_save = false;
         }
     }
 }

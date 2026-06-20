@@ -119,7 +119,7 @@ void AWU_Sleep_Now(void)
         ;
 #endif
 
-    PWR->AWUCSR |= PWR_AWUCSR_AWUEN; /* Включаем AWU (таймер стартует) */
+    //PWR->AWUCSR |= PWR_AWUCSR_AWUEN; /* Включаем AWU (таймер стартует) */
 
     PWR->CTLR |= PWR_CTLR_PDDS; /*Устанавливаем PDDS=1 в PWR_CTLR → выбираем Standby (не Sleep) */
 
@@ -142,7 +142,7 @@ void AWU_Sleep_Now(void)
     PFIC->SCTLR &= ~(1 << 2);
     PWR->CTLR &= ~PWR_CTLR_PDDS;
 
-    PWR->AWUCSR &= ~PWR_AWUCSR_AWUEN; /* Выключаем AWU после пробуждения */
+    //PWR->AWUCSR &= ~PWR_AWUCSR_AWUEN; /* Выключаем AWU после пробуждения */
 
 #ifdef WL_FLASH_DEBUG
     USART_Printf_Init(115200); /* Восстанавливаем UART для отладки */
@@ -169,7 +169,8 @@ void AWU_IRQHandler(void)
         while (USART_GetFlagStatus(USART1, USART_FLAG_TC) == RESET) {}
         #endif
 
-        mode = MODE_BEACON;
+        awu_event = 1;
+        wakeup_source = WS_AWU;
 
         /* Очищаем флаг EXTI9 */
         EXTI_ClearITPendingBit(EXTI_Line9);

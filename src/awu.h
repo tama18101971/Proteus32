@@ -18,6 +18,8 @@ typedef enum {
 	AWU_16S
 } awu_tick_t;
 
+extern volatile uint8_t awu_event;
+
 void AWU_init(void);
 void AWU_int_init(void);
 bool AWU_set_delay(awu_tick_t time_aux);

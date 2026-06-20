@@ -5,25 +5,13 @@
 
 typedef enum
 {
-    WS_AWU = 0,
+    WS_NONE = 0,
+    WS_AWU,
     WS_BUTTON
 } wakeup_source_t;
 
-typedef enum
-{
-    MODE_BEACON = 0,
-    MODE_ON1
-} driver_mode_t;
-
-typedef enum
-{
-    LED_OFF_STATE = 0,
-    LED_ON_STATE
-} led_state_t;
-
 extern volatile uint8_t button_event;
-extern volatile driver_mode_t mode;
-extern led_state_t led_state;
+extern volatile wakeup_source_t wakeup_source;
 
 void button_init(void);
 
