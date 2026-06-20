@@ -68,7 +68,7 @@ void AWU_int_init(void)
     /* EXTI Line9 — interrupt mode, rising trigger
      * AWU внутренне подключён к EXTI9 (RM табл. 6-2) */
     EXTI->INTENR |= (1 << 9); /* Маска прерывания для Line 9 */
-    EXTI->RTENR |= (1 << 9);  /* Rising trigger для Line 9 */
+    EXTI->RTENR  |= (1 << 9);  /* Rising trigger для Line 9 */
 
     /* PFIC — включаем AWU IRQ (вектор 21) */
     NVIC->IENR[0] = (1 << 21);
@@ -185,7 +185,7 @@ void handle_awu(void)
 {
     if (wakeup_source == WS_AWU)
     {
-        wakeup_source == WS_NONE;
+        wakeup_source = WS_NONE;
         AWU_Sleep_Now();
     }
 }

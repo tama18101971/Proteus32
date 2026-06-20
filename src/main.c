@@ -63,20 +63,16 @@ int main(void)
 
     while (1)
     {
-
-    if (wakeup_source == WS_AWU)
-    {
-        wakeup_source = WS_NONE;
-        handle_aux();
-        AWU_Sleep_Now();
-    }
-
-        //handle_awu();   // обрабатывается только если wakeup_source == WS_AWU
+        if (wakeup_source == WS_AWU)
+        {
+            wakeup_source = WS_NONE;
+            handle_aux();
+            AWU_Sleep_Now();
+        }
 
         ntc_read();
         scan_ui1();
         ss_scan();
-
-        hanlde_ee();    // срабатывает только если need_save == true
+        hanlde_ee();
     }
 }

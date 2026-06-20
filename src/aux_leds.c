@@ -69,12 +69,11 @@ const uint32_t buf_sos_red[5] = {
 };
 
 /* Тестовый массив: простое мигание RED 512ms ON / 512ms OFF */
-const uint32_t buf_test_blink[6] = {
+const uint32_t buf_test_blink[5] = {
 	MAKE_CMD(RED_LED, 0, 2, AWU_PSC_10240, 16, AWU_PSC_10240, 16, 1, 0),  /* ON 512ms, OFF 512ms */
 	MAKE_CMD(RED_LED, 0, 2, AWU_PSC_4096, 16, AWU_PSC_4096, 16, 1, 0),  /* ON 512ms, OFF 512ms */
 	MAKE_CMD(RED_LED, 0, 2, AWU_PSC_1024, 16, AWU_PSC_1024, 16, 1, 0),  /* ON 512ms, OFF 512ms */
 	MAKE_CMD(RED_LED, 0, 2, AWU_PSC_4096, 16, AWU_PSC_4096, 16, 1, 0),  /* ON 512ms, OFF 512ms */
-	MAKE_CMD(RED_LED, 0, 2, AWU_PSC_10240, 16, AWU_PSC_10240, 16, 1, 0),  /* ON 512ms, OFF 512ms */
 	0x1  /* AC_REP_ATSTART */
 };
 
@@ -541,8 +540,27 @@ union AUX_Cmd_u *handle_aux_array(const uint32_t pArray[], AUX_Ctr_t *ctr) {
 			ctr->period = PER_INIT;				// сбрасываем период для инициализации
 			ctr->arr_index++;					// переходим к следующему элементу
 			p++;								// сдвигаем указатель
-			ctr->enable = true;					// включаем обработку новой команды
 		}
+		// Пропускаем системные команды, пока не найдём LED-команду
+		while (p->cmd.is_cmd == 0) {
+			switch ((Array_Cmd_t) p->cmd.command) {
+			case AC_STOP:
+				ctr->enable = false;
+				return NULL;
+			case AC_REP_ATSTART:
+				ctr->arr_index = 0;
+				p = (union AUX_Cmd_u*) pArray;
+				break;
+			case AC_REP_ATSTEPS:
+				ctr->arr_index = p->cmd.steps;
+				p = (union AUX_Cmd_u*) pArray + p->cmd.steps;
+				break;
+			default:
+				ctr->enable = false;
+				return NULL;
+			}
+		}
+		ctr->enable = true;
 	}
 	return p;									// возвращаем указатель на текущую команду
 }
