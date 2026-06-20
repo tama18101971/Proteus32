@@ -16,6 +16,7 @@ volatile wakeup_source_t wakeup_source = WS_NONE;
 volatile uint8_t awu_event = 0;
 volatile uint8_t button_event = 0;
 
+uint8_t	need_pwd = false;	
 extern uint8_t need_save;
 
 int main(void)
@@ -56,18 +57,19 @@ int main(void)
 
     // start_aux_cmd(ERRO_RED, true, IDM_BEACON);
     // start_aux_cmd(INFO_GRN, true, IDM_BEACON);
-
+    wakeup_source = WS_AWU;
+    
     start_aux_array(buf_test_blink);
 
     while (1)
     {
         handle_aux();
-        AWU_Sleep_Now();
+        handle_awu();   // обрабатывается только если wakeup_source == WS_AWU
 
         ntc_read();
         scan_ui1();
         ss_scan();
 
-        hanlde_ee();
+        hanlde_ee();    // срабатывает только если need_save == true
     }
 }

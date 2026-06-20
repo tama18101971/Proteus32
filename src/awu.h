@@ -28,4 +28,6 @@ void AWU_stop(bool stop_lsi);
 void AWU_Sleep_Tick(awu_tick_t tick);
 void AWU_Sleep_Now(void);
 
+void handle_awu(void);
+
 #endif // AWU_H

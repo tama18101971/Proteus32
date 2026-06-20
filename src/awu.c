@@ -67,12 +67,12 @@ void AWU_int_init(void)
 
     /* EXTI Line9 — interrupt mode, rising trigger
      * AWU внутренне подключён к EXTI9 (RM табл. 6-2) */
-    EXTI->INTENR |= (1 << 9);   /* Маска прерывания для Line 9 */
-    EXTI->RTENR  |= (1 << 9);   /* Rising trigger для Line 9 */
+    EXTI->INTENR |= (1 << 9); /* Маска прерывания для Line 9 */
+    EXTI->RTENR |= (1 << 9);  /* Rising trigger для Line 9 */
 
     /* PFIC — включаем AWU IRQ (вектор 21) */
     NVIC->IENR[0] = (1 << 21);
-    NVIC->IPRIOR[21] = (1 << 7) | (1 << 6);  /* preemption=1, sub=1 */
+    NVIC->IPRIOR[21] = (1 << 7) | (1 << 6); /* preemption=1, sub=1 */
 }
 
 /* ============================================================
@@ -119,12 +119,14 @@ void AWU_Sleep_Now(void)
         ;
 #endif
 
-    //PWR->AWUCSR |= PWR_AWUCSR_AWUEN; /* Включаем AWU (таймер стартует) */
+    // PWR->AWUCSR |= PWR_AWUCSR_AWUEN; /* Включаем AWU (таймер стартует) */
 
     PWR->CTLR |= PWR_CTLR_PDDS; /*Устанавливаем PDDS=1 в PWR_CTLR → выбираем Standby (не Sleep) */
 
     /* Барьер: убедиться, что все записи завершены */
-    __NOP();  __NOP();  __NOP();
+    __NOP();
+    __NOP();
+    __NOP();
 
     /* 4. WFI — войти в Standby.
      *    Пробуждение: EXTI прерывание (кнопка) → EXTI7_0_IRQHandler
@@ -142,7 +144,7 @@ void AWU_Sleep_Now(void)
     PFIC->SCTLR &= ~(1 << 2);
     PWR->CTLR &= ~PWR_CTLR_PDDS;
 
-    //PWR->AWUCSR &= ~PWR_AWUCSR_AWUEN; /* Выключаем AWU после пробуждения */
+    // PWR->AWUCSR &= ~PWR_AWUCSR_AWUEN; /* Выключаем AWU после пробуждения */
 
 #ifdef WL_FLASH_DEBUG
     USART_Printf_Init(115200); /* Восстанавливаем UART для отладки */
@@ -164,16 +166,26 @@ void AWU_IRQHandler(void)
         SystemCoreClockUpdate(); /* Обновляем переменную SystemCoreClock */
 
         EE_PRINTF("[AWU] WAKEUP Source: AWU TIMER\r\n");
-        #ifdef WL_FLASH_DEBUG
+#ifdef WL_FLASH_DEBUG
         /* Ждём завершения передачи UART */
-        while (USART_GetFlagStatus(USART1, USART_FLAG_TC) == RESET) {}
-        #endif
+        while (USART_GetFlagStatus(USART1, USART_FLAG_TC) == RESET)
+        {
+        }
+#endif
 
         awu_event = 1;
         wakeup_source = WS_AWU;
 
         /* Очищаем флаг EXTI9 */
         EXTI_ClearITPendingBit(EXTI_Line9);
+    }
+}
 
+void handle_awu(void)
+{
+    if (wakeup_source == WS_AWU)
+    {
+        wakeup_source == WS_NONE;
+        AWU_Sleep_Now();
     }
 }

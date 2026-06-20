@@ -147,10 +147,11 @@ def flash_firmware(port, filepath, baudrate):
             unit_scale=True,
             unit_divisor=1024,
             desc="Flashing",
-            dynamic_ncols=True,
+            ncols=56,
             leave=True,
+            bar_format="{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt}"
         ) as pbar:
-
+            
             for offset in range(0, len(data), BLOCK_SIZE):
                 # Берем реальный кусок данных
                 chunk = data[offset:offset+BLOCK_SIZE]
@@ -204,6 +205,7 @@ def flash_firmware(port, filepath, baudrate):
         print(f"Elapsed : {total_time:.2f} s")
         print(f"Speed   : {speed:.1f} KiB/s")
         print("=" * 56)
+        print()
 
         return True
 
