@@ -184,4 +184,6 @@ int read_ee(void);
    Возвращает: 1=успех, 0=ошибка (не должна возникать при правильной работе) */
 int write_ee(void);
 
+void hanlde_ee(void);
+
 #endif // WL_FLASH_H

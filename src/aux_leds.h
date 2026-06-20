@@ -192,7 +192,7 @@ void start_aux_array(const uint32_t *pArray);  /* Запуск массива к
 void smart_off_leds(LED_Bits_t channel); /* Умное выключение с учётом подсветки */
 
 /* Главный цикл обработки (вызывается каждые ~15мс из main) */
-void handle_aux(void);
+bool handle_aux(void);
 void handle_aux_cmd(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits);
 union AUX_Cmd_u *handle_aux_array(const uint32_t pBuffer[], AUX_Ctr_t *ubits);
 

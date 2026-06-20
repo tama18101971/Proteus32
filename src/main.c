@@ -68,10 +68,6 @@ int main(void)
         scan_ui1();
         ss_scan();
 
-        if (need_save)
-        {
-            write_ee();
-            need_save = false;
-        }
+        hanlde_ee();
     }
 }

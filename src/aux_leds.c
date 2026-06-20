@@ -556,9 +556,10 @@ union AUX_Cmd_u *handle_aux_array(const uint32_t pArray[], AUX_Ctr_t *ctr) {
  * После return main loop вызывает AWU_Sleep_Now() — MCU спит ровно столько,
  * сколько задано в текущем полупериоде.
  *
- * Приоритет каналов: RED → GRN → HBL (первый активный).
+ * @return true если хотя бы один канал активен (aux_ctl.enable == true),
+ *         false если все каналы пусты
  */
-void handle_aux(void) {
+bool handle_aux(void) {
 	PWR->AWUCSR &= ~PWR_AWUCSR_AWUEN; /* Выключаем AWU */
 
 	// === Красный канал ===
@@ -589,6 +590,8 @@ void handle_aux(void) {
 	}
 
 	PWR->AWUCSR |= PWR_AWUCSR_AWUEN; /* Включаем AWU (таймер стартует) */
+	
+	return aux_ctl_red.enable || aux_ctl_grn.enable || aux_ctl_hbl.enable;
 }
 
 /**
