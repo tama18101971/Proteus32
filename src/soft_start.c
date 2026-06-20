@@ -19,7 +19,7 @@
 
 #include "stdbool.h"
 #include "soft_start.h"
-#include "button.h"
+#include "ui.h"
 #include "config.h"
 
 /* Глобальное состояние soft start (одна переменная — один процесс) */

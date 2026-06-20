@@ -1,12 +1,12 @@
 /*
- * button.h
+ * ui.h
  *
  *  Created on: Dec 24, 2022
  *      Author: tamag
  */
 
-#ifndef INC_BUTTON_H_
-#define INC_BUTTON_H_
+#ifndef UI_H_
+#define UI_H_
 
 #include "debug.h"
 #include "soft_start.h"
@@ -67,6 +67,8 @@ typedef enum {
 	MODE_SLOT09,
 	MODE_SLOT10					//29
 } DRIVER_Mode_t;
+
+extern DRIVER_Mode_t driver_mode;
 
 typedef enum {
 	CMODE_OFF =	0U,
@@ -193,4 +195,4 @@ void set_current(uint16_t step_target, SoftStartSpeed_t ss_speed);
 uint16_t get_step_tc(uint16_t step);
 void out_set_stc(uint16_t step);
 
-#endif /* INC_BUTTON_H_ */
+#endif /* UI_H_ */

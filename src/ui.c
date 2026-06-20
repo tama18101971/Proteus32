@@ -1,5 +1,5 @@
 /*
- * button.c
+ * ui.c
  *
  *  Created on: Dec 24, 2022
  *      Author: tamag
@@ -8,7 +8,7 @@
 #include <stdbool.h>
 #include "debug.h"
 
-#include "button.h"
+#include "ui.h"
 #include "array.h"
 #include "aux_leds.h"
 #include "wl_flash.h"

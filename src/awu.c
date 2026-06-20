@@ -173,7 +173,6 @@ void AWU_IRQHandler(void)
         }
 #endif
 
-        awu_event = 1;
         wakeup_source = WS_AWU;
 
         /* Очищаем флаг EXTI9 */

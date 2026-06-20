@@ -542,22 +542,32 @@ union AUX_Cmd_u *handle_aux_array(const uint32_t pArray[], AUX_Ctr_t *ctr) {
 			p++;								// сдвигаем указатель
 		}
 		// Пропускаем системные команды, пока не найдём LED-команду
+		//
+		// При переходе к следующему элементу (arr_index++) следующий элемент
+		// может оказаться системной командой (is_cmd == 0), а не LED-командой.
+		// Если вернуть указатель на системную команду — handle_aux_cmd()
+		// интерпретирует её как LED-команду и вызовет AWU_set_raw(0, 0),
+		// что приведёт к нулевой задержке сна и зависанию MCU.
+		//
+		// Поэтому обрабатываем системные команды здесь в цикле:
+		// сбрасываем индекс/указатель и продолжаем поиск LED-команды,
+		// пока не найдём её или не получим команду остановки.
 		while (p->cmd.is_cmd == 0) {
 			switch ((Array_Cmd_t) p->cmd.command) {
-			case AC_STOP:
-				ctr->enable = false;
-				return NULL;
-			case AC_REP_ATSTART:
-				ctr->arr_index = 0;
-				p = (union AUX_Cmd_u*) pArray;
-				break;
-			case AC_REP_ATSTEPS:
-				ctr->arr_index = p->cmd.steps;
-				p = (union AUX_Cmd_u*) pArray + p->cmd.steps;
-				break;
-			default:
-				ctr->enable = false;
-				return NULL;
+			case AC_STOP:							// Остановить обработку массива
+				ctr->enable = false;				// Отключаем канал — обработка завершена
+				return NULL;						// NULL → handle_aux отключит EnableArrayProcessing*
+			case AC_REP_ATSTART:					// Зациклить с начала массива
+				ctr->arr_index = 0;				// Сбрасываем индекс на первый элемент
+				p = (union AUX_Cmd_u*) pArray;	// Указатель тоже на начало массива
+				break;							// Продолжаем цикл — проверим pArray[0]
+			case AC_REP_ATSTEPS:					// Зациклить с заданного шага
+				ctr->arr_index = p->cmd.steps;	// Устанавливаем индекс из поля steps команды
+				p = (union AUX_Cmd_u*) pArray + p->cmd.steps;	// Сдвигаем указатель на шаг
+				break;							// Продолжаем цикл — проверим pArray[steps]
+			default:								// Неизвестная системная команда
+				ctr->enable = false;				// Безопасная остановка канала
+				return NULL;						// Прекращаем обработку массива
 			}
 		}
 		ctr->enable = true;
@@ -582,7 +592,7 @@ union AUX_Cmd_u *handle_aux_array(const uint32_t pArray[], AUX_Ctr_t *ctr) {
  */
 bool handle_aux(void) {
 
-	//EE_PRINTF("[AUX] Handle AUX\r\n");
+	EE_PRINTF("[AUX] Handle AUX\r\n");
 
 	PWR->AWUCSR &= ~PWR_AWUCSR_AWUEN; /* Выключаем AWU */
 

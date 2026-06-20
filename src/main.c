@@ -9,14 +9,13 @@
 #include "button_gpio.h"
 #include "aux_leds.h"
 #include "wl_flash.h"
-#include "button.h"
+#include "ui.h"
 #include "ntc_table.h"
+#include "timers.h"
 
 volatile wakeup_source_t wakeup_source = WS_NONE;
-volatile uint8_t awu_event = 0;
-volatile uint8_t button_event = 0;
 
-uint8_t	need_pwd = false;	
+uint8_t need_pwd = false;
 extern uint8_t need_save;
 
 int main(void)
@@ -61,18 +60,59 @@ int main(void)
 
     start_aux_array(buf_test_blink);
 
+/* Интервалы таймеров (аналог millis в Arduino) */
+#define TICK_150HZ_MS 7 /* 1000мс / 150Гц ≈ 6.67мс → округляем до 7мс */
+#define TICK_60HZ_MS 17 /* 1000мс / 60Гц ≈ 16.67мс → округляем до 17мс */
+#define TICK_5S_MS 5000 /* 5 секунд */
+
+    uint32_t last_tick_150hz = 0;
+    uint32_t last_tick_60hz = 0;
+    uint32_t last_tick_5s = 0;
+
+    //tim2_start();
+
     while (1)
     {
-        if (wakeup_source == WS_AWU)
+        if (driver_mode > MODE_OFF) // здесь кода включено и не до сна
         {
-            wakeup_source = WS_NONE;
+            tim2_start();
+            
+            /* 150 Гц (каждые ~7 мс) */
+            if (tim2_ms - last_tick_150hz >= TICK_150HZ_MS)
+            {
+                last_tick_150hz += TICK_150HZ_MS;
+                scan_ui1();
+                ss_scan();
+            }
+
+            /* 60 Гц (каждые ~17 мс) */
+            if (tim2_ms - last_tick_60hz >= TICK_60HZ_MS)
+            {
+                last_tick_60hz += TICK_60HZ_MS;
+                ntc_read();
+            }
+
+            /* 5 секунд */
+            if (tim2_ms - last_tick_5s >= TICK_5S_MS)
+            {
+                // сброс на начало: last_tick_5s = tim2_ms;
+                last_tick_5s += TICK_5S_MS;
+                hanlde_ee();
+            }
+
+            if (wakeup_source == WS_AWU)
+            {
+                wakeup_source = WS_NONE;
+                handle_aux();
+                AWU_Sleep_Now();
+            }
+        }
+        else // здесь сонные режимы
+        {
+            tim2_stop();
             handle_aux();
             AWU_Sleep_Now();
+            //wakeup_source = WS_NONE;
         }
-
-        ntc_read();
-        scan_ui1();
-        ss_scan();
-        hanlde_ee();
     }
 }

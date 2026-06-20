@@ -15,7 +15,7 @@
 #include "aux_leds.h"        /* Определения BCK_COLOR_RED, BCK_TYPE_ON, BCON_2S, RED_LED — константы подсветки и маяка */
 #include "array.h"           /* Вспомогательные макросы/функции для работы с массивами */
 #include "main.h"            /* EE_PRINTF — макрос отладочного вывода (printf через UART/USB) */
-#include "button.h"          /* Определения SLOT_BATT_IND, SLOT_BEACON и т.д. — константы функций слотов */
+#include "ui.h"
 
 /* ============================================================
  * GLOBAL VARIABLES

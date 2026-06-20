@@ -22,7 +22,6 @@ void EXTI7_0_IRQHandler(void)
         #endif
 
         need_pwd = false;
-        wakeup_source = WS_BUTTON;
         
         AWU_set_delay(AWU_15MS);
 
