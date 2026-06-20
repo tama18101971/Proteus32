@@ -58,13 +58,20 @@ int main(void)
     // start_aux_cmd(ERRO_RED, true, IDM_BEACON);
     // start_aux_cmd(INFO_GRN, true, IDM_BEACON);
     wakeup_source = WS_AWU;
-    
+
     start_aux_array(buf_test_blink);
 
     while (1)
     {
+
+    if (wakeup_source == WS_AWU)
+    {
+        wakeup_source = WS_NONE;
         handle_aux();
-        handle_awu();   // обрабатывается только если wakeup_source == WS_AWU
+        AWU_Sleep_Now();
+    }
+
+        //handle_awu();   // обрабатывается только если wakeup_source == WS_AWU
 
         ntc_read();
         scan_ui1();

@@ -69,10 +69,12 @@ const uint32_t buf_sos_red[5] = {
 };
 
 /* Тестовый массив: простое мигание RED 512ms ON / 512ms OFF */
-const uint32_t buf_test_blink[4] = {
+const uint32_t buf_test_blink[6] = {
 	MAKE_CMD(RED_LED, 0, 2, AWU_PSC_10240, 16, AWU_PSC_10240, 16, 1, 0),  /* ON 512ms, OFF 512ms */
 	MAKE_CMD(RED_LED, 0, 2, AWU_PSC_4096, 16, AWU_PSC_4096, 16, 1, 0),  /* ON 512ms, OFF 512ms */
 	MAKE_CMD(RED_LED, 0, 2, AWU_PSC_1024, 16, AWU_PSC_1024, 16, 1, 0),  /* ON 512ms, OFF 512ms */
+	MAKE_CMD(RED_LED, 0, 2, AWU_PSC_4096, 16, AWU_PSC_4096, 16, 1, 0),  /* ON 512ms, OFF 512ms */
+	MAKE_CMD(RED_LED, 0, 2, AWU_PSC_10240, 16, AWU_PSC_10240, 16, 1, 0),  /* ON 512ms, OFF 512ms */
 	0x1  /* AC_REP_ATSTART */
 };
 
@@ -561,6 +563,9 @@ union AUX_Cmd_u *handle_aux_array(const uint32_t pArray[], AUX_Ctr_t *ctr) {
  *         false если все каналы пусты
  */
 bool handle_aux(void) {
+
+	//EE_PRINTF("[AUX] Handle AUX\r\n");
+
 	PWR->AWUCSR &= ~PWR_AWUCSR_AWUEN; /* Выключаем AWU */
 
 	// === Красный канал ===
