@@ -598,7 +598,7 @@ union AUX_Cmd_u *handle_aux_array(const uint32_t pArray[], AUX_Ctr_t *ctr) {
  */
 bool handle_aux(void) {
 
-	EE_PRINTF("[AUX] Handle AUX\r\n");
+	//EE_PRINTF("[AUX] Handle AUX\r\n");
 
 	AWU_OFF(); /* Выключаем AWU */
 

@@ -188,7 +188,7 @@ void AWU_IRQHandler(void)
         SystemInit();            /* Восстанавливаем системные часы после пробуждения */
         SystemCoreClockUpdate(); /* Обновляем переменную SystemCoreClock */
 
-        EE_PRINTF("[AWU] WAKEUP Source: AWU TIMER\r\n");
+        //EE_PRINTF("[AWU] WAKEUP Source: AWU TIMER\r\n");
 #ifdef WL_FLASH_DEBUG
         /* Ждём завершения передачи UART */
         while (USART_GetFlagStatus(USART1, USART_FLAG_TC) == RESET)

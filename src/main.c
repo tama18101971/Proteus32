@@ -71,53 +71,61 @@ int main(void)
     // start_aux_cmd(INFO_GRN, true, IDM_BEACON, AWU_120MS);
 
     start_aux_array(buf_test_blink, AWU_120MS); /* Запуск тестового массива мигания */
-    need_sleep = true; /* Включаем режим сна для первого цикла */
+    need_sleep = true; 
 
     /* Интервалы таймеров (аналог millis в Arduino) */
 
     while (1)
     {
-        wakeup_source_t ws = WS_NONE;
+        //wakeup_source_t ws = WS_NONE;
 
         /* 1. Сон: останавливаем ADC и TIM2, засыпаем в STANDBY */
         if (need_sleep)
         {
+            EE_PRINTF("[MAIN] Entering sleep mode...\r\n");
             adc_stop();
             tim2_stop();
-            ws = AWU_Sleep_Now();
+            AWU_Sleep_Now();
         }
 
         /* 2. Пробуждение по кнопке: восстанавливаем периферию */
-        if ((ws == WS_BUTTON) && is_sleep_mode)
+        if ((wakeup_source == WS_BUTTON) && is_sleep_mode)
         {
+            EE_PRINTF("[MAIN] Event source: BUTTON.\r\n");
             is_sleep_mode = false;
-            ws = WS_NONE;
+            need_sleep = false;
+            wakeup_source = WS_NONE;
             adc_init();
             tim2_start();
         }
 
         /* 3. Пробуждение по AWU: обрабатываем AUX-команды */
-        if (ws == WS_AWU)
+        if (wakeup_source == WS_AWU)
         {
-            ws = WS_NONE;
+            EE_PRINTF("[MAIN] Event source: AWU.\r\n");
+            wakeup_source = WS_NONE;
             handle_aux();
         }
 
         /* 4. Таймерные задачи (выполняются пока need_sleep == false) */
         if (tick_150hz())    /* ~7мс: UI + softstart */
         {
-            scan_ui1();
+            //EE_PRINTF("[MAIN] Tick 150Hz.\r\n");
+            //scan_ui1();
             ss_scan();
         }
 
         if (tick_60hz())     /* ~17мс: ADC измерение */
         {
+            //EE_PRINTF("[MAIN] Tick 60Hz.\r\n");
             adc_read();
         }
 
         if (tick_5s())       /* 5с: сохранение EEPROM */
         {
+            //EE_PRINTF("[MAIN] Tick 5 Sec.\r\n");
             hanlde_ee();
+            need_sleep = true;
         }
     }
 }
