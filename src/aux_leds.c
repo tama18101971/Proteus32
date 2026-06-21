@@ -629,10 +629,11 @@ bool handle_aux(void) {
 		handle_aux_cmd(p_hbl, &aux_ctl_hbl);
 	}
 
-	/* AWU включаем если есть массивы для обработки.
-	 * EnableArrayProcessing* = true означает, что массив ещё не завершён
-	 * (нет AC_STOP), и нужен следующий wake для перехода к следующей команде */
-	bool pending = EnableArrayProcessingRed || EnableArrayProcessingGrn || EnableArrayProcessingHbl;
+	/* AWU включаем если есть массивы для обработки ИЛИ одиночные команды.
+	 * EnableArrayProcessing* — массив ещё не завершён (нет AC_STOP)
+	 * aux_ctl.enable — одиночная команда ещё выполняется */
+	bool pending = EnableArrayProcessingRed || EnableArrayProcessingGrn || EnableArrayProcessingHbl
+				|| aux_ctl_red.enable || aux_ctl_grn.enable || aux_ctl_hbl.enable;
 
 	if(pending) AWU_ON(); /* Включаем AWU (таймер стартует) */
 	

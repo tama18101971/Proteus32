@@ -56,10 +56,10 @@ int main(void)
     }
 
     // start_aux_cmd(ERRO_RED, true, IDM_BEACON, AWU_120MS);
-     start_aux_cmd(INFO_GRN, true, IDM_BEACON, AWU_120MS);
+    // start_aux_cmd(INFO_GRN, true, IDM_BEACON, AWU_120MS);
     // wakeup_source = WS_AWU;
 
-    //start_aux_array(buf_test_blink, AWU_120MS);
+    start_aux_array(buf_test_blink, AWU_120MS);
     need_sleep = true;
 
     /* Интервалы таймеров (аналог millis в Arduino) */
