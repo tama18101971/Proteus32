@@ -7,6 +7,8 @@
 #include "config.h"
 #include "button_gpio.h"
 
+uint8_t is_sleep_mode = false;
+
 /* ============================================================
  * AWU TABLE
  * ============================================================
@@ -112,14 +114,15 @@ void AWU_Sleep_Tick(awu_tick_t tick)
 /* ============================================================
  * AWU_Sleep_Now — вход в STANDBY и пробуждение
  * ============================================================ */
-void AWU_Sleep_Now(void)
+wakeup_source_t AWU_Sleep_Now(void)
 {
 #ifdef WL_FLASH_DEBUG
     while (!(USART1->STATR & USART_FLAG_TC)) /* Ждём окончания передачи USART1 (бит 6 STATR) */
         ;
 #endif
 
-    // PWR->AWUCSR |= PWR_AWUCSR_AWUEN; /* Включаем AWU (таймер стартует) */
+    is_sleep_mode = true; /* Устанавливаем флаг сна */
+    wakeup_source = WS_NONE;  /* Сбрасываем источник пробуждения перед сном */
 
     PWR->CTLR |= PWR_CTLR_PDDS; /*Устанавливаем PDDS=1 в PWR_CTLR → выбираем Standby (не Sleep) */
 
@@ -144,11 +147,11 @@ void AWU_Sleep_Now(void)
     PFIC->SCTLR &= ~(1 << 2);
     PWR->CTLR &= ~PWR_CTLR_PDDS;
 
-    // PWR->AWUCSR &= ~PWR_AWUCSR_AWUEN; /* Выключаем AWU после пробуждения */
-
 #ifdef WL_FLASH_DEBUG
     USART_Printf_Init(115200); /* Восстанавливаем UART для отладки */
 #endif
+
+    return wakeup_source;  /* WS_AWU, WS_BUTTON или WS_NONE */
 }
 
 /* ═══════════════════════════════════════════════════════════════

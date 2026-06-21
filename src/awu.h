@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include "button_gpio.h"
 
 typedef enum {
 	AWU_15MS = 0,
@@ -20,13 +21,16 @@ typedef enum {
 
 extern volatile uint8_t awu_event;
 
+#define AWU_ON()    (PWR->AWUCSR |=  PWR_AWUCSR_AWUEN)  /* Включаем AWU */
+#define AWU_OFF()   (PWR->AWUCSR &= ~PWR_AWUCSR_AWUEN)  /* Выключаем AWU */
+
 void AWU_init(void);
 void AWU_int_init(void);
 bool AWU_set_delay(awu_tick_t time_aux);
 void AWU_set_raw(uint8_t psc_idx, uint8_t win);
 void AWU_stop(bool stop_lsi);
 void AWU_Sleep_Tick(awu_tick_t tick);
-void AWU_Sleep_Now(void);
+wakeup_source_t AWU_Sleep_Now(void);
 
 void handle_awu(void);
 

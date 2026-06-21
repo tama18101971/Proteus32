@@ -146,7 +146,7 @@ static union AUX_Cmd_u **const aux_ptr_table[] = {
  * Сбрасывает структуру состояния, устанавливает флаг EnableArrayProcessing
  * и запоминает указатель на массив для дальнейшей обработки в handle_aux().
  */
-void start_aux_array(const uint32_t *pArray) {
+void start_aux_array(const uint32_t *pArray, awu_tick_t delay) {
 	LED_Bits_t channel = (LED_Bits_t)(pArray[0] & 0x07);	// извлекаем канал из младших 3 бит
 
 	AUX_Ctr_t *ctl;		// указатель на структуру состояния канала
@@ -186,6 +186,9 @@ void start_aux_array(const uint32_t *pArray) {
 	*ptr = (union AUX_Cmd_u*)pArray;			// указатель на текущую команду = начало массива
 	*current_buf = pArray;						// запоминаем массив для handle_aux()
 	ctl->enable = true;							// включаем обработчик команд
+
+	AWU_set_delay(delay);
+	AWU_ON();
 }
 
 /**
@@ -351,7 +354,7 @@ void set_aux_count(uint8_t count) {
  * Используется при выключении (aux_off)
  */
 void aux_cmd_info_red(void) {
-	start_aux_cmd(INFO_RED, true, IDM_OTHER);
+	start_aux_cmd(INFO_RED, true, IDM_OTHER, AWU_120MS);
 }
 
 /**
@@ -359,7 +362,7 @@ void aux_cmd_info_red(void) {
  * Используется при включении (aux_on)
  */
 void aux_cmd_info_grn(void) {
-	start_aux_cmd(INFO_GRN, true, IDM_OTHER);
+	start_aux_cmd(INFO_GRN, true, IDM_OTHER, AWU_120MS);
 }
 
 /**
@@ -370,7 +373,7 @@ void aux_cmd_info_grn(void) {
  *
  * Таймер AWU настраивается в handle_aux_cmd при обработке PER_FIRST.
  */
-void start_aux_cmd(uint32_t command, bool enable, IDM_Type_t idm_mode) {
+void start_aux_cmd(uint32_t command, bool enable, IDM_Type_t idm_mode, awu_tick_t delay) {
     LED_Bits_t channel = command & 0x07;
 
 	#ifdef AUX_DEBUG
@@ -396,6 +399,9 @@ void start_aux_cmd(uint32_t command, bool enable, IDM_Type_t idm_mode) {
     ctl->work_count = 0;
 
     *ptr = cmd;
+
+	AWU_set_delay(delay);
+	AWU_ON();
 }
 
 /**
@@ -594,7 +600,7 @@ bool handle_aux(void) {
 
 	EE_PRINTF("[AUX] Handle AUX\r\n");
 
-	PWR->AWUCSR &= ~PWR_AWUCSR_AWUEN; /* Выключаем AWU */
+	AWU_OFF(); /* Выключаем AWU */
 
 	// === Красный канал ===
 	if (EnableArrayProcessingRed) {
@@ -623,9 +629,14 @@ bool handle_aux(void) {
 		handle_aux_cmd(p_hbl, &aux_ctl_hbl);
 	}
 
-	PWR->AWUCSR |= PWR_AWUCSR_AWUEN; /* Включаем AWU (таймер стартует) */
+	/* AWU включаем если есть массивы для обработки.
+	 * EnableArrayProcessing* = true означает, что массив ещё не завершён
+	 * (нет AC_STOP), и нужен следующий wake для перехода к следующей команде */
+	bool pending = EnableArrayProcessingRed || EnableArrayProcessingGrn || EnableArrayProcessingHbl;
+
+	if(pending) AWU_ON(); /* Включаем AWU (таймер стартует) */
 	
-	return aux_ctl_red.enable || aux_ctl_grn.enable || aux_ctl_hbl.enable;
+	return pending;
 }
 
 /**
@@ -659,7 +670,7 @@ void start_aux_beacon(void) {
 		bcon_psc1[beacon_type], bcon_win1[beacon_type],
 		1, 0);
 
-	start_aux_cmd(cmd, true, IDM_BEACON);
+	start_aux_cmd(cmd, true, IDM_BEACON, AWU_120MS);
 }
 
 #ifdef USE_EX_AUX
@@ -723,14 +734,14 @@ void slot_batt_ind(void) {
  * @brief Включение (одна зелёная вспышка)
  */
 void aux_on(void) {
-	start_aux_cmd(INFO_GRN, true, IDM_OTHER);
+	start_aux_cmd(INFO_GRN, true, IDM_OTHER, AWU_120MS);
 }
 
 /**
  * @brief Выключение (одна красная вспышка)
  */
 void aux_off(void) {
-	start_aux_cmd(INFO_RED, true, IDM_OTHER);
+	start_aux_cmd(INFO_RED, true, IDM_OTHER, AWU_120MS);
 }
 
 /**
@@ -743,7 +754,7 @@ void aux_count(uint8_t count) {
 		cmd = 0b00000000000000010100000100000010 | (count << 4);	// зеленые, если не ноль
 	else
 		cmd = 0b00000000000000010010001000010001;					// одна красная, если 0
-	start_aux_cmd(cmd, true, IDM_OTHER);
+	start_aux_cmd(cmd, true, IDM_OTHER, AWU_120MS);
 }
 
 /**********************************************************************************************/

@@ -1,4 +1,4 @@
-#include "ntc_table.h"
+#include "adc.h"
 #include "ch32v00x.h"
 #include "ch32v00x_adc.h"
 #include "ch32v00x_rcc.h"
@@ -99,7 +99,7 @@ int16_t calc_temperature(uint16_t adcValue)
  *
  * @return  none
  */
-void ntc_adc_Init(void)
+void adc_init(void)
 {
     // 1. Включаем тактирование GPIOD и ADC1
     RCC->APB2PCENR |= (1 << 5) | (1 << 9); // GPIOD(bit5) | ADC1(bit9)
@@ -171,7 +171,7 @@ void ntc_adc_Init(void)
     ema_init(323);
 }
 
-void ntc_read(void)
+void adc_read(void)
 {
     // Включаем делитель напряжения (PD3 = 0, земля)
     GPIOD->BCR = (1 << 3);
@@ -210,4 +210,34 @@ void ntc_read(void)
     EE_PRINTF("%04d, %04d -> Vbat: %ld mV | Temp: %d.%d C\r\n",
               vrefint_adc, raw_temperature_adc, vbat_mv, temperature / 10, temperature % 10);
 #endif
+}
+
+/**
+ * @brief Полная остановка АЦП для экономии энергии
+ *
+ * Выполняет:
+ *   1. Сброс флага ADON (бит 0 CTLR2) — отключение АЦП
+ *   2. Отключение тактирования АЦП (бит 9 APB2PCENR = RCC_ADC1EN)
+ *   3. Отключение GPIO аналоговых входов (PD2, PD3 в Hi-Z)
+ *
+ * После вызова АЦП полностью обесточен. Для повторного использования
+ * вызвать adc_init() (требуется повторная калибровка).
+ */
+void adc_stop(void)
+{
+    /* Если АЦП уже отключено (тактирование выключено или ADON=0) — выходим */
+    if (!(RCC->APB2PCENR & RCC_ADC1EN) || !(ADC1->CTLR2 & (1 << 0)))
+        return;
+
+    /* 1. Отключаем АЦП (ADON = 0) */
+    ADC1->CTLR2 &= ~(1 << 0);
+
+    /* 2. Отключаем тактирование ADC1 (бит 9 APB2PCENR) */
+    RCC->APB2PCENR &= ~RCC_ADC1EN;
+
+    /* 3. PD2 и PD3 в setInputFloating — высокое импедансное состояние
+     *    PD3 (искусственная земля делителя) — Hi-Z, делитель обесточен
+     *    PD2 (вход NTC) — Hi-Z, нет утечки через АЦП */
+    GPIOD->CFGLR &= ~(0xF << 8);   /* PD2: 0b0000 = Analog Input (Hi-Z) */
+    GPIOD->CFGLR &= ~(0xF << 12);  /* PD3: 0b0000 = Analog Input (Hi-Z) */
 }

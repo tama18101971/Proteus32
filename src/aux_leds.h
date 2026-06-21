@@ -185,8 +185,8 @@ void stop_aux_mode(LED_Bits_t channel, IDM_Type_t mode); /* Остановка �
 void off_aux_cmd(LED_Bits_t channel, bool stop_lsi);     /* Полная остановка канала + выключение LED */
 
 /* Запуск команд */
-void start_aux_cmd(uint32_t command, bool enable, IDM_Type_t idm_mode); /* Одиночная команда */
-void start_aux_array(const uint32_t *pArray);  /* Запуск массива команд (автоопределение канала) */
+void start_aux_cmd(uint32_t command, bool enable, IDM_Type_t idm_mode, awu_tick_t delay); /* Одиночная команда */
+void start_aux_array(const uint32_t *pArray, awu_tick_t delay);  /* Запуск массива команд (автоопределение канала) */
 
 /* Управление яркостью */
 void smart_off_leds(LED_Bits_t channel); /* Умное выключение с учётом подсветки */

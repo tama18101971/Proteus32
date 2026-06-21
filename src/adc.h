@@ -1,13 +1,14 @@
-#ifndef USER_NTC_TABLE_H_
-#define USER_NTC_TABLE_H_
+#ifndef ADC_H_
+#define ADC_H_
 
 #include <stdint.h>
 
 #define TEMPERATURE_TABLE_START  (-200)
 #define TEMPERATURE_TABLE_STEP   (10)
 
-void ntc_read(void);
-void ntc_adc_Init(void);
+void adc_read(void);
+void adc_init(void);
+void adc_stop(void);
 
 int16_t calc_temperature(uint16_t adcValue);
 
@@ -19,4 +20,4 @@ int16_t calc_temperature(uint16_t adcValue);
 void     ema_init(uint16_t seed);
 uint16_t ema_update(uint16_t raw);
 
-#endif
+#endif /* ADC_H_ */

@@ -3,7 +3,7 @@
 #include "awu.h"
 #include "config.h"
 
-extern uint8_t	need_pwd;
+extern uint8_t	need_sleep;
 
 /*********************************************************************
  * Button interrupt handler
@@ -21,10 +21,9 @@ void EXTI7_0_IRQHandler(void)
         while (USART_GetFlagStatus(USART1, USART_FLAG_TC) == RESET) {}
         #endif
 
-        need_pwd = false;
+        need_sleep = false;
+        wakeup_source = WS_BUTTON;
         
-        AWU_set_delay(AWU_15MS);
-
         EXTI_ClearITPendingBit(EXTI_Line3);
     }
 }

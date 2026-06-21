@@ -10,12 +10,13 @@
 #include "aux_leds.h"
 #include "wl_flash.h"
 #include "ui.h"
-#include "ntc_table.h"
+#include "adc.h"
 #include "timers.h"
 
 volatile wakeup_source_t wakeup_source = WS_NONE;
 
-uint8_t need_pwd = false;
+extern uint8_t is_sleep_mode; /* 0 - не во сне, 1 - во сне */
+uint8_t need_sleep = false; /* флаг определяет необходимость перейти в режим сна */
 extern uint8_t need_save;
 
 int main(void)
@@ -40,7 +41,7 @@ int main(void)
     led_init();
     button_init();
 
-    ntc_adc_Init();
+    adc_init();
 
     /* DAC */
     dac_pwrpin_init();
@@ -54,65 +55,58 @@ int main(void)
         init_ee();
     }
 
-    // start_aux_cmd(ERRO_RED, true, IDM_BEACON);
-    // start_aux_cmd(INFO_GRN, true, IDM_BEACON);
-    wakeup_source = WS_AWU;
+    // start_aux_cmd(ERRO_RED, true, IDM_BEACON, AWU_120MS);
+     start_aux_cmd(INFO_GRN, true, IDM_BEACON, AWU_120MS);
+    // wakeup_source = WS_AWU;
 
-    start_aux_array(buf_test_blink);
+    //start_aux_array(buf_test_blink, AWU_120MS);
+    need_sleep = true;
 
-/* Интервалы таймеров (аналог millis в Arduino) */
-#define TICK_150HZ_MS 7 /* 1000мс / 150Гц ≈ 6.67мс → округляем до 7мс */
-#define TICK_60HZ_MS 17 /* 1000мс / 60Гц ≈ 16.67мс → округляем до 17мс */
-#define TICK_5S_MS 5000 /* 5 секунд */
-
-    uint32_t last_tick_150hz = 0;
-    uint32_t last_tick_60hz = 0;
-    uint32_t last_tick_5s = 0;
-
-    //tim2_start();
+    /* Интервалы таймеров (аналог millis в Arduino) */
 
     while (1)
     {
-        if (driver_mode > MODE_OFF) // здесь кода включено и не до сна
-        {
-            tim2_start();
-            
-            /* 150 Гц (каждые ~7 мс) */
-            if (tim2_ms - last_tick_150hz >= TICK_150HZ_MS)
-            {
-                last_tick_150hz += TICK_150HZ_MS;
-                scan_ui1();
-                ss_scan();
-            }
+        wakeup_source_t ws = WS_NONE;
 
-            /* 60 Гц (каждые ~17 мс) */
-            if (tim2_ms - last_tick_60hz >= TICK_60HZ_MS)
-            {
-                last_tick_60hz += TICK_60HZ_MS;
-                ntc_read();
-            }
-
-            /* 5 секунд */
-            if (tim2_ms - last_tick_5s >= TICK_5S_MS)
-            {
-                // сброс на начало: last_tick_5s = tim2_ms;
-                last_tick_5s += TICK_5S_MS;
-                hanlde_ee();
-            }
-
-            if (wakeup_source == WS_AWU)
-            {
-                wakeup_source = WS_NONE;
-                handle_aux();
-                AWU_Sleep_Now();
-            }
-        }
-        else // здесь сонные режимы
-        {
+        if (need_sleep)   /* если сон нужен, то и останавливаем перифирию и затем спим */
+        {   
+            //need_sleep = false;
+            adc_stop();
             tim2_stop();
+            ws = AWU_Sleep_Now();
+        }
+
+        if ((ws == WS_BUTTON) && is_sleep_mode) /* проснулись по кнопке т.к. is_sleep_mode == true значит кнопка была нажата ранее в режиме сна */
+        {
+            is_sleep_mode = false;
+            ws = WS_NONE;
+            adc_init();
+            tim2_start();
+        }
+
+        if (ws == WS_AWU) /* handle_aux() вызывается только при срабатывании AWU. Если AWU не сработало значит заданий нет */
+        {
+            ws = WS_NONE;
             handle_aux();
-            AWU_Sleep_Now();
-            //wakeup_source = WS_NONE;
+        }
+
+        /* 150 Гц (каждые ~7 мс) */
+        if (tick_150hz())
+        {
+            scan_ui1();
+            ss_scan();
+        }
+
+        /* 60 Гц (каждые ~17 мс) */
+        if (tick_60hz())
+        {
+            adc_read();
+        }
+
+        /* 5 секунд */
+        if (tick_5s())
+        {
+            hanlde_ee();
         }
     }
 }

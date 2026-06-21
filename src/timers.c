@@ -21,6 +21,61 @@
 
 volatile uint32_t tim2_ms = 0;
 
+/* Интервалы таймеров (аналог millis в Arduino) */
+#define TICK_150HZ_MS 7 /* 1000мс / 150Гц ≈ 6.67мс → округляем до 7мс */
+#define TICK_60HZ_MS 17 /* 1000мс / 60Гц ≈ 16.67мс → округляем до 17мс */
+#define TICK_5S_MS 5000 /* 5 секунд */
+
+/* Счётчики последнего срабатывания (static — доступны только из timers.c) */
+static uint32_t last_tick_150hz = 0;
+static uint32_t last_tick_60hz = 0;
+static uint32_t last_tick_5s = 0;
+
+/**
+ * @brief Проверка: прошло ли TICK_150HZ_MS (7 мс) с последнего вызова
+ * @return true если интервал истёк (счётчик автоматически сдвигается)
+ *
+ * Использование:
+ *   if (tick_150hz()) { ... }
+ */
+bool tick_150hz(void)
+{
+    if (tim2_ms - last_tick_150hz >= TICK_150HZ_MS)
+    {
+        last_tick_150hz += TICK_150HZ_MS;
+        return true;
+    }
+    return false;
+}
+
+/**
+ * @brief Проверка: прошло ли TICK_60HZ_MS (17 мс) с последнего вызова
+ * @return true если интервал истёк (счётчик автоматически сдвигается)
+ */
+bool tick_60hz(void)
+{
+    if (tim2_ms - last_tick_60hz >= TICK_60HZ_MS)
+    {
+        last_tick_60hz += TICK_60HZ_MS;
+        return true;
+    }
+    return false;
+}
+
+/**
+ * @brief Проверка: прошло ли TICK_5S_MS (5000 мс) с последнего вызова
+ * @return true если интервал истёк (счётчик автоматически сдвигается)
+ */
+bool tick_5s(void)
+{
+    if (tim2_ms - last_tick_5s >= TICK_5S_MS)
+    {
+        last_tick_5s += TICK_5S_MS;
+        return true;
+    }
+    return false;
+}
+
 /**
  * @brief Запуск таймера 2 с периодом 1 мс
  *
@@ -29,86 +84,57 @@ volatile uint32_t tim2_ms = 0;
  *   2. Настраивает NVIC (вектор 38, приоритет preemption=1, sub=1)
  *   3. Конфигурирует таймер: PSC=47, ARR=999, прерывание Update
  *   4. Запускает счётчик
- *
- * Вызывать вместо tim2_init() — функция самодостаточна.
  */
 void tim2_start(void)
 {
-    /* проверяем, если таймер запущен - выходим */
     if (TIM2->CTLR1 & (1 << 0))
         return;
 
-    /* Включаем тактирование TIM2 (бит 0 APB1PCENR = RCC_TIM2EN) */
     RCC->APB1PCENR |= RCC_TIM2EN;
 
-    /* NVIC — включаем TIM2 IRQ (вектор 38)
-     * IENR[1] = бит 6 (38 & 0x1F = 6) — вектор 38 в слове IENR[1] */
     NVIC->IENR[38 >> 5] = (1 << (38 & 0x1F));
-    NVIC->IPRIOR[38] = (1 << 7) | (1 << 6);  /* preemption=1, sub=1 */
+    NVIC->IPRIOR[38] = (1 << 7) | (1 << 6);
 
-    /* Сброс регистров таймера перед конфигурацией */
-    TIM2->CTLR1  = 0;          /* Управление: всё выключено */
-    TIM2->INTFR  = 0;          /* Очищаем все флаги прерываний */
-
-    /* Предделитель: 48 МГц / (PSC+1) = 48 МГц / 48 = 1 МГц (1 тик = 1 мкс) */
-    TIM2->PSC    = 48 - 1;
-
-    /* Автозагрузка: ARR+1 тиков между прерываниями = 1000 тиков = 1 мс */
-    TIM2->ATRLR  = 1000 - 1;
-
-    /* Немедленная загрузка prescaler (без ожидания обновления) */
+    TIM2->CTLR1 = 0;
+    TIM2->INTFR = 0;
+    TIM2->PSC = 48 - 1;
+    TIM2->ATRLR = 1000 - 1;
     TIM2->SWEVGR = TIM_PSCReloadMode_Immediate;
-
-    /* Включаем прерывание Update (бит 0 DMAINTENR = TIM_IT_Update) */
     TIM2->DMAINTENR = TIM_IT_Update;
 
-    /* Запуск таймера */
-    TIM2->CNT = 0;                         /* Обнуляем счётчик */
-    TIM2->CTLR1 |= (1 << 0);              /* CEN = 1 — запускаем таймер */
+    TIM2->CNT = 0;
+    TIM2->CTLR1 |= (1 << 0);
 }
 
 /**
  * @brief Полная остановка таймера 2 с отключением тактирования
- *
- * Последовательность:
- *   1. Останавливаем счётчик (CEN = 0)
- *   2. Отключаем прерывания таймера (DMAINTENR = 0)
- *   3. Отключаем NVIC (IRER — Interrupt Reset Enable Register)
- *   4. Отключаем тактирование TIM2 → полное питание off
- *
- * После вызова регистры TIM2 теряют значения (тактирование отключено).
- * Для повторного использования вызвать tim2_start().
  */
 void tim2_stop(void)
 {
-    /* проверяем, если таймер не запущен - выходим */
     if (!(TIM2->CTLR1 & (1 << 0)))
         return;
 
-    TIM2->CTLR1 &= ~(1 << 0);  /* CEN = 0 — останавливаем счётчик */
-    TIM2->DMAINTENR = 0;        /* Отключаем прерывания таймера */
-
-    /* NVIC — отключаем TIM2 IRQ (запись в IRER сбрасывает бит) */
+    /* отключаем таймер */
+    TIM2->CTLR1 &= ~(1 << 0);
+    TIM2->DMAINTENR = 0;
     NVIC->IRER[38 >> 5] = (1 << (38 & 0x1F));
-
-    /* Отключаем тактирование TIM2 — периферия обесточена */
     RCC->APB1PCENR &= ~RCC_TIM2EN;
+
+    /* обнулям счетчики */
+    tim2_ms = 0;
+    last_tick_150hz = 0;
+    last_tick_60hz = 0;
+    last_tick_5s = 0;
 }
 
 /**
  * @brief Обработчик прерывания TIM2 (вектор 38)
  *
  * Вызывается каждую 1 мс. Инкрементирует глобальный счётчик tim2_ms.
- *
- * Используется fast-interrupt атрибут WCH — приоритетный вход без
- * сохранения/восстановления контекста (максимальная скорость).
- *
- * Флаг Update очищается записью 0 во весь регистр INTFR —
- * единственный активный источник прерывания, проверка избыточна.
  */
 void TIM2_IRQHandler(void) __attribute__((interrupt("WCH-Interrupt-fast")));
 void TIM2_IRQHandler(void)
 {
-    TIM2->INTFR = 0;   /* Очищаем все флаги прерываний TIM2 */
-    tim2_ms++;          /* Счётчик миллисекунд */
+    TIM2->INTFR = 0;
+    tim2_ms++;
 }
