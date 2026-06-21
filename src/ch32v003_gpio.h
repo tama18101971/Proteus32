@@ -1,6 +1,22 @@
 #ifndef CH32V003_GPIO_H
 #define CH32V003_GPIO_H
 
+/*
+ * ch32v003_gpio.h — Утилиты для настройки GPIO на CH32V003
+ *
+ * Константы конфигурации пинов:
+ *   CFG_OUT_PP_10M/2M/50M — выход Push-Pull с разной скоростью
+ *   CFG_IN_PULL            — вход с pull-up/pull-down
+ *   CFG_IN_FLOAT           — вход плавающий (High-Z)
+ *   CFG_IN_ANALOG          — аналоговый вход
+ *
+ * Функции:
+ *   GPIO_PinConfig() — настройка одного пина (порт + маска + конфигурация)
+ *   PIN_NUM()        — вычисление номера пина из битовой маски
+ *
+ * Примечание: CH32V003 имеет один регистр CFGLR на порт (32 бита = 8 пинов × 4 бита)
+ */
+
 #include "ch32v00x.h"
 
 // PIN_NUM macro

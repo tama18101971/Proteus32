@@ -47,8 +47,8 @@ typedef enum {
 	IDM_STROBE         /* Стробоскоп */
 } IDM_Type_t;
 
-/* Этапы автомата обработки команды ( finite state machine )
- * Переключение: PER_INIT → PER_FIRST → PER_SECOND → PER_END → (PER_FIRST или PER_NEXT) */
+/* Цикл полупериодов (finite state machine):
+ * PER_INIT → PER_FIRST (ON) → PER_SECOND (OFF) → PER_END → (PER_FIRST или PER_NEXT) */
 typedef enum {
 	PER_INIT = 0U,  /* Инициализация: загрузка count из команды */
 	PER_FIRST,      /* 1-й полупериод: яркость0, MCU спит per0 */
@@ -57,7 +57,10 @@ typedef enum {
 	PER_NEXT        /* Команда завершена: нужна загрузка следующей из массива */
 } PER_Step_t;
 
-/* Системные команды массива (is_cmd == 0, биты 5..31 == 0) */
+/* Системные команды массива (is_cmd == 0, биты 5..31 == 0).
+ * Обрабатываются в handle_aux_array перед возвратом указателя.
+ * Если встретилась системная команда — цикл продолжается (break),
+ * пока не найдётся LED-команда или AC_STOP. */
 typedef enum {
 	AC_STOP = 0U,       /* Остановить обработку массива (вернуть NULL) */
 	AC_REP_ATSTART,     /* Зациклить с начала массива (arr_index = 0) */
@@ -191,13 +194,14 @@ void start_aux_array(const uint32_t *pArray, awu_tick_t delay);  /* Запуск
 /* Управление яркостью */
 void smart_off_leds(LED_Bits_t channel); /* Умное выключение с учётом подсветки */
 
-/* Главный цикл обработки (вызывается каждые ~15мс из main) */
+/* Главный цикл обработки (вызывается при пробуждении по AWU)
+ * Возвращает true если есть активные команды (AWU будет перезапущен),
+ * false если все каналы завершены (AWU не перезапускается) */
 bool handle_aux(void);
 void handle_aux_cmd(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits);
 union AUX_Cmd_u *handle_aux_array(const uint32_t pBuffer[], AUX_Ctr_t *ubits);
 
 
-/* Готовые команды (MAKE_CMD с параметрами) */
 #define INFO_RED    MAKE_CMD(RED_LED, 0, 1, AWU_PSC_1024, 56, AWU_PSC_2048, 56, 1, 0)   /* 1 красная вспышка ~448мс */
 #define INFO_GRN    MAKE_CMD(GRN_LED, 0, 15, AWU_PSC_512, 56, AWU_PSC_4096, 35, 1, 0)  /* 15 зелёных вспышек */
 #define ERRO_RED    MAKE_CMD(RED_LED, 0, 3, AWU_PSC_128, 15, AWU_PSC_256, 45, 1, 0)     /* 3 красных вспышки ~15/90мс */

@@ -1,6 +1,20 @@
-#include "debug.h"
-#include "awu.h"
-#include "main.h"
+/*
+ * main.c — Точка входа и главный цикл проекта Proteus003
+ *
+ * Управление фонариком на базе CH32V003:
+ * - 2 канала LED (красный, зелёный) через DAC
+ * - NTC-датчик температуры (ADC)
+ * - Кнопка управления (EXTI)
+ * - AWU (Auto Wake-Up) для периодических задач и сна
+ * - TIM2 (1мс системный тик) для таймерных интервалов
+ * - EEPROM-эмуляция во Flash (настройки)
+ *
+ * Главный цикл:
+ * 1. Если need_sleep — останавливаем ADC и TIM2, засыпаем в STANDBY
+ * 2. При пробуждении по AWU — обрабатываем AUX-команды
+ * 3. При пробуждении по кнопке — восстанавливаем периферию
+ * 4. По таймерам: 150Гц (UI + softstart), 60Гц (ADC), 5с (EEPROM)
+ */
 #include <stdint.h>
 #include <stdbool.h>
 #include "led_gpio.h"
@@ -13,11 +27,11 @@
 #include "adc.h"
 #include "timers.h"
 
-volatile wakeup_source_t wakeup_source = WS_NONE;
+volatile wakeup_source_t wakeup_source = WS_NONE; /* Источник последнего пробуждения */
 
-extern uint8_t is_sleep_mode; /* 0 - не во сне, 1 - во сне */
-uint8_t need_sleep = false; /* флаг определяет необходимость перейти в режим сна */
-extern uint8_t need_save;
+extern uint8_t is_sleep_mode; /* Флаг режима сна: 0 — работает, 1 — в STANDBY */
+uint8_t need_sleep = false; /* Флаг необходимости перейти в режим сна */
+extern uint8_t need_save; /* Флаг необходимости сохранения EEPROM */
 
 int main(void)
 {
@@ -26,7 +40,7 @@ int main(void)
     SystemCoreClockUpdate();
     Delay_Init();
 
-    Delay_Ms(3000);
+    Delay_Ms(3000); /* Задержка перед инициализацией (стабилизация питания) */
 
 #ifdef WL_FLASH_DEBUG
     USART_Printf_Init(115200);
@@ -34,33 +48,30 @@ int main(void)
 
     EE_PRINTF("\r\n[MAIN] Boot...\r\n");
 
-    AWU_init();
-    AWU_int_init();
-    AWU_set_delay(AWU_15MS);
+    AWU_init();         /* Включение PWR + LSI генератора */
+    AWU_int_init();     /* Настройка EXTI Line9 + NVIC */
+    AWU_set_delay(AWU_15MS); /* Начальная задержка AWU */
 
-    led_init();
-    button_init();
+    led_init();         /* Инициализация GPIO для LED */
+    button_init();      /* Инициализация EXTI для кнопки */
 
-    adc_init();
+    adc_init();         /* Инициализация АЦП (NTC + Vrefint) */
 
-    /* DAC */
+    /* DAC + I2C */
     dac_pwrpin_init();
     dac_pwrpin_on();
     i2c_init(I2C_SPEED_400K);
     dac_set_value(0);
-    /* DAC */
 
-    if (read_ee() == FAILED)
+    if (read_ee() == FAILED) /* Загрузка настроек из EEPROM (или инициализация по умолчанию) */
     {
         init_ee();
     }
 
-    // start_aux_cmd(ERRO_RED, true, IDM_BEACON, AWU_120MS);
     // start_aux_cmd(INFO_GRN, true, IDM_BEACON, AWU_120MS);
-    // wakeup_source = WS_AWU;
 
-    start_aux_array(buf_test_blink, AWU_120MS);
-    need_sleep = true;
+    start_aux_array(buf_test_blink, AWU_120MS); /* Запуск тестового массива мигания */
+    need_sleep = true; /* Включаем режим сна для первого цикла */
 
     /* Интервалы таймеров (аналог millis в Arduino) */
 
@@ -68,15 +79,16 @@ int main(void)
     {
         wakeup_source_t ws = WS_NONE;
 
-        if (need_sleep)   /* если сон нужен, то и останавливаем перифирию и затем спим */
-        {   
-            //need_sleep = false;
+        /* 1. Сон: останавливаем ADC и TIM2, засыпаем в STANDBY */
+        if (need_sleep)
+        {
             adc_stop();
             tim2_stop();
             ws = AWU_Sleep_Now();
         }
 
-        if ((ws == WS_BUTTON) && is_sleep_mode) /* проснулись по кнопке т.к. is_sleep_mode == true значит кнопка была нажата ранее в режиме сна */
+        /* 2. Пробуждение по кнопке: восстанавливаем периферию */
+        if ((ws == WS_BUTTON) && is_sleep_mode)
         {
             is_sleep_mode = false;
             ws = WS_NONE;
@@ -84,27 +96,26 @@ int main(void)
             tim2_start();
         }
 
-        if (ws == WS_AWU) /* handle_aux() вызывается только при срабатывании AWU. Если AWU не сработало значит заданий нет */
+        /* 3. Пробуждение по AWU: обрабатываем AUX-команды */
+        if (ws == WS_AWU)
         {
             ws = WS_NONE;
             handle_aux();
         }
 
-        /* 150 Гц (каждые ~7 мс) */
-        if (tick_150hz())
+        /* 4. Таймерные задачи (выполняются пока need_sleep == false) */
+        if (tick_150hz())    /* ~7мс: UI + softstart */
         {
             scan_ui1();
             ss_scan();
         }
 
-        /* 60 Гц (каждые ~17 мс) */
-        if (tick_60hz())
+        if (tick_60hz())     /* ~17мс: ADC измерение */
         {
             adc_read();
         }
 
-        /* 5 секунд */
-        if (tick_5s())
+        if (tick_5s())       /* 5с: сохранение EEPROM */
         {
             hanlde_ee();
         }

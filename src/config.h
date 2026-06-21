@@ -1,6 +1,18 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+/*
+ * config.h — Глобальные настройки проекта
+ *
+ * Управление отладочным выводом:
+ *   WL_FLASH_DEBUG — включает UART отладку (mini_printf)
+ *   PRINT_ADC      — включает вывод ADC-значений
+ *
+ * EE_PRINTF() — макрос отладочного вывода:
+ *   - Если WL_FLASH_DEBUG или PRINT_ADC определены → mini_printf()
+ *   - Иначе → пустой макрос (нет вывода, нет потребления)
+ */
+
 // Раскомментировать для отладки через UART
 #define WL_FLASH_DEBUG
 #define PRINT_ADC

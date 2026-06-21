@@ -1,6 +1,26 @@
 #ifndef AWU_H
 #define AWU_H
 
+/*
+ * awu.h — Auto Wake-Up таймер (AWU) для CH32V003
+ *
+ * AWU — аппаратный таймер, работающий от LSI (128 кГц).
+ * Используется для:
+ *   - Периодического пробуждения из STANDBY mode
+ *   - Задержек в AUX-автомате (моргание светодиодов)
+ *
+ * Доступные задержки (awu_tick_t):
+ *   AWU_15MS..AWU_16S — предустановленные интервалы
+ *
+ * Макросы:
+ *   AWU_ON()  — включить AWU (PWR->AWUCSR |= AWUEN)
+ *   AWU_OFF() — выключить AWU (PWR->AWUCSR &= ~AWUEN)
+ *
+ * Пробуждение:
+ *   STANDBY → EXTI Line9 (AWU) → AWU_IRQHandler → wakeup_source = WS_AWU
+ *   Кнопка  → EXTI Line3     → EXTI7_0_IRQHandler → wakeup_source = WS_BUTTON
+ */
+
 #include <stdbool.h>
 #include <stdint.h>
 #include "button_gpio.h"

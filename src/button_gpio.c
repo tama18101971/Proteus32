@@ -3,6 +3,25 @@
 #include "awu.h"
 #include "config.h"
 
+/*
+ * button_gpio.c — Реализация обработчика кнопки (EXTI Line3)
+ *
+ * Кнопка: PC3 → EXTI Line3 → EXTI7_0_IRQHandler
+ *
+ * Инициализация (button_init):
+ *   1. Тактирование GPIOC + AFIO
+ *   2. PC3 = Input Pull-Up
+ *   3. EXTI3 → GPIOC
+ *   4. EXTI Line3: прерывание по спадающему фронту
+ *   5. NVIC: EXTI7_0_IRQn (IRQn=20)
+ *
+ * В ISR (EXTI7_0_IRQHandler):
+ *   - Ожидание завершения UART (если отладка включена)
+ *   - need_sleep = false — запрещаем сон
+ *   - wakeup_source = WS_BUTTON — источник пробуждения
+ *   - Очистка флага EXTI3
+ */
+
 extern uint8_t	need_sleep;
 
 /*********************************************************************

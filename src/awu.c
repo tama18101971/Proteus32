@@ -1,3 +1,23 @@
+/*
+ * awu.c — Реализация Auto Wake-Up таймера для CH32V003
+ *
+ * Функции:
+ *   AWU_init()        — включение PWR тактирования и LSI генератора
+ *   AWU_int_init()    — настройка EXTI Line9 + NVIC для обработки пробуждения
+ *   AWU_set_delay()   — установка предделителя и окна по перечислению awu_tick_t
+ *   AWU_set_raw()     — установка предделителя и окна напрямую (для AUX-автомата)
+ *   AWU_Sleep_Now()   — вход в STANDBY, возврат wakeup_source_t после пробуждения
+ *   AWU_stop()        — полная остановка AWU + опционально LSI
+ *
+ * Регистры (прямая запись, без SDK-хелперов):
+ *   PWR->AWUPSC  — предделитель (биты 3:0)
+ *   PWR->AWUWR   — значение окна (биты 5:0)
+ *   PWR->AWUCSR  — управление AWU (бит 1: AWUEN)
+ *   PWR->CTLR    — управление питанием (бит 1: PDDS — STANDBY mode)
+ *
+ * Примечание: после AWU_stop() регистры теряются (тактирование отключено).
+ */
+
 #include "awu.h"
 #include <stdint.h>
 #include <stdbool.h>
