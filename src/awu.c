@@ -134,7 +134,7 @@ void AWU_Sleep_Tick(awu_tick_t tick)
 /* ============================================================
  * AWU_Sleep_Now — вход в STANDBY и пробуждение
  * ============================================================ */
-wakeup_source_t AWU_Sleep_Now(void)
+void AWU_Sleep_Now(void)
 {
 #ifdef WL_FLASH_DEBUG
     while (!(USART1->STATR & USART_FLAG_TC)) /* Ждём окончания передачи USART1 (бит 6 STATR) */
@@ -171,7 +171,7 @@ wakeup_source_t AWU_Sleep_Now(void)
     USART_Printf_Init(115200); /* Восстанавливаем UART для отладки */
 #endif
 
-    return wakeup_source;  /* WS_AWU, WS_BUTTON или WS_NONE */
+    return;  /* wakeup_source содержит WS_AWU, WS_BUTTON или WS_NONE */
 }
 
 /* ═══════════════════════════════════════════════════════════════

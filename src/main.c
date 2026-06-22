@@ -111,7 +111,7 @@ int main(void)
         if (tick_150hz())    /* ~7мс: UI + softstart */
         {
             //EE_PRINTF("[MAIN] Tick 150Hz.\r\n");
-            //scan_ui1();
+            scan_ui1();
             ss_scan();
         }
 

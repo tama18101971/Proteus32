@@ -50,7 +50,7 @@ bool AWU_set_delay(awu_tick_t time_aux);
 void AWU_set_raw(uint8_t psc_idx, uint8_t win);
 void AWU_stop(bool stop_lsi);
 void AWU_Sleep_Tick(awu_tick_t tick);
-wakeup_source_t AWU_Sleep_Now(void);
+void AWU_Sleep_Now(void);
 
 void handle_awu(void);
 
