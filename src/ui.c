@@ -160,7 +160,7 @@ void off_driver(uint8_t reset_step, SoftStartSpeed_t ss_speed)
 	}
 
 #ifdef USE_EX_AUX
-	stop_aux_voltage(); // отключаем моргания о низкой напруге
+	stop_aux_voltage(RED_LED); // отключаем моргания о низкой напруге
 #endif
 
 	// sleep_remains = SLEEP_DELAY;

@@ -686,14 +686,16 @@ void start_exaux_voltage(WARNING_Fr_t ex_mode) {
 	case VWARNING_FAST:   /* ON 100ms, OFF 1900ms → ~2с */
 		cmd = MAKE_CMD(RED_LED, 0, 0, AWU_PSC_256, 50, AWU_PSC_4096, 60, 1, 0);
 		break;
-	case VWARNING_MEDIUM: /* ON 200ms, OFF 3800ms → ~4с */
-		cmd = MAKE_CMD(RED_LED, 0, 0, AWU_PSC_256, 100, AWU_PSC_4096, 60, 3, 0);
+	case VWARNING_MEDIUM: /* ON 200ms, OFF 3840ms → ~4с */
+		cmd = MAKE_CMD(RED_LED, 0, 0, AWU_PSC_256, 100, AWU_PSC_10240, 48, 1, 0);
 		break;
-	case VWARNING_SLOW:   /* ON 300ms, OFF 7700ms → ~8с */
-		cmd = MAKE_CMD(RED_LED, 0, 0, AWU_PSC_1024, 38, AWU_PSC_61440, 16, 2, 0);
+	case VWARNING_SLOW:   /* ON 300ms, OFF 7680ms → ~8с */
+		cmd = MAKE_CMD(RED_LED, 0, 0, AWU_PSC_1024, 38, AWU_PSC_61440, 16, 1, 0);
+		break;
+	default:
 		break;
 	}
-	start_aux_cmd(cmd, true, IDM_VWARNING);
+	start_aux_cmd(cmd, true, IDM_VWARNING, AWU_15MS);
 }
 #endif
 

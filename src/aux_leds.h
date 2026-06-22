@@ -33,9 +33,9 @@ typedef enum {
 
 /* Уровни предупреждения о напряжении (задают частоту моргания) */
 typedef enum {
-	VWARNING_FAST =	0U,   /* ~2с 周期 */
-	VWARNING_MEDIUM,          /* ~4с 周期 */
-	VWARNING_SLOW,            /* ~8с 周期 */
+	VWARNING_FAST =	0U,   /* ~2с */
+	VWARNING_MEDIUM,          /* ~4с */
+	VWARNING_SLOW,            /* ~8с */
 	VWARNING_NONE             /* Предупреждение не активно */
 } WARNING_Fr_t;
 
@@ -181,6 +181,9 @@ bool is_aux_mode(LED_Bits_t channel, IDM_Type_t mode); /* true если рабо
 
 /* Остановка и управление */
 void stop_aux_mode(LED_Bits_t channel, IDM_Type_t mode); /* Остановка если работает в указанном режиме */
+void stop_aux_beacon(LED_Bits_t channel);  /* Остановка маяка */
+void stop_aux_voltage(LED_Bits_t channel); /* Остановка предупреждения о напряжении */
+void stop_aux_strobe(LED_Bits_t channel);  /* Остановка стробоскопа */
 void off_aux_cmd(LED_Bits_t channel, bool stop_lsi);     /* Полная остановка канала + выключение LED */
 
 /* Запуск команд */
@@ -208,7 +211,7 @@ union AUX_Cmd_u *handle_aux_array(const uint32_t pBuffer[], AUX_Ctr_t *ubits);
  * @brief Макрос формирования 32-битной AUX-команды
  *
  * Упаковывает параметры моргания LED в 32-битное слово для хранения в Flash.
- * Результат可以直接 использовать в start_aux_cmd() или в массивах команд.
+ * Результат можно использовать в start_aux_cmd() или в массивах команд.
  *
  * Время полупериода = (psc_значение × win) / 128000 секунд
  *   psc=0 (128),  win=1 → 1мс;    win=50 → 50мс;    win=63 → 63мс
