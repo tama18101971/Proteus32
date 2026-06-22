@@ -39,4 +39,6 @@ int16_t calc_temperature(uint16_t adcValue);
 void     ema_init(uint16_t seed);
 uint16_t ema_update(uint16_t raw);
 
+uint8_t bat_get_flashes(void);  /* Заглушка: количество вспышек по заряду батареи */
+
 #endif /* ADC_H_ */

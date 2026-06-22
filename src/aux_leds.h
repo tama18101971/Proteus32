@@ -187,6 +187,7 @@ void off_aux_cmd(LED_Bits_t channel, bool stop_lsi);     /* Полная ост�
 void start_aux_cmd(uint32_t command, bool enable, IDM_Type_t idm_mode, awu_tick_t delay); /* Одиночная команда */
 void start_aux_array(const uint32_t *pArray, awu_tick_t delay);  /* Запуск массива команд (автоопределение канала) */
 void start_aux_beacon(void);  /* Запуск маяка из настроек EEPROM */
+uint32_t set_aux_count(uint8_t count);  /* Формирование команды вспышек по количеству */
 
 /* Управление яркостью */
 void smart_off_leds(LED_Bits_t channel); /* Умное выключение с учётом подсветки */

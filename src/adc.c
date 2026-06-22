@@ -261,3 +261,7 @@ void adc_stop(void)
     GPIOD->CFGLR &= ~(0xF << 8);   /* PD2: 0b0000 = Analog Input (Hi-Z) */
     GPIOD->CFGLR &= ~(0xF << 12);  /* PD3: 0b0000 = Analog Input (Hi-Z) */
 }
+
+uint8_t bat_get_flashes(void) {
+    return 1;
+}

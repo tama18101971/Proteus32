@@ -36,6 +36,7 @@
 #include "button_gpio.h"
 #include "led_gpio.h"
 #include "wl_flash.h"
+#include "adc.h"
 #include "ch32v00x.h"
 #include "system_ch32v00x.h"
 
@@ -309,43 +310,44 @@ void off_aux_cmd(LED_Bits_t channel, bool stop_lsi) {
 
 #ifdef USE_BATTIND
 /**
- * @brief Формирование команды для индикации уровня заряда батареи
- * @param count — количество вспышек (0 = одна красная, иначе зелёные)
+ * @brief Формирование команды индикации количества вспышек
  *
- * Используется в slot_batt_ind() для отображения заряда батареи.
+ * @param count — количество (0..6):
+ *   0,1 → 1 вспышка RED_LED
+ *   2   → 2 вспышки RED_LED
+ *   3   → 3 вспышки RED_LED|GRN_LED
+ *   4   → 4 вспышки RED_LED|GRN_LED
+ *   5   → 5 вспышек GRN_LED
+ *   6   → 6 вспышек GRN_LED
+ *
+ * Если ee.usr.id_plus_sid == 1, к каналу добавляется HBL_LED.
+ * Время: ON=75мс, OFF=225мс.
+ * @return 32-битная команда для start_aux_cmd()
  */
-void set_aux_count(uint8_t count) {
-	stop_wakeup();																		// для уверенности
+uint32_t set_aux_count(uint8_t count) {
+	LED_Bits_t device;
+	uint8_t flashes;
 
-	as_red.acmd.aux.brightness0 = 1;		// яркость 1-го полупериода = включено
-	as_red.acmd.aux.brightness1 = 0;		// яркость 2-го полупериода = выключено
-	as_red.acmd.aux.p0.psc = AWU_PSC_1024;	// предделитель для 500мс
-	as_red.acmd.aux.p0.win = 63;			// окно для 500мс (1024×63/128000 = 504ms)
-	as_red.acmd.aux.p1.psc = AWU_PSC_256;	// предделитель для 60мс
-	as_red.acmd.aux.p1.win = 30;			// окно для 60мс (256×30/128000 = 60ms)
-	as_red.acmd.aux.count = count;			// количество повторов
-	as_red.acmd.aux.cycle = 0;				// без зацикливания
-
-#ifdef USE_EX_AUX
-	// Определяем канал по количеству вспышек
-	if (count == 1)
-		as_red.acmd.aux.device = RED_BIT;				// 1 вспышка = красный
-	else if (count == 2)
-		as_red.acmd.aux.device = RED_BIT | GRN_BIT;	// 2 вспышки = красный + зелёный
-	else
-		as_red.acmd.aux.device = GRN_BIT;				// 3+ вспышки = зелёный
-#else
-	if(count < 0) as_red.acmd.aux.device = RED_BIT;
-	else as_red.acmd.aux.device = GRN_BIT;
-	#endif
-
-	if (ee.usr.id_plus_sid) {													// флаг включения дублирования ИДа СИДом
-		as_red.acmd.aux.brightness0 |= step_user ? step_user : step_default;//	если дублируем - используем текущий step и сохраняем младший бит для работы ИДа
-		as_red.acmd.aux.device |= HBL_BIT;
+	if (count <= 1) {
+		device = RED_LED;
+		flashes = 1;
+	} else if (count == 2) {
+		device = RED_LED;
+		flashes = 2;
+	} else if (count <= 4) {
+		device = RED_LED | GRN_LED;
+		flashes = count;
+	} else {
+		device = GRN_LED;
+		flashes = count;
 	}
 
-	as_red.ubits.enable = true;
-	AUX_Set_Delay(AWU_15MS);								//включаем сторожевой таймер интервалом delay (WDTO_15MS)
+	if (ee.usr.id_plus_sid)
+		device |= HBL_LED;
+
+	return MAKE_CMD(device, 0, flashes,
+		AWU_PSC_256, 38, AWU_PSC_1024, 28,
+		1, 0);
 }
 #endif
 
@@ -723,7 +725,8 @@ void slot_batt_ind(void) {
 	stop_aux_beacon(RED_LED);
 	stop_aux_beacon(GRN_LED);
 	stop_aux_beacon(HBL_LED);
-	set_aux_count(bat_get_flashes());
+	uint32_t cmd = set_aux_count(bat_get_flashes());
+	start_aux_cmd(cmd, true, IDM_OTHER, AWU_120MS);
 #endif
 }
 
