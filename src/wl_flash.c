@@ -366,7 +366,7 @@ void init_ee(void)
 	/* Настройки маяка */
 	ee.aux.beacon_mode = BCON_2S;            /* Режим маяка = 2 секунды (интервал мигания) */
 	ee.aux.beacon_on = true;                 /* Маяк включен по умолчанию */
-	ee.aux.beacon_type = RED_LED;            /* Тип маяка = красный LED */
+	ee.aux.beacon_type = GRN_LED;            /* Тип маяка = зеленый LED */
 
 	/* Пользовательские настройки */
 	ee.usr.eaux_onoff = false;               /* Дополнительный экран = выключен */

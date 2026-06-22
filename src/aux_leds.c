@@ -643,32 +643,28 @@ bool handle_aux(void) {
 /**
  * @brief Запуск режима маяка (beacon)
  *
- * Формирует команду из настроек EEPROM:
- *   - beacon_type: тип моргания (задаёт psc0/win0 и psc1/win1)
- *   - beacon_mode: частота моргания (задаёт задержку между циклами)
+ * Формирует команду из настроек EEPROM (aux_flags):
+ *   - beacon_on:   включение/выключение (0=выкл, 1=вкл)
+ *   - beacon_mode: частота моргания (BCON_1S..BCON_8S — пауза OFF)
+ *   - beacon_type: цвет светодиода (RED_LED=1, GRN_LED=2, HBL_LED=4)
+ *
+ * ON всегда 50мс, OFF определяется beacon_mode.
  */
 void start_aux_beacon(void) {
-	uint8_t beacon_type = ee.aux.beacon_type;
+	if (!ee.aux.beacon_on) return;
 
-	/* Маппинг beacon_type (0..7) на пары ON/OFF:
-	 * 0: ON 100ms OFF 100ms   (быстрое моргание)
-	 * 1: ON 100ms OFF 200ms
-	 * 2: ON 200ms OFF 300ms
-	 * 3: ON 300ms OFF 300ms
-	 * 4: ON 200ms OFF 800ms
-	 * 5: ON 300ms OFF 1200ms
-	 * 6: ON 500ms OFF 1500ms
-	 * 7: ON 500ms OFF 3500ms  (медленное моргание) */
-	static const uint8_t bcon_psc0[] = {AWU_PSC_256,  AWU_PSC_256,  AWU_PSC_256,  AWU_PSC_256, AWU_PSC_256, AWU_PSC_256, AWU_PSC_4096, AWU_PSC_4096};
-	static const uint8_t bcon_win0[] = {50,           50,           100,          150,         100,         150,          16,           16};
-	static const uint8_t bcon_psc1[] = {AWU_PSC_256,  AWU_PSC_256,  AWU_PSC_256,  AWU_PSC_256, AWU_PSC_4096, AWU_PSC_4096, AWU_PSC_4096, AWU_PSC_4096};
-	static const uint8_t bcon_win1[] = {50,           100,          150,          150,         26,           38,           48,           112};
+	/* Параметры OFF-полупериода по beacon_mode:
+	 * BCON_1S: psc=2048, win=63 → (2048×63)/128000 ≈ 1.0с
+	 * BCON_2S: psc=10240, win=25 → (10240×25)/128000 = 2.0с
+	 * BCON_4S: psc=10240, win=50 → (10240×50)/128000 = 4.0с
+	 * BCON_8S: psc=61440, win=17 → (61440×17)/128000 ≈ 8.2с */
+	static const uint8_t bcon_psc1[] = {AWU_PSC_2048, AWU_PSC_10240, AWU_PSC_10240, AWU_PSC_61440};
+	static const uint8_t bcon_win1[] = {63,           25,            50,            17};
 
-	if (beacon_type > 7) beacon_type = 7;
+	uint8_t mode = ee.aux.beacon_mode & 0x03;
 
-	uint32_t cmd = MAKE_CMD(RED_LED, 1, 0,
-		bcon_psc0[beacon_type], bcon_win0[beacon_type],
-		bcon_psc1[beacon_type], bcon_win1[beacon_type],
+	uint32_t cmd = MAKE_CMD(ee.aux.beacon_type, 1, 0,
+		AWU_PSC_256, 25, bcon_psc1[mode], bcon_win1[mode],
 		1, 0);
 
 	start_aux_cmd(cmd, true, IDM_BEACON, AWU_120MS);

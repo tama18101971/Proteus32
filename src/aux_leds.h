@@ -133,13 +133,9 @@ typedef struct {
 typedef enum {
 	BCON_1S	= 0U,
 	BCON_2S,
-	BCON_3S,
 	BCON_4S,
-	BCON_5S,
-	BCON_6S,
-	BCON_7S,
-	BCON_8S
-} Beacon_Type_t;
+	BCON_8S,
+} Beacon_Mode_t;
 
 typedef enum {
 	BCK_TYPE_OFF = 0U,
@@ -190,6 +186,7 @@ void off_aux_cmd(LED_Bits_t channel, bool stop_lsi);     /* Полная ост�
 /* Запуск команд */
 void start_aux_cmd(uint32_t command, bool enable, IDM_Type_t idm_mode, awu_tick_t delay); /* Одиночная команда */
 void start_aux_array(const uint32_t *pArray, awu_tick_t delay);  /* Запуск массива команд (автоопределение канала) */
+void start_aux_beacon(void);  /* Запуск маяка из настроек EEPROM */
 
 /* Управление яркостью */
 void smart_off_leds(LED_Bits_t channel); /* Умное выключение с учётом подсветки */

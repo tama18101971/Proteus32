@@ -69,8 +69,10 @@ int main(void)
     }
 
     // start_aux_cmd(INFO_GRN, true, IDM_BEACON, AWU_120MS);
+    //start_aux_array(buf_test_blink, AWU_120MS); /* Запуск тестового массива мигания */
 
-    start_aux_array(buf_test_blink, AWU_120MS); /* Запуск тестового массива мигания */
+    start_aux_beacon();
+    
     need_sleep = true; 
 
     /* Интервалы таймеров (аналог millis в Arduino) */
