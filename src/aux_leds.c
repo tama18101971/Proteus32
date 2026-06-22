@@ -61,12 +61,16 @@ const uint32_t buf_grn[3] = {
 	MAKE_CMD(GRN_LED, 0, 1, AWU_PSC_256, 30, AWU_PSC_256, 30, 1, 0),             /* ON 60ms, OFF 60ms */
 	0  /* AC_REP_ATSTART */
 };
-const uint32_t buf_sos_red[5] = {
-	MAKE_CMD(RED_LED, 0, 0, AWU_PSC_256, 50, AWU_PSC_256, 50, 1, 0),             /* S: ON 100ms, OFF 100ms */
-	MAKE_CMD(RED_LED, 0, 0, AWU_PSC_1024, 38, AWU_PSC_256, 50, 1, 0),            /* O: ON 304ms, OFF 100ms */
-	MAKE_CMD(RED_LED, 0, 0, AWU_PSC_256, 50, AWU_PSC_256, 50, 1, 0),             /* S: ON 100ms, OFF 100ms */
-	MAKE_CMD(RED_LED, 0, 0, AWU_PSC_2048, 44, AWU_PSC_256, 50, 1, 0),            /* Пауза: OFF 704ms */
-	0x6  /* AC_REP_ATSTART */
+const uint32_t buf_sos_red[] = {
+	/* S: ··· (count=3) */
+	MAKE_CMD(RED_LED, 0, 3, AWU_PSC_256, 63, AWU_PSC_256, 63, 1, 0),             /* ·: ON 126ms, OFF 126ms ×3 */
+	/* O: ——— (count=3) */
+	MAKE_CMD(RED_LED, 0, 3, AWU_PSC_1024, 47, AWU_PSC_256, 63, 1, 0),            /* —: ON 376ms, OFF 126ms ×3 */
+	/* S: ··· (count=3) */
+	MAKE_CMD(RED_LED, 0, 3, AWU_PSC_256, 63, AWU_PSC_256, 63, 1, 0),             /* ·: ON 126ms, OFF 126ms ×3 */
+	/* Пауза между циклами SOS */
+	MAKE_CMD(RED_LED, 0, 0, AWU_PSC_2048, 55, 0, 0, 0, 0),                        /* OFF 880ms */
+	0x1  /* AC_REP_ATSTART */
 };
 
 /* Тестовый массив: простое мигание RED 512ms ON / 512ms OFF */
