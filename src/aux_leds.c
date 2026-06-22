@@ -69,16 +69,7 @@ const uint32_t buf_sos_red[] = {
 	/* S: ··· (count=3) */
 	MAKE_CMD(RED_LED, 0, 3, AWU_PSC_256, 63, AWU_PSC_256, 63, 1, 0),             /* ·: ON 126ms, OFF 126ms ×3 */
 	/* Пауза между циклами SOS */
-	MAKE_CMD(RED_LED, 0, 0, AWU_PSC_2048, 55, 0, 0, 0, 0),                        /* OFF 880ms */
-	0x1  /* AC_REP_ATSTART */
-};
-
-/* Тестовый массив: простое мигание RED 512ms ON / 512ms OFF */
-const uint32_t buf_test_blink[5] = {
-	MAKE_CMD(RED_LED, 0, 2, AWU_PSC_10240, 16, AWU_PSC_10240, 16, 1, 0),  /* ON 512ms, OFF 512ms */
-	MAKE_CMD(RED_LED, 0, 2, AWU_PSC_4096, 16, AWU_PSC_4096, 16, 1, 0),  /* ON 512ms, OFF 512ms */
-	MAKE_CMD(RED_LED, 0, 2, AWU_PSC_1024, 16, AWU_PSC_1024, 16, 1, 0),  /* ON 512ms, OFF 512ms */
-	MAKE_CMD(RED_LED, 0, 2, AWU_PSC_4096, 16, AWU_PSC_4096, 16, 1, 0),  /* ON 512ms, OFF 512ms */
+	MAKE_CMD(RED_LED, 0, 0, AWU_PSC_1024, 55, AWU_PSC_1024, 55, 0, 0),            /* OFF 440ms + OFF 440ms = 880мс */
 	0x1  /* AC_REP_ATSTART */
 };
 
