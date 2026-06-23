@@ -106,7 +106,7 @@ void out_set_stc(uint16_t step)
 {
 	uint16_t out = getBright_CRT_9to12Bit(step) + get_min_level(step);
 	if (out > 4095) out = 4095;
-	//EE_PRINTF("[BTN] out_set_stc step=%u out=%u\r\n", step, out);
+	EE_PRINTF("[BTN] out_set_stc step=%u out=%u\r\n", step, out);
 	dac_set_value(out);
 }
 /******************************************************************************************/
@@ -186,7 +186,7 @@ void set_current_ll(uint16_t step_target, SoftStartSpeed_t ss_speed)
 
 void set_current(uint16_t step_target, SoftStartSpeed_t ss_speed)
 {
-	//EE_PRINTF("[BTN] set_current step=%u ss=%u\r\n", step_target, ss_speed);
+	EE_PRINTF("[BTN] set_current step=%u ss=%u\r\n", step_target, ss_speed);
 	step_user = step_target; // для ТК. step_user это то, что по идее хочет пользователь
 	set_current_ll(step_target, ss_speed);
 }
@@ -218,7 +218,7 @@ void step_down_ui1(void)
 
 void on_rumpup_ui1(void)
 {
-	//EE_PRINTF("[BTN] ramp UP  step=%u dir=%u\r\n", step_user, direction);
+	EE_PRINTF("[BTN] ramp UP  step=%u dir=%u\r\n", step_user, direction);
 	on_driver(); // заводим если надо
 	ps.use_prev = false;
 	if (direction)

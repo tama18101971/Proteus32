@@ -168,7 +168,7 @@ void AWU_Sleep_Now(void)
     PWR->CTLR &= ~PWR_CTLR_PDDS;
 
 #ifdef WL_FLASH_DEBUG
-    USART_Printf_Init(115200); /* Восстанавливаем UART для отладки */
+    USART_Printf_Init(460800); /* Восстанавливаем UART для отладки */
 #endif
 
     return;  /* wakeup_source содержит WS_AWU, WS_BUTTON или WS_NONE */

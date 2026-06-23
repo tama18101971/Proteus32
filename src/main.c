@@ -43,7 +43,7 @@ int main(void)
     Delay_Ms(3000); /* Задержка перед инициализацией (стабилизация питания) */
 
 #ifdef WL_FLASH_DEBUG
-    USART_Printf_Init(115200);
+    USART_Printf_Init(460800);
 #endif
 
     EE_PRINTF("\r\n[MAIN] Boot...\r\n");
