@@ -58,8 +58,8 @@ int main(void)
     adc_init();         /* Инициализация АЦП (NTC + Vrefint) */
 
     /* DAC + I2C */
-    dac_pwrpin_init();
-    dac_pwrpin_on();
+    dac_pwrpin_init();  // настраиваем ногу для управления питанием.
+    dac_pwrpin_on();    // включаем питание DAC
     i2c_init(I2C_SPEED_400K);
     dac_set_value(0);
 

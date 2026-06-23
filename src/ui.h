@@ -100,7 +100,7 @@ typedef enum {
 #define RELEASE_TIMEOUT_UI1			80//40		// Пауза для ожидания продолжения ввода
 #define LONG_HOLD_UI1				50//100		// удержание - реакция не дожидаясь отпускания (таймаут для рампинга)
 #define LONG_HOLD_RAMP_PAUSE_UI1	120//93		// Пауза на step=1 рампинга из выключено. Для удобства попадания в минимальный.
-#define DIRECTION_TIMEOUT_UI1		186//93		// Пауза после которой направление рампинга не будет меняться при отпускании и повторном нажатии кнопки.
+#define DIRECTION_TIMEOUT_UI1		160//93		// Пауза после которой направление рампинга не будет меняться при отпускании и повторном нажатии кнопки.
 #define COMM_MAX_LEN_UI1			7		// максимальная длинна ввода
 
 /*************************************************************************/
@@ -207,5 +207,8 @@ void set_current_ll(uint16_t step_target, SoftStartSpeed_t ss_speed);
 void set_current(uint16_t step_target, SoftStartSpeed_t ss_speed);
 uint16_t get_step_tc(uint16_t step);
 void out_set_stc(uint16_t step);
+
+void ON_POWER(void);
+void OFF_POWER(void);
 
 #endif /* UI_H_ */

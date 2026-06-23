@@ -147,9 +147,7 @@ void AWU_Sleep_Now(void)
     PWR->CTLR |= PWR_CTLR_PDDS; /*Устанавливаем PDDS=1 в PWR_CTLR → выбираем Standby (не Sleep) */
 
     /* Барьер: убедиться, что все записи завершены */
-    __NOP();
-    __NOP();
-    __NOP();
+    __NOP(); __NOP(); __NOP();
 
     /* 4. WFI — войти в Standby.
      *    Пробуждение: EXTI прерывание (кнопка) → EXTI7_0_IRQHandler

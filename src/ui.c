@@ -13,6 +13,7 @@
 #include "aux_leds.h"
 #include "wl_flash.h"
 #include "dac.h"
+#include "i2c.h"
 #include "timers.h"
 
 #include "main.h"
@@ -47,17 +48,23 @@ extern void (*main_op[])(void);
 
 void ON_POWER()
 {
+	EE_PRINTF("[UI] ON POWER.\r\n");
+	dac_pwrpin_on();
+	i2c_init(I2C_SPEED_400K);
 }
 
 void OFF_POWER()
 {
+	EE_PRINTF("[UI] OFF POWER.\r\n");
+	i2c_deinit();
+	dac_pwrpin_off();
 }
 
 uint16_t get_step_tc(uint16_t step)
 {
 	int16_t tc_step = (MAX_STEP - 0 /*pic.correction*/); // учитываем термоконтроль - отнимаем от заданного шага корреецию
 	uint16_t result = step <= tc_step ? step : (tc_step > 0 ? tc_step : 1);
-	EE_PRINTF("[BTN] get_step_tc step=%u tc=%u -> %u\r\n", step, tc_step, result);
+	EE_PRINTF("[UI] get_step_tc step=%u tc=%u -> %u\r\n", step, tc_step, result);
 	return result;
 }
 
@@ -69,17 +76,6 @@ uint16_t get_min_level(uint16_t step)
 }
 
 /******************************************************************************************/
-
-#include <stdint.h>
-
-uint16_t getBright_CRT(uint8_t val) {
-	if (val < 2)  return val;
-	if (val < 10) return 1;
-	if (val == 255) return 0xFFF;
-	return ((uint32_t)val * val * val + 8190) >> 12;
-}
-
-#include <stdint.h>
 
 uint16_t getBright_CRT_9to12Bit(uint16_t val) {
     // Адаптированная начальная полка для 9-битного диапазона
@@ -105,15 +101,15 @@ uint16_t getBright_CRT_9to12Bit(uint16_t val) {
 void out_set_stc(uint16_t step)
 {
 	uint16_t out = getBright_CRT_9to12Bit(step) + get_min_level(step);
-	if (out > 4095) out = 4095;
-	EE_PRINTF("[BTN] out_set_stc step=%u out=%u\r\n", step, out);
+	if (out > 4095) out = 4095;		// не удалять, блин - надо!
+	//EE_PRINTF("[UI] out_set_stc step=%u out=%u\r\n", step, out);
 	dac_set_value(out);
 }
 /******************************************************************************************/
 
 uint8_t on_driver(void) // Если драйвер выключен - включаем и вернем true, если выключен ничего не делаем и возвращаем false
 {
-	EE_PRINTF("[BTN] ON driver\r\n");
+	EE_PRINTF("[UI] ON driver.\r\n");
 
 	if (ee.uif.ui_index)
 		step_tactic = 0;
@@ -135,7 +131,7 @@ uint8_t on_driver(void) // Если драйвер выключен - включ
 /************************************************************************/
 void off_driver(uint8_t reset_step, SoftStartSpeed_t ss_speed)
 {
-	EE_PRINTF("[BTN] OFF driver\r\n");
+	EE_PRINTF("[UI] OFF driver.\r\n");
 
 	// restore_bckl_status();
 
@@ -186,9 +182,10 @@ void set_current_ll(uint16_t step_target, SoftStartSpeed_t ss_speed)
 
 void set_current(uint16_t step_target, SoftStartSpeed_t ss_speed)
 {
-	EE_PRINTF("[BTN] set_current step=%u ss=%u\r\n", step_target, ss_speed);
+	//EE_PRINTF("[UI] set_current step=%u ss=%u\r\n", step_target, ss_speed);
 	step_user = step_target; // для ТК. step_user это то, что по идее хочет пользователь
 	set_current_ll(step_target, ss_speed);
+	if((!step_target) && (!ss_speed )) OFF_POWER();
 }
 
 /******************************************************************************************/
@@ -218,7 +215,7 @@ void step_down_ui1(void)
 
 void on_rumpup_ui1(void)
 {
-	EE_PRINTF("[BTN] ramp UP  step=%u dir=%u\r\n", step_user, direction);
+	//EE_PRINTF("[UI] ramp UP  step=%u dir=%u\r\n", step_user, direction);
 	on_driver(); // заводим если надо
 	ps.use_prev = false;
 	if (direction)
@@ -229,14 +226,14 @@ void on_rumpup_ui1(void)
 
 void on_rumpdown_ui1(void)
 {
-	EE_PRINTF("[BTN] ramp DOWN step=%u\r\n", step_user);
+	//EE_PRINTF("[UI] ramp DOWN step=%u\r\n", step_user);
 	ps.use_prev = false;
 	step_down_ui1();
 }
 
 void on_xmode_ui1(void)
 {
-	EE_PRINTF("[BTN] X-mode step=%u mem=%u\r\n", step_user, ee.uif.use_memory);
+	//EE_PRINTF("[UI] X-mode step=%u mem=%u\r\n", step_user, ee.uif.use_memory);
 	ps.use_prev = false; //! НЕ УБИРАТЬ - НАДО!
 	on_driver();
 	set_current(ee.uif.use_memory ? (step_user ? step_user : step_default) : ee.defauil_ui1, SS_FAST); // если предыдущий шаг = 0 начинаем с яркости по умолчанию, иначе - с яроксти в пред. шаге
@@ -244,7 +241,7 @@ void on_xmode_ui1(void)
 
 void on_turbo_ui1(void)
 {
-	EE_PRINTF("[BTN] turbo step=%u max=%u\r\n", step_user, max_step);
+	//EE_PRINTF("[UI] turbo step=%u max=%u\r\n", step_user, max_step);
 	uint8_t start = on_driver();
 
 	if (!ps.use_prev) // включаем турбо. если до этого драйвер был выключен - start будет равен true
@@ -271,7 +268,7 @@ void on_turbo_ui1(void)
 
 void off_driver_false(void)
 {
-	EE_PRINTF("[BTN] OFF driver (false)\r\n");
+	EE_PRINTF("[UI] OFF driver (false)\r\n");
 	driver_mode = MODE_OFF;
 	// mode_default = mode_current;
 	// mode_current = 0;

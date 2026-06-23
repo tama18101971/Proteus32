@@ -108,5 +108,6 @@ void ss_scan(void)
 
 		out_set_stc(ss.position);                   /* Применяем текущую позицию к DAC */
 		step_tc = ss.position;                      /* Обновляем глобальную позицию яркости */
+		if((!ss.enable) && (!step_tc)) OFF_POWER();	// выключаем питание DAC и I2C
 	}
 }
