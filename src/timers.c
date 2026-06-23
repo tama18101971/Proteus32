@@ -22,27 +22,27 @@
 volatile uint32_t tim2_ms = 0;
 
 /* Интервалы таймеров (аналог millis в Arduino) */
-#define TICK_150HZ_MS 7 /* 1000мс / 150Гц ≈ 6.67мс → округляем до 7мс */
+#define TICK_160HZ_MS 6 /* 1000мс / 160Гц = 6.25мс → округляем до 6мс */
 #define TICK_80HZ_MS 12 /* 1000мс / 80Гц = 12.5мс → округляем до 12мс */
 #define TICK_5S_MS 5000 /* 5 секунд */
 
 /* Счётчики последнего срабатывания (static — доступны только из timers.c) */
-static uint32_t last_tick_150hz = 0;
+static uint32_t last_tick_160hz = 0;
 static uint32_t last_tick_80hz = 0;
 static uint32_t last_tick_5s = 0;
 
 /**
- * @brief Проверка: прошло ли TICK_150HZ_MS (7 мс) с последнего вызова
+ * @brief Проверка: прошло ли TICK_160HZ_MS (6 мс) с последнего вызова
  * @return true если интервал истёк (счётчик автоматически сдвигается)
  *
  * Использование:
- *   if (tick_150hz()) { ... }
+ *   if (tick_160hz()) { ... }
  */
-bool tick_150hz(void)
+bool tick_160hz(void)
 {
-    if (tim2_ms - last_tick_150hz >= TICK_150HZ_MS)
+    if (tim2_ms - last_tick_160hz >= TICK_160HZ_MS)
     {
-        last_tick_150hz += TICK_150HZ_MS;
+        last_tick_160hz += TICK_160HZ_MS;
         return true;
     }
     return false;
@@ -127,7 +127,7 @@ void tim2_stop(void)
 
     /* обнулям счетчики */
     tim2_ms = 0;
-    last_tick_150hz = 0;
+    last_tick_160hz = 0;
     last_tick_80hz = 0;
     last_tick_5s = 0;
 }

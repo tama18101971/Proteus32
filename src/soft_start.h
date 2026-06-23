@@ -28,7 +28,7 @@
 typedef enum {
 	SS_NO = 0,
 	SS_SLOW,
-	SS_FAST = 8
+	SS_FAST = 7
 } SoftStartSpeed_t;
 
 #define on_ss() do { ss_enable = true; } while (0);

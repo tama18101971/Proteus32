@@ -8,7 +8,7 @@
  *   tim2_ms — глобальный счётчик миллисекунд (инкрементируется в IRQHandler)
  *
  * Функции-таймеры (аналог millis()):
- *   tick_150hz() — true каждые ~7мс (1000/150)
+ *   tick_160hz() — true каждые ~6мс (1000/160)
  *   tick_80hz()  — true каждые ~12мс (1000/80)
  *   tick_5s()    — true каждые 5000мс
  *
@@ -25,7 +25,7 @@
 void tim2_start(void);
 void tim2_stop(void);
 
-bool tick_150hz(void);
+bool tick_160hz(void);
 bool tick_80hz(void);
 bool tick_5s(void);
 void tick_5s_reset(void);

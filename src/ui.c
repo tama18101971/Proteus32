@@ -79,11 +79,34 @@ uint16_t getBright_CRT(uint8_t val) {
 	return ((uint32_t)val * val * val + 8190) >> 12;
 }
 
+#include <stdint.h>
+
+uint16_t getBright_CRT_9to12Bit(uint16_t val) {
+    // Адаптированная начальная полка для 9-битного диапазона
+    if (val < 2)  return val; // Мгновенный микро-старт (0, 1, 2, 3)
+    if (val < 10) return 1;   // Удержание минимального тления
+    
+    // Жесткая посадка на максимум (100% ШИМ)
+    if (val >= 511) return 4095; 
+
+    uint32_t x = val;
+    
+    // Кубический разгон без переполнения uint32_t
+    // Максимум при val=510: 510^3 * 16 = 2 122 416 000 (Лимит 4.29 млрд не превышен!)
+    // 2 122 416 000 >> 19 = 4048
+    uint32_t result = (x * x * x * 16) >> 19;
+
+    // Коррекция, чтобы избежать случайного нуля после сдвига на малых val
+    if (result == 0) result = 1; 
+
+    return (uint16_t)result;
+}
+
 void out_set_stc(uint16_t step)
 {
-	uint16_t out = getBright_CRT(step) + get_min_level(step);
+	uint16_t out = getBright_CRT_9to12Bit(step) + get_min_level(step);
 	if (out > 4095) out = 4095;
-	EE_PRINTF("[BTN] out_set_stc step=%u out=%u\r\n", step, out);
+	//EE_PRINTF("[BTN] out_set_stc step=%u out=%u\r\n", step, out);
 	dac_set_value(out);
 }
 /******************************************************************************************/
@@ -163,7 +186,7 @@ void set_current_ll(uint16_t step_target, SoftStartSpeed_t ss_speed)
 
 void set_current(uint16_t step_target, SoftStartSpeed_t ss_speed)
 {
-	EE_PRINTF("[BTN] set_current step=%u ss=%u\r\n", step_target, ss_speed);
+	//EE_PRINTF("[BTN] set_current step=%u ss=%u\r\n", step_target, ss_speed);
 	step_user = step_target; // для ТК. step_user это то, что по идее хочет пользователь
 	set_current_ll(step_target, ss_speed);
 }
@@ -184,18 +207,18 @@ void off_auto_repeat(void)
 void step_up_ui1(void)
 {
 	if (step_user < max_step)
-		set_current(++step_user, SS_SLOW);
+		set_current(++step_user, SS_NO);
 }
 
 void step_down_ui1(void)
 {
 	if (step_user > 1)
-		set_current(--step_user, SS_SLOW); // не даем погасить совсем, по этому не 0, а 1
+		set_current(--step_user, SS_NO); // не даем погасить совсем, по этому не 0, а 1
 }
 
 void on_rumpup_ui1(void)
 {
-	EE_PRINTF("[BTN] ramp UP  step=%u dir=%u\r\n", step_user, direction);
+	//EE_PRINTF("[BTN] ramp UP  step=%u dir=%u\r\n", step_user, direction);
 	on_driver(); // заводим если надо
 	ps.use_prev = false;
 	if (direction)
@@ -382,7 +405,7 @@ void scan_ui1(void) // Эта функция сканер. Она должна �
 		bt_u_time = 0;
 		tick_5s_reset();  // сброс таймера сна — не засыпаем при рампинге
 
-		if (!bt_d_time)
+		if (!bt_d_time)			// если переменная 0 кнопка только нажата
 		{
 			max_step = get_max_step(); // - (pic.correction + 1);			// вычисляем max_step в зависимости от напряжения на АКБ и перегрева
 									   //			stop_aux_beacon();								// отключаем маяк чтобы не моргал перед отмаргиванием АКБ
@@ -397,10 +420,10 @@ void scan_ui1(void) // Эта функция сканер. Она должна �
 		// if ((bt_d_time == 1) && (driver_mode < MODE_BLOCK_C))
 		// start_aux_cmd(SHORT_BLINK, AWU_15MS, true, IDM_OTHER);// моргаем красным при нажатии на кнопку в режиме блокировки
 
-		if (bt_d_time == VLPT)
+		if (bt_d_time >= VLPT)							// это для попадания в минимум в начале рампинга.
 		{
 			flag = true;
-			VLPT = 2; // BASE_RUMP_SPEED;					// быстрое время для рампинга. в настройках 0 или 1, а нам надо 2 или 3, по этому прибавляем 2
+			VLPT = 1; // BASE_RUMP_SPEED;					// быстрое время для рампинга. в настройках 0 или 1, а нам надо 2 или 3, по этому прибавляем 2
 			check_bit_map_ui(0, bt_cnt, true, false);
 			if (!stop_bit)
 				bt_d_time = 1; // для переключения режимов удержанием вводим автоповтор и способ его отключить.
@@ -419,11 +442,12 @@ void scan_ui1(void) // Эта функция сканер. Она должна �
 			bt_r_time = 0;
 			bt_cnt++; // Короткое нажатие. Пропускаем установку бита.
 
-			if (flag)
-				reset_res_ui3()
-					// обработка не требуется т.к. уже обработано удержание
-					else if (check_bit_map_ui(0, bt_cnt, false, false) || bt_cnt == COMM_MAX_LEN_UI1)
-						reset_res_ui3();
+			if (flag) {		// здесь ковырялось ИИ
+				bt_cnt = 0;
+				flag = false;
+			} else if (check_bit_map_ui(0, bt_cnt, false, false) || bt_cnt == COMM_MAX_LEN_UI1) {
+				reset_res_ui3();
+			}
 
 			bt_d_time = 0; // время придавки кнопки нам больше не нужно, сбрасываем.
 		}
@@ -437,7 +461,9 @@ void scan_ui1(void) // Эта функция сканер. Она должна �
 			}
 		}
 
-		if (++bt_r_time >= DIRECTION_TIMEOUT_UI1)
+		if (bt_r_time < DIRECTION_TIMEOUT_UI1)
+			bt_r_time++;
+		else
 			direction = DIR_UP; // после выжидания таймаута меняем направление рампинга
 	}
 }
