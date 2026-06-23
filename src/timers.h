@@ -9,7 +9,7 @@
  *
  * Функции-таймеры (аналог millis()):
  *   tick_150hz() — true каждые ~7мс (1000/150)
- *   tick_60hz()  — true каждые ~17мс (1000/60)
+ *   tick_80hz()  — true каждые ~12мс (1000/80)
  *   tick_5s()    — true каждые 5000мс
  *
  * Управление питанием:
@@ -26,7 +26,7 @@ void tim2_start(void);
 void tim2_stop(void);
 
 bool tick_150hz(void);
-bool tick_60hz(void);
+bool tick_80hz(void);
 bool tick_5s(void);
 void tick_5s_reset(void);
 

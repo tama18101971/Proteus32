@@ -112,7 +112,7 @@ int main(void)
         }
 
         /* 4. Таймерные задачи (выполняются пока need_sleep == false) */
-        if (tick_60hz())    /* ~17мс:  */
+        if (tick_80hz())    /* ~12мс: ADC измерение */
         {
             //EE_PRINTF("[MAIN] Tick 150Hz.\r\n");
             adc_read();
