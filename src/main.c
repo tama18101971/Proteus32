@@ -84,7 +84,7 @@ int main(void)
         /* 1. Сон: останавливаем ADC и TIM2, засыпаем в STANDBY */
         if (need_sleep)
         {
-            EE_PRINTF("[MAIN] Entering sleep mode...\r\n");
+            //EE_PRINTF("[MAIN] Entering sleep mode...\r\n");
             adc_stop();
             tim2_stop();
             start_aux_beacon();
@@ -94,7 +94,7 @@ int main(void)
         /* 2. Пробуждение по кнопке: восстанавливаем периферию */
         if ((wakeup_source == WS_BUTTON) && is_sleep_mode)
         {
-            EE_PRINTF("[MAIN] Event source: BUTTON.\r\n");
+            //EE_PRINTF("[MAIN] Event source: BUTTON.\r\n");
             is_sleep_mode = false;
             need_sleep = false;
             wakeup_source = WS_NONE;
@@ -112,17 +112,12 @@ int main(void)
         }
 
         /* 4. Таймерные задачи (выполняются пока need_sleep == false) */
-        if (tick_150hz())    /* ~7мс: UI + softstart */
+        if (tick_60hz())    /* ~17мс:  */
         {
             //EE_PRINTF("[MAIN] Tick 150Hz.\r\n");
+            adc_read();
             scan_ui1();
             ss_scan();
-        }
-
-        if (tick_60hz())     /* ~17мс: ADC измерение */
-        {
-            //EE_PRINTF("[MAIN] Tick 60Hz.\r\n");
-            adc_read();
         }
 
         if (tick_5s())       /* 5с: сохранение EEPROM */

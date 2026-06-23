@@ -17,7 +17,7 @@
 #define WL_FLASH_DEBUG
 #define PRINT_ADC
 #define USE_BATTIND
-#define USE_EX_AUX
+//#define USE_EX_AUX
 
 #if defined(WL_FLASH_DEBUG) || defined(PRINT_ADC)
     #include "mini_printf.h"

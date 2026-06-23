@@ -71,41 +71,18 @@ uint16_t get_min_level(uint16_t step)
 
 #include <stdint.h>
 
-uint16_t getBrightLED_CH32V003_12Bit(uint16_t val) {
-    if (val > 4095) val = 4095;
-    
-    uint32_t x = val;
-    
-    // 1. КУБИЧЕСКАЯ ЧАСТЬ (~85% в пике, должна дать 3480 при val = 4095)
-    // Максимум при 4095: (4095 * 4095) >> 12 = 4094.
-    // 4094 * 4095 = 16 764 930.
-    // 16 764 930 * 217 = 3 637 989 810 (Влезает в uint32_t!)
-    // И теперь сдвигаем на 20 бит (вместо 10): 3 637 989 810 >> 20 = 3469
-    uint32_t cubic = (((x * x) >> 12) * x * 217) >> 20;
-    
-    // 2. КВАДРАТИЧНАЯ ЧАСТЬ (~15% в пике, должна дать 614 при val = 4095)
-    // Максимум при 4095: 4095 * 4095 * 38 = 637 232 550 (Влезает в uint32_t).
-    // Сдвигаем на 20 бит: 637 232 550 >> 20 = 607
-    uint32_t quadratic = (x * x * 38) >> 20;
-    
-    uint32_t result = cubic + quadratic;
-    
-    // Жесткая посадка на края диапазона
-    if (val == 4095) return 4095;
-    if (val > 0 && result == 0) result = 1;
-
-    return (uint16_t)result;
+uint16_t getBright_CRT(uint8_t val) {
+	if (val < 2)  return val;
+	if (val < 10) return 1;
+	if (val == 255) return 0xFFF;
+	return ((uint32_t)val * val * val + 8190) >> 12;
 }
 
 void out_set_stc(uint16_t step)
 {
-	// Вычисляем 9-bit значение напрямую
-//	uint16_t bright = ((uint32_t)step * step * step + 523520) >> 18;
-
-	uint16_t bright = getBrightLED_CH32V003_12Bit(step);
-	uint16_t out = bright + get_min_level(step);
-	if(out > MAX_STEP) out = MAX_STEP;
-	EE_PRINTF("[BTN] out_set_stc step=%u bright=%u out=%u\r\n", step, bright, out);
+	uint16_t out = getBright_CRT(step) + get_min_level(step);
+	if (out > 4095) out = 4095;
+	EE_PRINTF("[BTN] out_set_stc step=%u out=%u\r\n", step, out);
 	dac_set_value(out);
 }
 /******************************************************************************************/
