@@ -15,7 +15,7 @@
 
 // Раскомментировать для отладки через UART
 #define WL_FLASH_DEBUG
-//#define PRINT_ADC
+#define PRINT_ADC
 #define USE_BATTIND
 #define USE_EX_AUX
 

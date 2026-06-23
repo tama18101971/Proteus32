@@ -649,6 +649,7 @@ bool handle_aux(void) {
  */
 void start_aux_beacon(void) {
 	if (!ee.aux.beacon_on) return;
+	if(is_aux_active(RED_LED) || is_aux_active(GRN_LED) || is_aux_active(HBL_LED)) return;
 
 	/* Параметры OFF-полупериода по beacon_mode:
 	 * BCON_1S: psc=2048, win=63 → (2048×63)/128000 ≈ 1.0с
@@ -706,10 +707,22 @@ void stop_aux_mode(LED_Bits_t channel, IDM_Type_t mode) {
 		off_aux_cmd(channel, false);
 }
 
-// Обёртки для остановки по типу режима
-void stop_aux_beacon(LED_Bits_t channel) { stop_aux_mode(channel, IDM_BEACON); }
-void stop_aux_voltage(LED_Bits_t channel) { stop_aux_mode(channel, IDM_VWARNING); }
-void stop_aux_strobe(LED_Bits_t channel) { stop_aux_mode(channel, IDM_STROBE); }
+// Обёртки для остановки по типу режима (автоопределение канала)
+void stop_aux_beacon(bool stop_lsi) {
+	if (is_aux_beacon(RED_LED)) off_aux_cmd(RED_LED, stop_lsi);
+	if (is_aux_beacon(GRN_LED)) off_aux_cmd(GRN_LED, stop_lsi);
+	if (is_aux_beacon(HBL_LED)) off_aux_cmd(HBL_LED, stop_lsi);
+}
+void stop_aux_voltage(bool stop_lsi) {
+	if (is_aux_voltage(RED_LED)) off_aux_cmd(RED_LED, stop_lsi);
+	if (is_aux_voltage(GRN_LED)) off_aux_cmd(GRN_LED, stop_lsi);
+	if (is_aux_voltage(HBL_LED)) off_aux_cmd(HBL_LED, stop_lsi);
+}
+void stop_aux_strobe(bool stop_lsi) {
+	if (is_aux_strobe(RED_LED)) off_aux_cmd(RED_LED, stop_lsi);
+	if (is_aux_strobe(GRN_LED)) off_aux_cmd(GRN_LED, stop_lsi);
+	if (is_aux_strobe(HBL_LED)) off_aux_cmd(HBL_LED, stop_lsi);
+}
 
 /**
  * @brief Индикация уровня заряда батареи
@@ -719,9 +732,7 @@ void stop_aux_strobe(LED_Bits_t channel) { stop_aux_mode(channel, IDM_STROBE); }
  */
 void slot_batt_ind(void) {
 #ifdef USE_BATTIND
-	stop_aux_beacon(RED_LED);
-	stop_aux_beacon(GRN_LED);
-	stop_aux_beacon(HBL_LED);
+	stop_aux_beacon(false);
 	uint32_t cmd = set_aux_count(bat_get_flashes());
 	start_aux_cmd(cmd, true, IDM_OTHER, AWU_120MS);
 #endif

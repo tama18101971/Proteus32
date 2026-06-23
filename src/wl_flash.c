@@ -364,7 +364,7 @@ void init_ee(void)
 	ee.aux.bcklight_type = BCK_TYPE_ON;      /* Тип подсветки = всегда включена */
 
 	/* Настройки маяка */
-	ee.aux.beacon_mode = BCON_2S;            /* Режим маяка = 2 секунды (интервал мигания) */
+	ee.aux.beacon_mode = BCON_1S;            /* Режим маяка = 2 секунды (интервал мигания) */
 	ee.aux.beacon_on = true;                 /* Маяк включен по умолчанию */
 	ee.aux.beacon_type = GRN_LED;            /* Тип маяка = зеленый LED */
 

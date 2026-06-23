@@ -181,9 +181,9 @@ bool is_aux_mode(LED_Bits_t channel, IDM_Type_t mode); /* true если рабо
 
 /* Остановка и управление */
 void stop_aux_mode(LED_Bits_t channel, IDM_Type_t mode); /* Остановка если работает в указанном режиме */
-void stop_aux_beacon(LED_Bits_t channel);  /* Остановка маяка */
-void stop_aux_voltage(LED_Bits_t channel); /* Остановка предупреждения о напряжении */
-void stop_aux_strobe(LED_Bits_t channel);  /* Остановка стробоскопа */
+void stop_aux_beacon(bool stop_lsi);  /* Остановка маяка (автоопределение канала) */
+void stop_aux_voltage(bool stop_lsi); /* Остановка предупреждения о напряжении (автоопределение канала) */
+void stop_aux_strobe(bool stop_lsi);  /* Остановка стробоскопа (автоопределение канала) */
 void off_aux_cmd(LED_Bits_t channel, bool stop_lsi);     /* Полная остановка канала + выключение LED */
 
 /* Запуск команд */

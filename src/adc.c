@@ -26,6 +26,8 @@
 #include "debug.h"
 #include "config.h"
 
+uint32_t vbat_mv = 0;  /* Напряжение питания в мВ (обновляется в adc_read) */
+
 /* ============================================================
  * EMA-фильтр (Exponential Moving Average)
  * ============================================================
@@ -220,7 +222,7 @@ void adc_read(void)
     GPIOD->BSHR = (1 << 3);
 
     // Вычисляем напряжение питания (мВ): Vrefint=1.2V, 10-бит ADC
-    uint32_t vbat_mv = (1200 * 1024) / vrefint_adc;
+    vbat_mv = (1200 * 1024) / vrefint_adc;
 
     // Расчет температуры по таблице
     int16_t temperature = calc_temperature(raw_temperature_adc);
@@ -263,5 +265,9 @@ void adc_stop(void)
 }
 
 uint8_t bat_get_flashes(void) {
-    return 1;
+	static const uint16_t thresholds[] = {3000, 3200, 3400, 3600, 3800, 4000};
+	for (uint8_t i = 0; i < sizeof(thresholds) / sizeof(thresholds[0]); i++) {
+		if (vbat_mv < thresholds[i]) return i;
+	}
+	return 6;
 }

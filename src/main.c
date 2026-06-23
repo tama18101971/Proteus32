@@ -69,9 +69,9 @@ int main(void)
     }
 
     // start_aux_cmd(INFO_GRN, true, IDM_BEACON, AWU_120MS);
-    start_aux_array(buf_sos_red, AWU_120MS); /* Запуск тестового массива мигания */
+    // start_aux_array(buf_sos_red, AWU_120MS); /* Запуск тестового массива мигания */
 
-    //start_aux_beacon();
+    start_aux_beacon();
     
     need_sleep = true; 
 
@@ -87,6 +87,7 @@ int main(void)
             EE_PRINTF("[MAIN] Entering sleep mode...\r\n");
             adc_stop();
             tim2_stop();
+            start_aux_beacon();
             AWU_Sleep_Now();
         }
 
@@ -97,6 +98,7 @@ int main(void)
             is_sleep_mode = false;
             need_sleep = false;
             wakeup_source = WS_NONE;
+            stop_aux_beacon(false);
             adc_init();
             tim2_start();
         }
