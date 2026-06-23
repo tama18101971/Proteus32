@@ -28,6 +28,7 @@ void tim2_stop(void);
 bool tick_150hz(void);
 bool tick_60hz(void);
 bool tick_5s(void);
+void tick_5s_reset(void);
 
 extern volatile uint32_t tim2_ms;
 

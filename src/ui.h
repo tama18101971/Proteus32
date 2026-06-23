@@ -35,7 +35,7 @@ typedef struct {
 	uint16_t  use_prev;
 } PSTEP_t;
 
-#define BASE_MOON_LEVEL 6
+#define BASE_MOON_LEVEL 5
 #define DEFAULT_STEP 128			// Шаг для УИ1.  Применяется при начальной инициализации.
 #define DEFAULT_MODE CMODE_MID		// Моде для УИ2. Применяется при начальной инициализации.
 

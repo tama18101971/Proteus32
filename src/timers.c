@@ -76,6 +76,11 @@ bool tick_5s(void)
     return false;
 }
 
+void tick_5s_reset(void)
+{
+    last_tick_5s = tim2_ms;
+}
+
 /**
  * @brief Запуск таймера 2 с периодом 1 мс
  *

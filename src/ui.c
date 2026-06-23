@@ -13,6 +13,7 @@
 #include "aux_leds.h"
 #include "wl_flash.h"
 #include "dac.h"
+#include "timers.h"
 
 #include "main.h"
 
@@ -379,7 +380,7 @@ void scan_ui1(void) // Эта функция сканер. Она должна �
 	if (Pressed) // Кнопень придавлена.
 	{
 		bt_u_time = 0;
-		// sleep_remains = SLEEP_DELAY;				// для режима сна во всех режимах. без этого засыпает при рампинге.
+		tick_5s_reset();  // сброс таймера сна — не засыпаем при рампинге
 
 		if (!bt_d_time)
 		{
