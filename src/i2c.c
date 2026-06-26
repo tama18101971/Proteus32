@@ -134,15 +134,11 @@ void i2c_wait_bus_free(void) {
  * (не repeated) START — перед вызовом шина должна быть свободна.
  */
 void i2c_start(void) {
-    /* Ждём освобождения шины */
-    uint32_t timeout = I2C_TIMEOUT_BUS_FREE;
-    while (I2C1->STAR2 & I2C_STAR2_BUSY) {
-        if (--timeout == 0) return;
-    }
+    i2c_wait_bus_free();
     /* Генерируем START */
     I2C1->CTLR1 |= I2C_CTLR1_START;
     /* Ждём завершения */
-    timeout = I2C_TIMEOUT_EVENT;
+    uint32_t timeout = I2C_TIMEOUT_EVENT;
     while (!(I2C1->STAR1 & I2C_STAR1_SB)) {
         if (--timeout == 0) return;
     }
@@ -153,11 +149,7 @@ void i2c_start(void) {
  */
 void i2c_stop(void) {
     I2C1->CTLR1 |= I2C_CTLR1_STOP;
-    /* Ждём освобождения шины после STOP */
-    uint32_t timeout = I2C_TIMEOUT_BUS_FREE;
-    while (I2C1->STAR2 & I2C_STAR2_BUSY) {
-        if (--timeout == 0) return;
-    }
+    i2c_wait_bus_free();
 }
 
 /**

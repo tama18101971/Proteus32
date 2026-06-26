@@ -64,7 +64,7 @@ uint16_t get_step_tc(uint16_t step)
 {
 	int16_t tc_step = (MAX_STEP - 0 /*pic.correction*/); // учитываем термоконтроль - отнимаем от заданного шага корреецию
 	uint16_t result = step <= tc_step ? step : (tc_step > 0 ? tc_step : 1);
-	EE_PRINTF("[UI] get_step_tc step=%u tc=%u -> %u\r\n", step, tc_step, result);
+	//EE_PRINTF("[UI] get_step_tc step=%u tc=%u -> %u\r\n", step, tc_step, result);
 	return result;
 }
 
@@ -182,7 +182,7 @@ void set_current_ll(uint16_t step_target, SoftStartSpeed_t ss_speed)
 
 void set_current(uint16_t step_target, SoftStartSpeed_t ss_speed)
 {
-	EE_PRINTF("[UI] set_current step=%u ss=%u\r\n", step_target, ss_speed);
+	//EE_PRINTF("[UI] set_current step=%u ss=%u\r\n", step_target, ss_speed);
 	step_user = step_target; // для ТК. step_user это то, что по идее хочет пользователь
 	set_current_ll(step_target, ss_speed);
 	if((!step_target) && (!ss_speed )) OFF_POWER();
