@@ -25,9 +25,17 @@
  *   dac_pwrpin_off()  — выключить питание DAC
  *   dac_set_value()   — установить 12-бит значение (нормальный режим)
  *   dac_set_100K()    — перейти в Power-Down 100кОм (экономия тока)
+ *
+ * Возвращаемые статусы:
+ *   dac_set_value() и dac_set_100K() возвращают I2C_OK (0) если DAC
+ *   подтвердил приём адреса и обоих байт данных, либо I2C_NACK (1) если
+ *   на любом шаге транзакции не пришёл ACK (например, DAC не запитан,
+ *   не подключён, или возникла ошибка на шине). Коды I2C_OK/I2C_NACK
+ *   определены в i2c.h.
  */
 
 #include "ch32v003_gpio.h"
+#include "i2c.h"
 #include <stdint.h>
 
 /* I2C адрес DAC7571 (8-бит, R/W=0 для записи) */
@@ -47,7 +55,7 @@ void dac_pwrpin_init(void);        /* Инициализация GPIO для п�
 void dac_pwrpin_on(void);          /* Включить питание DAC */
 void dac_pwrpin_off(void);         /* Выключить питание DAC */
 
-void dac_set_value(uint16_t data); /* Установить 12-бит значение (0x000..0xFFF) */
-void dac_set_100K(void);           /* Power-Down: 100кОм на GND */
+uint8_t dac_set_value(uint16_t data); /* Установить 12-бит значение; I2C_OK/I2C_NACK */
+uint8_t dac_set_100K(void);           /* Power-Down: 100кОм на GND; I2C_OK/I2C_NACK */
 
 #endif /* DAC_H */

@@ -182,7 +182,7 @@ void set_current_ll(uint16_t step_target, SoftStartSpeed_t ss_speed)
 
 void set_current(uint16_t step_target, SoftStartSpeed_t ss_speed)
 {
-	//EE_PRINTF("[UI] set_current step=%u ss=%u\r\n", step_target, ss_speed);
+	EE_PRINTF("[UI] set_current step=%u ss=%u\r\n", step_target, ss_speed);
 	step_user = step_target; // для ТК. step_user это то, что по идее хочет пользователь
 	set_current_ll(step_target, ss_speed);
 	if((!step_target) && (!ss_speed )) OFF_POWER();

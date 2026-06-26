@@ -37,6 +37,18 @@
 #define CKCFGR_FS_Set    ((uint16_t)0x8000)  /* Bit 15: F/S (0=Standard, 1=Fast) */
 #define CKCFGR_CCR_Set   ((uint16_t)0x0FFF)  /* Bits 11:0: Clock Control Register */
 
+/* OADDR1: бит 14 должен быть установлен в 1 согласно datasheet (зарезервирован
+ * под совместимость с 0xCxxx ref.man addressing scheme); биты 7:1 — адрес. */
+#define OADDR1_REQUIRED_BIT14   (1 << 14)
+
+/* Таймауты (число итераций цикла опроса, не время в мкс/мс).
+ * 100000 итераций на 48 МГц соответствует масштабу в десятки мс —
+ * достаточно, чтобы не зависнуть, но не словить ложный таймаут при
+ * нормальной работе шины. */
+#define I2C_TIMEOUT_BUS_FREE   100000
+#define I2C_TIMEOUT_EVENT      100000
+#define I2C_TIMEOUT_ACK        100000
+
 /**
  * @brief Инициализация I2C1
  * @param bound — желаемая частота шины (100000 или 400000)
@@ -83,13 +95,31 @@ void i2c_init(uint32_t bound) {
         if ((ccr & CKCFGR_CCR_Set) == 0) ccr |= 1;
         ccr |= CKCFGR_FS_Set;
     }
+    /* Защита от переполнения 12-битного поля CCR (на случай нестандартных bound) */
+    if ((ccr & CKCFGR_CCR_Set) > CKCFGR_CCR_Set) {
+        ccr = (ccr & CKCFGR_FS_Set) | CKCFGR_CCR_Set;
+    }
     I2C1->CKCFGR = ccr;
 
-    /* 7. Own Address: 7-bit mode, addr = 0 */
-    I2C1->OADDR1 = 0x4000;
+    /* 7. Own Address: 7-bit mode, addr = 0. Бит 14 зарезервирован и должен
+     * быть установлен в 1 (см. описание OADDR1 в reference manual). */
+    I2C1->OADDR1 = OADDR1_REQUIRED_BIT14;
 
     /* 8. Включаем I2C + ACK */
     I2C1->CTLR1 = I2C_CTLR1_PE | I2C_CTLR1_ACK;
+}
+
+/**
+ * @brief Ожидание освобождения шины I2C (флаг BUSY=0)
+ *
+ * Проверяет STAR2.BUSY. Если шина занята — ждёт с таймаутом.
+ * Используется после STOP или при восстановлении после ошибки.
+ */
+void i2c_wait_bus_free(void) {
+    uint32_t timeout = I2C_TIMEOUT_BUS_FREE;
+    while (I2C1->STAR2 & I2C_STAR2_BUSY) {
+        if (--timeout == 0) return;
+    }
 }
 
 /**
@@ -100,18 +130,19 @@ void i2c_init(uint32_t bound) {
  *   2. Установка бита START (CTLR1.START)
  *   3. Ожидание SB флага (STAR1.SB) — START успешно сгенерирован
  *
- * Оба этапа имеют таймаут 100000 итераций.
+ * Оба этапа имеют таймаут. Примечание: эта функция предполагает обычный
+ * (не repeated) START — перед вызовом шина должна быть свободна.
  */
 void i2c_start(void) {
     /* Ждём освобождения шины */
-    uint32_t timeout = 100000;
+    uint32_t timeout = I2C_TIMEOUT_BUS_FREE;
     while (I2C1->STAR2 & I2C_STAR2_BUSY) {
         if (--timeout == 0) return;
     }
     /* Генерируем START */
     I2C1->CTLR1 |= I2C_CTLR1_START;
     /* Ждём завершения */
-    timeout = 100000;
+    timeout = I2C_TIMEOUT_EVENT;
     while (!(I2C1->STAR1 & I2C_STAR1_SB)) {
         if (--timeout == 0) return;
     }
@@ -123,7 +154,7 @@ void i2c_start(void) {
 void i2c_stop(void) {
     I2C1->CTLR1 |= I2C_CTLR1_STOP;
     /* Ждём освобождения шины после STOP */
-    uint32_t timeout = 100000;
+    uint32_t timeout = I2C_TIMEOUT_BUS_FREE;
     while (I2C1->STAR2 & I2C_STAR2_BUSY) {
         if (--timeout == 0) return;
     }
@@ -133,6 +164,8 @@ void i2c_stop(void) {
  * @brief Отправка 7-битного адреса ведомого
  * @param addr      — 7-битный адрес (например, 0x4C для DAC7571)
  * @param direction — I2C_DIR_TX (запись) или I2C_DIR_RX (чтение)
+ * @return I2C_OK (0) если адрес подтверждён (ADDR=1), I2C_NACK (1) если
+ *         ведомый ответил NACK или произошёл таймаут.
  *
  * Формат байта на шине: [addr6..addr0][R/W]
  * Адрес сдвигается влево на 1 бит + бит направления.
@@ -140,56 +173,79 @@ void i2c_stop(void) {
  * Если ведомый ответил NACK (STAR1.AF), генерируется STOP.
  * После успешного ADDR флага читаются STAR1 и STAR2 для очистки.
  */
-void i2c_send_addr(uint8_t addr, uint8_t direction) {
+uint8_t i2c_send_addr(uint8_t addr, uint8_t direction) {
     I2C1->DATAR = (addr << 1) | (direction & 0x01);
-    uint32_t timeout = 100000;
+    uint32_t timeout = I2C_TIMEOUT_EVENT;
     while (!(I2C1->STAR1 & I2C_STAR1_ADDR)) {
         /* Проверка NACK (Acknowledge Failure) */
         if (I2C1->STAR1 & I2C_STAR1_AF) {
             I2C1->STAR1 &= ~I2C_STAR1_AF;
             I2C1->CTLR1 |= I2C_CTLR1_STOP;
-            return;
+            i2c_wait_bus_free();
+            return I2C_NACK;
         }
-        if (--timeout == 0) return;
+        if (--timeout == 0) return I2C_NACK;
     }
     /* Очистка флагов ADDR чтением STAR1 и STAR2 */
     (void)I2C1->STAR1;
     (void)I2C1->STAR2;
+    return I2C_OK;
 }
 
 /**
- * @brief Отправка одного байта данных
+ * @brief Отправка одного байта данных в регистр DATAR
  * @param data — байт для отправки
  *
- * Ожидание флага TXE (Data Register Empty) — регистр данных свободен.
- * Не имеет таймаута (блокируется до отправки).
+ * Ожидает флаг TXE (Data Register Empty) — означает только, что байт
+ * перенесён в сдвиговый регистр и DATAR свободен для следующего байта.
+ * TXE НЕ означает, что ведомый подтвердил приём (см. i2c_wait_ack()).
+ * Имеет таймаут — при обрыве шины не зависает навечно.
  */
 void i2c_send_byte(uint8_t data) {
     I2C1->DATAR = data;
-    uint32_t timeout = 100000;
+    uint32_t timeout = I2C_TIMEOUT_EVENT;
     while (!(I2C1->STAR1 & I2C_STAR1_TXE)) {
         if (--timeout == 0) return;
     }
 }
 
 /**
- * @brief Ожидание ACK от ведомого после отправки данных
- * @return 0 — ACK получен, 1 — NACK или таймаут
+ * @brief Ожидание подтверждения приёма байта ведомым
+ * @return I2C_OK (0) — ACK получен, I2C_NACK (1) — NACK или таймаут
  *
- * Проверяет два флага:
- *   TXE — данные отправлены (нет ответа ещё)
- *   AF  — ведомый ответил NACK
+ * ВАЖНО: проверяется флаг BTF (Byte Transfer Finished), а не TXE.
+ * TXE взводится сразу после переноса байта в сдвиговый регистр — то есть
+ * ДО того, как бит ACK реально придёт с шины от ведомого. Если ждать TXE
+ * здесь, функция почти всегда вернёт "OK" мгновенно, не дождавшись
+ * настоящего ответа устройства. BTF взводится только после получения
+ * бита ACK/NACK, поэтому именно он даёт достоверный результат.
  */
 uint8_t i2c_wait_ack(void) {
-    uint32_t timeout = 10000;
-    while (!(I2C1->STAR1 & (I2C_STAR1_TXE | I2C_STAR1_AF))) {
-        if (--timeout == 0) return 1;
+    uint32_t timeout = I2C_TIMEOUT_ACK;
+    while (!(I2C1->STAR1 & (I2C_STAR1_BTF | I2C_STAR1_AF))) {
+        if (--timeout == 0) return I2C_NACK;
     }
     if (I2C1->STAR1 & I2C_STAR1_AF) {
         I2C1->STAR1 &= ~I2C_STAR1_AF;
-        return 1;
+        I2C1->CTLR1 |= I2C_CTLR1_STOP;
+        i2c_wait_bus_free();
+        return I2C_NACK;
     }
-    return 0;
+    return I2C_OK;
+}
+
+/**
+ * @brief Отправка байта с ожиданием подтверждения — удобный wrapper
+ * @param data — байт для отправки
+ * @return I2C_OK (0) если ведомый подтвердил приём, I2C_NACK (1) иначе
+ *
+ * Объединяет i2c_send_byte() + i2c_wait_ack() для типового случая
+ * "отправить байт и убедиться, что он принят", что покрывает большинство
+ * вызовов в коде работы с DAC7571.
+ */
+uint8_t i2c_write_byte(uint8_t data) {
+    i2c_send_byte(data);
+    return i2c_wait_ack();
 }
 
 /**
