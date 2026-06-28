@@ -106,7 +106,7 @@ int main(void)
         /* 3. Пробуждение по AWU: обрабатываем AUX-команды */
         if (wakeup_source == WS_AWU)
         {
-            EE_PRINTF("[MAIN] Event source: AWU.\r\n");
+           // EE_PRINTF("[MAIN] Event source: AWU.\r\n");
             wakeup_source = WS_NONE;
             handle_aux();
         }
@@ -123,7 +123,7 @@ int main(void)
         if (tick_5s())       /* 5с: сохранение EEPROM */
         {
             //EE_PRINTF("[MAIN] Tick 5 Sec.\r\n");
-            hanlde_ee();
+            handle_ee();
             need_sleep = true;
         }
     }
