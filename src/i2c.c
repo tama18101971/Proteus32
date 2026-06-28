@@ -49,6 +49,70 @@
 #define I2C_TIMEOUT_EVENT      100000
 #define I2C_TIMEOUT_ACK        100000
 
+/* Задержка для одного такта SCL при восстановлении шины (в итерациях цикла) */
+#define I2C_SCL_PULSE_DELAY    100
+
+/**
+ * @brief Восстановление шины I2C (Clock Recovery)
+ *
+ * Если шина застряла (SDA held LOW by slave), генерирует до 16 тактов SCL,
+ * чтобы slave завершил передачу и освободил SDA.
+ *
+ * Алгоритм:
+ *   1. Отключаем I2C peripheral (PE=0)
+ *   2. Переводим SCL (PC2) в output push-pull
+ *   3. Генерируем до 16 тактов SCL (LOW → HIGH с задержкой)
+ *   4. Проверяем SDA (PC1) после каждого такта — если HIGH, шина свободна
+ *   5. Восстанавливаем GPIO в AF_OD, включаем I2C
+ */
+static void i2c_bus_recovery(void) {
+    /* Отключаем I2C peripheral */
+    I2C1->CTLR1 &= ~I2C_CTLR1_PE;
+
+    /* Включаем тактирование GPIOC (если было отключено) */
+    RCC->APB2PCENR |= RCC_APB2PCENR_IOPCEN;
+
+    /* Переводим SCL (PC2) в output push-pull 2MHz (CFGLR MODE=10=2MHz, CNF=00=PP)
+     * CFGLR для PC2: биты [11:8] = (CNF << 2 | MODE) = (0 << 2 | 2) = 0x02 */
+    GPIOC->CFGLR &= ~(0xF << 8);
+    GPIOC->CFGLR |=  (0x2 << 8);  /* PP 2MHz для PC2 (SCL) */
+
+    /* SDA (PC1) оставляем input floating (CFGLR биты [7:4] = 0x04) —
+     * можем читать его состояние (HIGH = шина свободна) */
+    GPIOC->CFGLR &= ~(0xF << 4);
+    GPIOC->CFGLR |=  (0x4 << 4);  /* Input floating для PC1 (SDA) */
+
+    /* Генерируем до 16 тактов SCL + проверяем SDA */
+    for (uint8_t i = 0; i < 16; i++) {
+        /* SCL LOW */
+        GPIOC->BCR = (1 << 2);
+        for (volatile uint32_t d = 0; d < I2C_SCL_PULSE_DELAY; d++);
+
+        /* SCL HIGH */
+        GPIOC->BSHR = (1 << 2);
+        for (volatile uint32_t d = 0; d < I2C_SCL_PULSE_DELAY; d++);
+
+        /* Проверяем SDA: если HIGH — slave освободил шину */
+        if (GPIOC->INDR & (1 << 1)) break;
+    }
+
+    /* Генерируем STOP: SDA LOW→HIGH при SCL=HIGH */
+    GPIOC->CFGLR &= ~(0xF << 4);
+    GPIOC->CFGLR |=  (0x2 << 4);  /* SDA → output push-pull 2MHz */
+    GPIOC->BCR = (1 << 1);        /* SDA LOW */
+    for (volatile uint32_t d = 0; d < I2C_SCL_PULSE_DELAY; d++);
+    GPIOC->BSHR = (1 << 1);      /* SDA HIGH → STOP */
+    for (volatile uint32_t d = 0; d < I2C_SCL_PULSE_DELAY; d++);
+
+    /* Восстанавливаем GPIO в AF_OD для I2C */
+    GPIOC->CFGLR &= ~((0xF << 4) | (0xF << 8));
+    GPIOC->CFGLR |=  (GPIO_CFG_AF_OD_30M << 4)
+                   |  (GPIO_CFG_AF_OD_30M << 8);
+
+    /* Включаем I2C peripheral обратно + ACK (как в i2c_init) */
+    I2C1->CTLR1 = I2C_CTLR1_PE | I2C_CTLR1_ACK;
+}
+
 /**
  * @brief Инициализация I2C1
  * @param bound — желаемая частота шины (100000 или 400000)
@@ -113,12 +177,16 @@ void i2c_init(uint32_t bound) {
  * @brief Ожидание освобождения шины I2C (флаг BUSY=0)
  *
  * Проверяет STAR2.BUSY. Если шина занята — ждёт с таймаутом.
+ * При таймауте запускает clock recovery для освобождения шины.
  * Используется после STOP или при восстановлении после ошибки.
  */
 void i2c_wait_bus_free(void) {
     uint32_t timeout = I2C_TIMEOUT_BUS_FREE;
     while (I2C1->STAR2 & I2C_STAR2_BUSY) {
-        if (--timeout == 0) return;
+        if (--timeout == 0) {
+            i2c_bus_recovery();
+            return;
+        }
     }
 }
 
@@ -130,8 +198,7 @@ void i2c_wait_bus_free(void) {
  *   2. Установка бита START (CTLR1.START)
  *   3. Ожидание SB флага (STAR1.SB) — START успешно сгенерирован
  *
- * Оба этапа имеют таймаут. Примечание: эта функция предполагает обычный
- * (не repeated) START — перед вызовом шина должна быть свободна.
+ * Оба этапа имеют таймаут. При таймауте очищаем START и восстанавливаем шину.
  */
 void i2c_start(void) {
     i2c_wait_bus_free();
@@ -140,7 +207,11 @@ void i2c_start(void) {
     /* Ждём завершения */
     uint32_t timeout = I2C_TIMEOUT_EVENT;
     while (!(I2C1->STAR1 & I2C_STAR1_SB)) {
-        if (--timeout == 0) return;
+        if (--timeout == 0) {
+            I2C1->CTLR1 &= ~I2C_CTLR1_START;
+            i2c_bus_recovery();
+            return;
+        }
     }
 }
 
@@ -176,7 +247,11 @@ uint8_t i2c_send_addr(uint8_t addr, uint8_t direction) {
             i2c_wait_bus_free();
             return I2C_NACK;
         }
-        if (--timeout == 0) return I2C_NACK;
+        if (--timeout == 0) {
+            I2C1->CTLR1 |= I2C_CTLR1_STOP;
+            i2c_wait_bus_free();
+            return I2C_NACK;
+        }
     }
     /* Очистка флагов ADDR чтением STAR1 и STAR2 */
     (void)I2C1->STAR1;
@@ -191,13 +266,17 @@ uint8_t i2c_send_addr(uint8_t addr, uint8_t direction) {
  * Ожидает флаг TXE (Data Register Empty) — означает только, что байт
  * перенесён в сдвиговый регистр и DATAR свободен для следующего байта.
  * TXE НЕ означает, что ведомый подтвердил приём (см. i2c_wait_ack()).
- * Имеет таймаут — при обрыве шины не зависает навечно.
+ * При таймауте генерируется STOP и восстанавливается шина.
  */
 void i2c_send_byte(uint8_t data) {
     I2C1->DATAR = data;
     uint32_t timeout = I2C_TIMEOUT_EVENT;
     while (!(I2C1->STAR1 & I2C_STAR1_TXE)) {
-        if (--timeout == 0) return;
+        if (--timeout == 0) {
+            I2C1->CTLR1 |= I2C_CTLR1_STOP;
+            i2c_wait_bus_free();
+            return;
+        }
     }
 }
 
@@ -215,7 +294,11 @@ void i2c_send_byte(uint8_t data) {
 uint8_t i2c_wait_ack(void) {
     uint32_t timeout = I2C_TIMEOUT_ACK;
     while (!(I2C1->STAR1 & (I2C_STAR1_BTF | I2C_STAR1_AF))) {
-        if (--timeout == 0) return I2C_NACK;
+        if (--timeout == 0) {
+            I2C1->CTLR1 |= I2C_CTLR1_STOP;
+            i2c_wait_bus_free();
+            return I2C_NACK;
+        }
     }
     if (I2C1->STAR1 & I2C_STAR1_AF) {
         I2C1->STAR1 &= ~I2C_STAR1_AF;

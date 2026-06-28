@@ -101,6 +101,8 @@ int main(void)
             stop_aux_beacon(false);
             adc_init();
             tim2_start();
+            dac_pwrpin_init();
+            i2c_init(I2C_SPEED_400K);
         }
 
         /* 3. Пробуждение по AWU: обрабатываем AUX-команды */

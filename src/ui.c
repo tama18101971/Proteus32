@@ -51,6 +51,7 @@ void ON_POWER()
 	EE_PRINTF("[UI] ON POWER.\r\n");
 	dac_pwrpin_on();
 	i2c_init(I2C_SPEED_400K);
+	for (volatile uint32_t i = 0; i < 24000; i++);  /* ~5мс — время включения DAC7571 */
 }
 
 void OFF_POWER()
