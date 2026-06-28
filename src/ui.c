@@ -87,8 +87,8 @@ void ee_defaults(struct ee_data *e)
 	e->usr.t_calibr = 6;
 
 	/* Значения UI по умолчанию */
-	e->defauil_ui1 = DEFAULT_STEP;
-	e->defauil_ui2 = DEFAULT_MODE;
+	e->default__ui1 = DEFAULT_STEP;
+	e->default__ui2 = DEFAULT_MODE;
 
 	/* Распределение функций по слотам */
 	e->slots[0] = SLOT_BATT_IND;
@@ -279,7 +279,7 @@ void on_xmode_ui1(void)
 	//EE_PRINTF("[UI] X-mode step=%u mem=%u\r\n", step_user, ee.uif.use_memory);
 	ps.use_prev = false; //! НЕ УБИРАТЬ - НАДО!
 	on_driver();
-	set_current(ee.uif.use_memory ? (step_user ? step_user : step_default) : ee.defauil_ui1, SS_FAST); // если предыдущий шаг = 0 начинаем с яркости по умолчанию, иначе - с яроксти в пред. шаге
+	set_current(ee.uif.use_memory ? (step_user ? step_user : step_default) : ee.default__ui1, SS_FAST); // если предыдущий шаг = 0 начинаем с яркости по умолчанию, иначе - с яроксти в пред. шаге
 }
 
 void on_turbo_ui1(void)

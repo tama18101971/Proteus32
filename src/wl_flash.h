@@ -60,13 +60,13 @@ struct __attribute__((packed)) ui_flags {
 struct __attribute__((packed, aligned(4))) ee_data {
     uint32_t seq;               
     uint8_t version;            
-    uint16_t defauil_ui1;       
+    uint16_t default__ui1;       
     struct ui_flags  uif;       
     struct aux_flags aux;       
     struct eng_flags eng;       
     struct usr_flags usr;       
-    uint8_t defauil_ui2;        
-    uint8_t defauil_ui3;        
+    uint8_t default__ui2;        
+    uint8_t default__ui3;        
     uint8_t slots[SLOT_COUNT];  
     uint8_t reserved[3];        
     uint32_t crc;               
