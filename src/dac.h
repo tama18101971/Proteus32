@@ -51,9 +51,10 @@
 #define DAC_PWR_PORT    GPIOD
 #define DAC_PWR_PIN     GPIO_Pin_0
 
-void dac_pwrpin_init(void);        /* Инициализация GPIO для пина питания */
-void dac_pwrpin_on(void);          /* Включить питание DAC */
-void dac_pwrpin_off(void);         /* Выключить питание DAC */
+void dac_pwrpin_init(void);
+void dac_pwrpin_on(void);
+void dac_pwrpin_off(void);
+uint8_t dac_pwrpin_is_on(void);
 
 uint8_t dac_set_value(uint16_t data); /* Установить 12-бит значение; I2C_OK/I2C_NACK */
 uint8_t dac_set_100K(void);           /* Power-Down: 100кОм на GND; I2C_OK/I2C_NACK */

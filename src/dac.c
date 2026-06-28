@@ -63,6 +63,14 @@ void dac_pwrpin_off(void) {
 }
 
 /**
+ * @brief Проверка состояния питания DAC
+ * @return 1 если питание включено (PD0 = HIGH), 0 если выключено
+ */
+uint8_t dac_pwrpin_is_on(void) {
+    return (DAC_PWR_PORT->INDR & DAC_PWR_PIN) != 0;
+}
+
+/**
  * @brief Отправка двух байтов в DAC7571 через I2C
  * @param msb — старший байт (режим + старшие 4 бита данных)
  * @param lsb — младший байт (младшие 8 бит данных)
