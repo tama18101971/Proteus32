@@ -24,6 +24,8 @@
 #include "debug.h"
 #include "soft_start.h"
 
+struct ee_data;
+
 extern u_int16_t crt;
 extern uint16_t step_default;
 extern uint16_t step_user;
@@ -210,5 +212,7 @@ void out_set_stc(uint16_t step);
 
 void ON_POWER(void);
 void OFF_POWER(void);
+
+void ee_defaults(struct ee_data *e);
 
 #endif /* UI_H_ */

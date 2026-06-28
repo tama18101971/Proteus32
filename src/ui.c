@@ -61,6 +61,48 @@ void OFF_POWER()
 	dac_pwrpin_off();
 }
 
+void ee_defaults(struct ee_data *e)
+{
+	/* Инженерное меню */
+	e->eng.min_level = 1;
+	e->eng.vc = 0;
+	e->eng.tc = 0;
+
+	/* Интерфейс */
+	e->uif.ui_index = 1;
+	e->uif.use_memory = 0;
+
+	/* Подсветка */
+	e->aux.bcklight_color = BCK_COLOR_RED;
+	e->aux.bcklight_type = BCK_TYPE_ON;
+
+	/* Маяк */
+	e->aux.beacon_mode = BCON_1S;
+	e->aux.beacon_on = true;
+	e->aux.beacon_type = GRN_LED;
+
+	/* Пользовательские настройки */
+	e->usr.eaux_onoff = false;
+	e->usr.id_plus_sid = false;
+	e->usr.t_calibr = 6;
+
+	/* Значения UI по умолчанию */
+	e->defauil_ui1 = DEFAULT_STEP;
+	e->defauil_ui2 = DEFAULT_MODE;
+
+	/* Распределение функций по слотам */
+	e->slots[0] = SLOT_BATT_IND;
+	e->slots[1] = SLOT_BEACON;
+	e->slots[2] = SLOT_STROBE;
+	e->slots[3] = SLOT_TACTICAL;
+	e->slots[4] = SLOT_BLOCK;
+	e->slots[5] = SLOT_EMPTY;
+	e->slots[6] = SLOT_EMPTY;
+	e->slots[7] = SLOT_MEMORY;
+	e->slots[8] = SLOT_BACKLIGHT;
+	e->slots[9] = SLOT_IPSMODE;
+}
+
 uint16_t get_step_tc(uint16_t step)
 {
 	int16_t tc_step = (MAX_STEP - 0 /*pic.correction*/); // учитываем термоконтроль - отнимаем от заданного шага корреецию

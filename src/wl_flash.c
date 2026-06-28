@@ -5,7 +5,8 @@
 #include "ch32v00x.h"       
 #include <string.h>          
 #include "main.h"  
-#include "config.h"          
+#include "config.h"
+#include "ui.h"
 
 // Гарантируем наличие флага аппаратной ошибки выравнивания/программирования для CH32V003
 // (Маска 0x20 соответствует 5-му биту регистра FLASH->STATR)
@@ -386,19 +387,16 @@ EE_PRINTF("[EEPROM] Writing to 0x%08lX seq=%lu\r\n", ResAddress, ee.seq);
 /* ============================================================
  * INITIALIZE DEFAULTS
  * ============================================================ */
+/* Инициализация структуры ee значениями по умолчанию.
+   Вызывается при первом запуске (EEPROM пуста) или при сбросе настроек.
+   Обнуляет структуру, устанавливает версию и вызывает ee_defaults() для заполнения полей.
+   После вызова этой функции обычно вызывают write_ee() для сохранения во flash */
 void init_ee(void)
 {
-    EE_PRINTF("[EEPROM] Init defaults\r\n");  
-    memset(&ee, 0, EE_STRUCT_SIZE);           
-    ee.version = EE_VERSION; 
-
-    ee.eng.min_level = 1;    
-    ee.eng.vc = 0;           
-    ee.eng.tc = 0;           
-
-    ee.uif.ui_index = 1;     
-    ee.uif.use_memory = 0;   
-
+    EE_PRINTF("[EEPROM] Init defaults\r\n");
+    memset(&ee, 0, EE_STRUCT_SIZE);
+    ((uint8_t *)&ee)[4] = EE_VERSION;
+    ee_defaults(&ee);
 }
 
 void handle_ee(void) 
