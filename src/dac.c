@@ -71,67 +71,56 @@ uint8_t dac_pwrpin_is_on(void) {
 }
 
 /**
- * @brief Отправка двух байтов в DAC7571 через I2C
- * @param msb — старший байт (режим + старшие 4 бита данных)
- * @param lsb — младший байт (младшие 8 бит данных)
- * @return I2C_OK (0) — все три шага подтверждены ACK,
- *         I2C_NACK (1) — DAC не ответил на адрес или на один из байт
- *         (например, питание выключено, DAC не подключён, обрыв шины).
- *
- * Формат I2C транзакции:
- *   START → [0x98] → [msb] → [lsb] → STOP
- *
- * Каждый шаг проверяется на ACK. При ошибке на любом шаге i2c_send_addr()
- * / i2c_write_byte() уже сами генерируют STOP и ждут освобождения шины,
- * поэтому дополнительный i2c_stop() в этом случае не нужен — но он
- * безопасен и используется в конце успешного пути.
+ * @brief Установка выходного напряжения на ЦАП DAC7571
+ * @param data_12bit: значение от 0 до 4095 (12 бит)
+ * @return I2C_OK или I2C_NACK
  */
-static uint8_t dac_write(uint8_t msb, uint8_t lsb) {
-    i2c_start();
-
-    if (i2c_send_addr(DAC7571_ADDRESS >> 1, I2C_DIR_TX) != I2C_OK) {
-        return I2C_NACK;
-    }
-    if (i2c_write_byte(msb) != I2C_OK) {
-        return I2C_NACK;
-    }
-    if (i2c_write_byte(lsb) != I2C_OK) {
-        return I2C_NACK;
+uint8_t dac7571_set_voltage(uint16_t data_12bit) {
+    // 1. Защита от выхода за границы 12-битного разрешения
+    if (data_12bit > 4095) {
+        data_12bit = 4095;
     }
 
+    // 2. Формируем два байта по спецификации TI
+    // Старший байт: PD1=0, PD0=0 (Normal Mode), далее 4 старших бита данных
+    uint8_t byte_msb = (uint8_t)((data_12bit >> 8) & 0x0F);
+    // Младший байт: оставшиеся 8 бит данных
+    uint8_t byte_lsb = (uint8_t)(data_12bit & 0xFF);
+
+    // 3. Низкоуровневая транзакция с пошаговым контролем ошибок
+    if (i2c_start() != I2C_OK) return I2C_NACK;
+    
+    if (i2c_send_addr(DAC7571_I2C_ADDR, I2C_DIR_TX) != I2C_OK) {
+        // Если устройство отключено, i2c_send_addr сам сгенерирует STOP
+        return I2C_NACK; 
+    }
+    
+    // Передаем старший байт и ждем ACK
+    if (i2c_write_byte(byte_msb) != I2C_OK) return I2C_NACK;
+    
+    // Передаем младший байт и ждем ACK
+    if (i2c_write_byte(byte_lsb) != I2C_OK) return I2C_NACK;
+    
+    // Успешное завершение транзакции
     i2c_stop();
     return I2C_OK;
 }
 
 /**
- * @brief Установка 12-бит значения DAC (нормальный режим)
- * @param data — 12-бит значение (0x000..0xFFF)
- * @return I2C_OK (0) если DAC подтвердил приём, I2C_NACK (1) при ошибке
- *
- * Формирование формата данных:
- *   MSB = [режим(2 бита)] [00] [старшие 4 бита]
- *   LSB = [младшие 8 бит]
- *
- * Пример: data = 0xABC
- *   MSB = (0x00 << 4) | (0xA) = 0x0A
- *   LSB = 0xBC
+ * @brief Перевод ЦАП в режим сна (Power-Down) для экономии энергии
+ * @param mode: 1 - подтяжка 1 кОм к GND, 2 - 100 кОм к GND, 3 - High-Z (высокий импеданс)
  */
-uint8_t dac_set_value(uint16_t data) {
-    data &= 0x0FFF;
-    uint8_t msb = (uint8_t)(((DAC7571_MODE_NORMAL << 4) & 0x30) | ((data >> 8) & 0x0F));
-    uint8_t lsb = (uint8_t)(data & 0xFF);
-    return dac_write(msb, lsb);
-}
-
-/**
- * @brief Перевод DAC в режим Power-Down 100кОм
- * @return I2C_OK (0) если DAC подтвердил приём, I2C_NACK (1) при ошибке
- *
- * DAC7571 переходит в режим пониженного энергопотребления.
- * Выход подключён к GND через резистор 100кОм.
- * Потребление: ~1мкА (вместо ~250мкА в нормальном режиме).
- */
-uint8_t dac_set_100K(void) {
-    uint8_t msb = (uint8_t)((DAC7571_MODE_PD_100K << 4) & 0x30);
-    return dac_write(msb, 0x00);
+uint8_t dac7571_power_down(uint8_t mode) {
+    if (mode < 1 || mode > 3) return I2C_NACK;
+    
+    // Сдвигаем режим в биты PD1:PD0 (6-й и 7-й биты первого байта)
+    uint8_t byte_msb = (mode << 6); 
+    
+    if (i2c_start() != I2C_OK) return I2C_NACK;
+    if (i2c_send_addr(DAC7571_I2C_ADDR, I2C_DIR_TX) != I2C_OK) return I2C_NACK;
+    if (i2c_write_byte(byte_msb) != I2C_OK) return I2C_NACK;
+    if (i2c_write_byte(0x00) != I2C_OK) return I2C_NACK; // Второй байт не важен, но обязателен
+    i2c_stop();
+    
+    return I2C_OK;
 }

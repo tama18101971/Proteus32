@@ -38,8 +38,10 @@
 #include "i2c.h"
 #include <stdint.h>
 
-/* I2C адрес DAC7571 (8-бит, R/W=0 для записи) */
-#define DAC7571_ADDRESS    0x98  /* 7-бит адрес 0x4C, сдвинутый влево */
+// Адрес DAC7571 зависит от пина A0:
+// Если A0 подключен к GND, 7-битный адрес = 0x4C (бинарно: 1001100)
+// Если A0 подключен к VDD, 7-битный адрес = 0x4D (бинарно: 1001101)
+#define DAC7571_I2C_ADDR    0x4C
 
 /* Режимы работы DAC7571 (биты 15:14 в формате данных) */
 #define DAC7571_MODE_NORMAL    0x00  /* Нормальный режим (активный вывод) */
@@ -56,7 +58,7 @@ void dac_pwrpin_on(void);
 void dac_pwrpin_off(void);
 uint8_t dac_pwrpin_is_on(void);
 
-uint8_t dac_set_value(uint16_t data); /* Установить 12-бит значение; I2C_OK/I2C_NACK */
-uint8_t dac_set_100K(void);           /* Power-Down: 100кОм на GND; I2C_OK/I2C_NACK */
+uint8_t dac7571_set_voltage(uint16_t data_12bit); /* Установить 12-бит значение; I2C_OK/I2C_NACK */
+uint8_t dac7571_power_down(uint8_t mode);
 
 #endif /* DAC_H */

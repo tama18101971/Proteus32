@@ -61,7 +61,7 @@ int main(void)
     dac_pwrpin_init();  // настраиваем ногу для управления питанием.
     dac_pwrpin_on();    // включаем питание DAC
     i2c_init(I2C_SPEED_400K);
-    dac_set_value(0);
+    dac7571_set_voltage(0);
 
     if (read_ee() == FAILED) /* Загрузка настроек из EEPROM (или инициализация по умолчанию) */
     {
