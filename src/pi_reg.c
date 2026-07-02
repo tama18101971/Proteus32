@@ -167,3 +167,4 @@ uint16_t pi_reg_compute(const pi_reg_config_t *config, pi_reg_state_t *state, ui
     state->last_limiter = (uint16_t)current_limiter;
     return state->last_limiter;
 }
+

@@ -98,7 +98,7 @@ main loop:
     handle_aux()      → обработка AUX-команд
 
   tick_160hz(): scan_ui1(), ss_scan()   → пока не спим
-  tick_80hz():  adc_read()               → пока не спим
+  tick_50hz():  adc_read()               → пока не спим
   tick_5s():    hanlde_ee()               → пока не спим
 ```
 
@@ -153,7 +153,7 @@ tim2_start();           // Включить таймер
 tim2_stop();            // Отключить (экономия энергии)
 
 if (tick_160hz()) { }   // true каждые ~6 мс (UI, soft start)
-if (tick_80hz())  { }   // true каждые ~12 мс (ADC)
+if (tick_50hz())  { }   // true каждые ~20 мс
 if (tick_5s())    { }   // true каждые 5 секунд (сохранение данных)
 void tick_5s_reset(void);  // Сброс таймера 5с (предотвращает сон при рампинге)
 

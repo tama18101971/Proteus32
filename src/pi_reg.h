@@ -36,6 +36,16 @@ typedef struct {
     uint16_t last_limiter;     // Значение ограничения на прошлом шаге
 } pi_reg_state_t;
 
+/**
+ * @brief Сброс состояния регулятора при выключении системы.
+ * @param state Указатель на структуру состояния.
+ * @param config Указатель на структуру конфигурации (нужен для корректного заполнения фильтра).
+ * @param current_adc_10bit Текущее сырое значение АЦП в момент выключения/сброса.
+ */
+void pi_reg_reset(pi_reg_state_t *state, const pi_reg_config_t *config, uint16_t current_adc_10bit);
+// Макрос делает pi_reg_init синонимом pi_reg_reset. Компилятор просто подставит правильное имя.
+#define pi_reg_init(state, config, initial_adc_10bit) pi_reg_reset(state, config, initial_adc_10bit)
+
 void pi_reg_init(pi_reg_state_t *state, const pi_reg_config_t *config, uint16_t initial_adc_10bit);
 uint16_t pi_reg_compute(const pi_reg_config_t *config, pi_reg_state_t *state, uint16_t raw_adc_10bit, uint16_t user_pwm);
 
