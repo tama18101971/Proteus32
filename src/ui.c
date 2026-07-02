@@ -144,7 +144,7 @@ uint16_t getBright_CRT_9to12Bit(uint16_t val) {
 void out_set_stc(uint16_t step)
 {
 	uint16_t out = getBright_CRT_9to12Bit(step) + get_min_level(step);
-	if (out > 4095) out = 4095;		// не удалять, блин - надо!
+	//if (out > 4095) out = 4095;		// не удалять, блин - надо! С новым I2C не надо
 	//EE_PRINTF("[UI] out_set_stc step=%u out=%u\r\n", step, out);
 	dac7571_set_voltage(out);
 }
