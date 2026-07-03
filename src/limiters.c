@@ -29,7 +29,7 @@ void sys_init(void) {
     led_thermal_config.slew_release = 2;
 
     // Инициализируем структуру состояния регулятора
-    pi_reg_init(&led_thermal_state, &led_thermal_config, raw_temperature_adc); //raw 25С = 271
+    pi_reg_init(&led_thermal_config, &led_thermal_state, raw_temperature_adc); //raw 25С = 271
 }
 
 void scan_limiters(void)
@@ -67,5 +67,5 @@ void scan_limiters(void)
 
 void reset_limiters(void)
 {
-    pi_reg_reset(&led_thermal_state, &led_thermal_config, raw_temperature_adc);
+    pi_reg_reset(&led_thermal_config, &led_thermal_state, raw_temperature_adc);
 }

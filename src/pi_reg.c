@@ -10,7 +10,7 @@
 // Внутренний сдвиг для fixed-point представления heat_rate (масштаб *256)
 #define HR_SCALE_SHIFT            8
 
-void pi_reg_reset(pi_reg_state_t *state, const pi_reg_config_t *config, uint16_t initial_adc_10bit) {
+void pi_reg_reset(const pi_reg_config_t *config, pi_reg_state_t *state, uint16_t initial_adc_10bit) {
     if (!state) {
         return;
     }

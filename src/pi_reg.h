@@ -41,12 +41,12 @@ typedef struct {
     uint16_t current_limiter;   // Текущее значение ограничения
 } pi_reg_state_t;
 
-void pi_reg_reset(pi_reg_state_t *state, const pi_reg_config_t *config, uint16_t initial_adc_10bit);
+void pi_reg_reset(const pi_reg_config_t *config, pi_reg_state_t *state, uint16_t initial_adc_10bit);
 
 /**
  * @brief Макрос обратной совместимости. Использование sizeof(*state) гарантирует безопасность.
  */
-#define pi_reg_init(state, config, initial_adc_10bit) pi_reg_reset(state, config, initial_adc_10bit)
+#define pi_reg_init(config, state, initial_adc_10bit) pi_reg_reset(config, state, initial_adc_10bit)
 
 uint16_t pi_reg_compute(const pi_reg_config_t *config, pi_reg_state_t *state, uint16_t raw_adc_10bit, uint16_t user_pwm);
 
