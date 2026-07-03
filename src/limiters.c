@@ -16,9 +16,9 @@ uint16_t limiter = 0;
 void sys_init(void)
 {
 led_thermal_config.setpoint = 375;      // Уставка 750 (10-бит)
-led_thermal_config.start_offset = 30;   // Работаем в зоне от 720 до 750
+led_thermal_config.start_offset = 60;   // Работаем в зоне от 720 до 750
 
-led_thermal_config.kp = 32;             // Ослабляем пропорциональный пинок (0.125)
+led_thermal_config.kp = 48;             // Ослабляем пропорциональный пинок (0.125)
 led_thermal_config.ki = 2;              // Тормозим интегратор в 4 раза! (0.0078)
 led_thermal_config.k_predict = 128;     // Оставляем как есть, он гасит первичный вылет
 
