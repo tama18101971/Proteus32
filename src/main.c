@@ -31,11 +31,7 @@
 
 volatile wakeup_source_t wakeup_source = WS_NONE; /* Источник последнего пробуждения */
 
-extern uint8_t is_sleep_mode; /* Флаг режима сна: 0 — работает, 1 — в STANDBY */
-extern uint8_t need_save; /* Флаг необходимости сохранения EEPROM */
-
 uint8_t need_sleep = false; /* Флаг необходимости перейти в режим сна */
-extern uint16_t raw_temperature_adc; // определена в adc.c
 
 
 int main(void)

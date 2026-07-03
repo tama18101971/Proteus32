@@ -18,7 +18,6 @@
  * GLOBAL VARIABLES
  * ============================================================ */
 
-extern uint8_t need_save;
 struct ee_data ee;                    
 
 static uint32_t ResAddress; // Физический адрес для следующей записи

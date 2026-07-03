@@ -40,8 +40,6 @@
 #include "ch32v00x.h"
 #include "system_ch32v00x.h"
 
-extern struct ee_data ee;
-
 uint8_t vwarning = VWARNING_NONE;			// Текущий уровень предупреждения о напряжении
 uint8_t vwarning_old = VWARNING_NONE;		// Предыдущий уровень (для отслеживания изменений)
 

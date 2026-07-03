@@ -29,3 +29,5 @@ typedef enum {
 } FUN_Index_t;
 
 #endif /* INC_ARRAY_H_ */
+
+extern void (*main_op[])(void);

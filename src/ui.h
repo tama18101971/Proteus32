@@ -30,6 +30,7 @@ extern u_int16_t crt;
 extern uint16_t step_default;
 extern uint16_t step_user;
 extern uint16_t step_tc;
+extern uint8_t need_save;
 
 typedef struct {
 	uint16_t  start;

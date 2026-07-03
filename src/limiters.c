@@ -2,9 +2,7 @@
 #include "ui.h"
 #include "pi_reg.h"
 #include "limiters.h"
-
-extern uint16_t raw_temperature_adc;
-extern struct ee_data ee;
+#include "wl_flash.h"
 
 /* ============ СТРУКТУРЫ РЕГУЛЯТОРА ============ */
 

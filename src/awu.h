@@ -40,6 +40,7 @@ typedef enum {
 } awu_tick_t;
 
 extern volatile uint8_t awu_event;
+extern uint8_t is_sleep_mode;
 
 #define AWU_ON()    (PWR->AWUCSR |=  PWR_AWUCSR_AWUEN)  /* Включаем AWU */
 #define AWU_OFF()   (PWR->AWUCSR &= ~PWR_AWUCSR_AWUEN)  /* Выключаем AWU */
