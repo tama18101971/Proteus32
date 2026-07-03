@@ -57,7 +57,7 @@ src/
 ├── config.h        — Настройки отладки (WL_FLASH_DEBUG, PRINT_ADC, EE_PRINTF)
 │
 ├── awu.c/.h        — Auto Wake-Up таймер (пробуждение из STANDBY)
-├── timers.c/.h     — TIM2 (1мс тик, аналог millis() в Arduino)
+├── timers.c/.h     — TIM2 (1мс тик, таймерные интервалы)
 ├── button_gpio.c/.h — Кнопка (EXTI Line3 на PC3)
 │
 ├── aux_leds.c/.h   — AUX LED автомат (моргание светодиодами)
@@ -68,9 +68,11 @@ src/
 ├── dac.c/.h        — DAC7571 + I2C (управление яркостью, прямые регистры)
 ├── i2c.c/.h        — I2C драйвер (прямые регистры, без SDK)
 │
-├── adc.c/.h        — АЦП (NTC температура + Vrefint)
-├── ntc_table.c/.h  — Температурная таблица NTC
+├── adc.c/.h        — АЦП (NTC температура + Vrefint + температурная таблица)
 ├── wl_flash.c/.h   — Сохранение данных во Flash (wl_flash)
+│
+├── limiters.c/.h   — Терморегулятор: PI-регулятор + slew rate
+├── pi_reg.c/.h     — Ядро PI-регулятора (heat_rate, feedforward, anti-windup)
 │
 ├── array.c/.h      — Утилиты для массивов
 ├── ch32v003_gpio.h — Утилиты GPIO (GPIO_PinConfig)
@@ -98,8 +100,9 @@ main loop:
     handle_aux()      → обработка AUX-команд
 
   tick_160hz(): scan_ui1(), ss_scan()   → пока не спим
-  tick_50hz():  adc_read()               → пока не спим
-  tick_5s():    hanlde_ee()               → пока не спим
+  tick_50hz():  scan_limiters()          → пока не спим (PI-регулятор)
+  tick_2hz():   (отладочный вывод)       → пока не спим
+  tick_5s():    handle_ee()              → пока не спим
 ```
 
 ### Правила энергосбережения
@@ -153,7 +156,8 @@ tim2_start();           // Включить таймер
 tim2_stop();            // Отключить (экономия энергии)
 
 if (tick_160hz()) { }   // true каждые ~6 мс (UI, soft start)
-if (tick_50hz())  { }   // true каждые ~20 мс
+if (tick_50hz())  { }   // true каждые ~20 мс (PI-регулятор)
+if (tick_2hz())   { }   // true каждые 500 мс (отладка)
 if (tick_5s())    { }   // true каждые 5 секунд (сохранение данных)
 void tick_5s_reset(void);  // Сброс таймера 5с (предотвращает сон при рампинге)
 
@@ -207,6 +211,99 @@ Fast Mode:      CCR = PCLK1 / (3 × FI2C)
 - `dac_pwrpin_init/on/off()` — управление питанием (PD0)
 - `dac_set_value(data)` — установка 12-бит значения
 - `dac_set_100K()` — Power-Down 100кОм (экономия тока)
+
+---
+
+## PI-регулятор термозащиты (pi_reg.c/.h)
+
+### Назначение
+Ограничение мощности LED для защиты от перегрева. Работает как PI-регулятор с feedforward упреждением.
+
+### Конфигурация (pi_reg_config_t)
+```c
+setpoint;          // Уставка температуры (9 бит, 0..511)
+kp;                // Пропорциональный коэффициент (*256)
+ki;                // Интегральный коэффициент (*256)
+k_predict;         // Коэффициент feedforward (*256)
+max_i_term;        // Предел интегратора (Anti-Windup)
+minimum_pwm;       // Минимальный ШИМ (защита драйвера)
+start_offset;      // Зона начала регулирования (коды АЦП)
+predict_distance;  // Зона начала feedforward (коды АЦП)
+filter_shift;      // EMA фильтр температуры (1..8)
+slew_rise;         // Скорость нарастания limiter
+slew_release;      // Скорость падения limiter
+```
+
+### Состояние (pi_reg_state_t)
+```c
+filtered_temp;     // EMA фильтр температуры
+heat_rate;         // Скорость нагрева за ~1 секунду (коды АЦП/сек)
+integrator;        // Интегральная сумма (*256)
+current_limiter;   // Текущий лимитер мощности
+raw_adc_history[]; // Circular buffer истории температуры (32 отсчёта)
+```
+
+### Алгоритм
+1. **EMA фильтр** температуры (фильтрованные коды АЦП)
+2. **Heat rate** — изменение температуры за 30 циклов (~1 сек при 30Гц)
+3. **P-терм** — пропорциональный по ошибке (с гистерезисом ±1 код)
+4. **I-терм** — интегратор с двумя скоростями по HR:
+   - HR > 6: ×4 (быстрый нагрев)
+   - HR 3..6: ×2
+   - HR 1..3: ×1 (норма)
+   - HR ≤ 0: ÷4 (стационар/остывание)
+5. **Feedforward** — упреждение по скорости нагрева в зоне predict_distance
+6. **Slew rate** — асимметричный (slew_rise=1, slew_release=10)
+
+### Формулы
+```
+error = current_temp - start_temp
+p_term = error × kp
+delta_i = error × ki × (множитель HR)
+integrator += delta_i (при error > 0)
+integrator -= bleed (при error ≤ 0)
+predict_term = heat_rate × k_predict × proximity / predict_distance
+target_limiter = (p_term + integrator + predict_term) >> 8
+```
+
+### Отладочный вывод
+```
+T:645 E:15 HR:1 P:2 I:160 PR:0 L:163
+│    │   │   │ │    │ │     │  └─ L: итоговый лимитер (0..user_pwm)
+│    │   │   │ │    │ │     └──── PR: feedforward (единицы ШИМ)
+│    │   │   │ │    │ └────────── I: интегратор (единицы ШИМ)
+│    │   │   │ │    └──────────── P: пропорциональная (единицы ШИМ)
+│    │   │   │ └───────────────── HR: скорость нагрева (коды АЦП/сек)
+│    │   │   └─────────────────── E: ошибка (коды АЦП)
+│    │   └─────────────────────── T: температура (10 бит, фильтрованная)
+```
+
+---
+
+## Терморегулятор (limiters.c/.h)
+
+### Назначение
+Обёртка над pi_reg: инициализация конфигурации, вызов `pi_reg_compute()`, обновление яркости через `set_current_ll()`.
+
+### Конфигурация по умолчанию
+```c
+setpoint = 375;           // 75°C (10 бит = 750)
+start_offset = 60;        // 38°C зона начала регулирования
+predict_distance = 120;   // FF за 120 кодов до уставки
+kp = 48;                  // P (0.1875)
+ki = 2;                   // I (0.0078)
+k_predict = 128;          // Feedforward
+max_i_term = 2000;
+minimum_pwm = 50;
+filter_shift = 3;
+slew_rise = 1;
+slew_release = 10;
+```
+
+### Функции
+- `sys_init()` — инициализация конфигурации PI-регулятора
+- `scan_limiters()` — вычисление лимитера и обновление яркости (вызывается из tick_50hz)
+- `reset_limiters()` — сброс состояния регулятора
 
 ---
 

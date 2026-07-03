@@ -80,8 +80,8 @@ uint16_t pi_reg_compute(const pi_reg_config_t *config, pi_reg_state_t *state, ui
         p_term = clipped_error * (int32_t)config->kp;
     }
 
-    // Интегратор: работает всегда при error > 0, скорость зависит от HR
-    if (error > 0) {
+    // Интегратор: накопление только при HR > 0
+    if (error > 0 && state->heat_rate > 0) {
         int32_t clipped_error = (error > (int32_t)ADC_MAX_VALUE) ? (int32_t)ADC_MAX_VALUE : error;
         int32_t delta_i = clipped_error * (int32_t)config->ki;
 
@@ -90,8 +90,6 @@ uint16_t pi_reg_compute(const pi_reg_config_t *config, pi_reg_state_t *state, ui
             delta_i <<= 2;  // Быстрый нагрев → ×4
         } else if (state->heat_rate > 3) {
             delta_i <<= 1;  // Средний нагрев → ×2
-        } else if (state->heat_rate <= 0) {
-            delta_i >>= 2;  // HR≤0 (стационар/остывание) → медленно (÷4)
         }
         // HR 1..3 → ×1 (норма)
 
@@ -105,7 +103,7 @@ uint16_t pi_reg_compute(const pi_reg_config_t *config, pi_reg_state_t *state, ui
         }
 
         // Anti-Windup: не накапливаем если близко к потолку
-        if (max_allowed_limiter > 0 && state->current_limiter >= max_allowed_limiter - 2) {
+        if (max_allowed_limiter > 0 && state->current_limiter >= max_allowed_limiter - 5) {
             // Не обновляем — уже насыщаемся
         } else {
             int32_t new_integrator = state->integrator + delta_i;
@@ -115,9 +113,8 @@ uint16_t pi_reg_compute(const pi_reg_config_t *config, pi_reg_state_t *state, ui
             state->integrator = new_integrator;
         }
     }
-    else {
-        // error <= 0 — стравливаем интегратор (всегда, независимо от HR)
-        // Скорость стравливания пропорциональна величине ошибки
+    // Стравливание: при error <= 0 ИЛИ при HR < -2 (температура падает)
+    else if (error <= 0 || state->heat_rate < -2) {
         int32_t bleed = state->integrator >> 9;
         if (bleed == 0) bleed = 1;
         state->integrator -= bleed;
@@ -129,7 +126,7 @@ uint16_t pi_reg_compute(const pi_reg_config_t *config, pi_reg_state_t *state, ui
     // ========== 4. Feedforward упреждение ==========
     int32_t predict_term = 0;
 
-    if (state->heat_rate > 0 && config->k_predict > 0) {
+    if (state->heat_rate > 1 && config->k_predict > 0) {
         int32_t predict_dist = (int32_t)config->predict_distance << 1;
 
         if (distance_to_target <= 0) {
