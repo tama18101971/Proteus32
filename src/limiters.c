@@ -19,7 +19,7 @@ void sys_init(void)
 
     led_thermal_config.predict_distance = 50; // было 120
 
-    led_thermal_config.kp = 128;        // было 48
+    led_thermal_config.kp = 12 8;        // было 48
     led_thermal_config.ki = 1;         // было 2
     led_thermal_config.k_predict = 96; // было 128
 
