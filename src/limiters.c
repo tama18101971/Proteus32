@@ -15,17 +15,17 @@ uint16_t limiter = 0;
 
 void sys_init(void)
 {
-led_thermal_config.setpoint = 375;      // Целевая полка температуры (~55°C)
-led_thermal_config.start_offset = 20;   // Порог плавного входа (за 5°C до уставки)
+led_thermal_config.setpoint = 375;      // Уставка 750 (10-бит)
+led_thermal_config.start_offset = 30;   // Работаем в зоне от 720 до 750
 
-led_thermal_config.kp = 256;            // Базовый P = 1.0 (256 / 256) — не дает мерцания
-led_thermal_config.ki = 16;             // Базовый I = 0.062 (16 / 256) — плавное накопление
-led_thermal_config.k_predict = 0;       // Строго 0 — старое упреждение отключено
+led_thermal_config.kp = 32;             // Ослабляем пропорциональный пинок (0.125)
+led_thermal_config.ki = 2;              // Тормозим интегратор в 4 раза! (0.0078)
+led_thermal_config.k_predict = 128;     // Оставляем как есть, он гасит первичный вылет
 
-led_thermal_config.max_i_term = 1500;   // Потолок интегратора
-led_thermal_config.minimum_pwm = 100;   // Защита нижнего порога ШИМ драйвера
-led_thermal_config.filter_shift = 3;    // Фильтрация АЦП (EMA по 8 выборкам)
-led_thermal_config.slew_release = 60;   // Скорость возврата яркости при остывании
+led_thermal_config.max_i_term = 2000;   
+led_thermal_config.minimum_pwm = 50;    
+led_thermal_config.filter_shift = 3;    
+led_thermal_config.slew_release = 10;
 
 pi_reg_init(&led_thermal_config, &led_thermal_state, raw_temperature_adc);
 }

@@ -85,8 +85,10 @@ uint16_t pi_reg_compute(const pi_reg_config_t *config, pi_reg_state_t *state, ui
 
         pi_term = p_term + state->integrator;
     } else {
+        // Мягкое, ОЧЕНЬ МЕДЛЕННОЕ затухание интегратора вне зоны перегрева
+        // На высокой частоте (50 Гц) сдвиг должен быть большим (например, >> 10)
         if (state->integrator > 0) {
-            int32_t bleed = state->integrator >> 5;
+            int32_t bleed = state->integrator >> 12; // Было >> 10
             if (bleed == 0) bleed = 1;
             state->integrator -= bleed;
             if (state->integrator < 0) state->integrator = 0;
