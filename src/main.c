@@ -26,7 +26,8 @@
 #include "ui.h"
 #include "adc.h"
 #include "timers.h"
-#include "pi_reg.h"
+#include "limiters.h"
+
 
 volatile wakeup_source_t wakeup_source = WS_NONE; /* Источник последнего пробуждения */
 
@@ -34,39 +35,7 @@ extern uint8_t is_sleep_mode; /* Флаг режима сна: 0 — работ�
 extern uint8_t need_save; /* Флаг необходимости сохранения EEPROM */
 
 uint8_t need_sleep = false; /* Флаг необходимости перейти в режим сна */
-uint16_t raw_temperature_adc = 271; // 25°C
-
-
-/* ============ СТРУКТУРЫ РЕГУЛЯТОРА ============ */
-
-static pi_reg_config_t led_thermal_config;
-static pi_reg_state_t  led_thermal_state;
-
-static void sys_init(void) {
-    // 1. Настройка конфигурации термоконтроля
-    led_thermal_config.setpoint     = 375;  // Целевой код АЦП (~55°C)
-    led_thermal_config.start_offset = 30;   // Начать упреждение за 15 кодов до целевой температуры
-
-    // Коэффициенты масштабированы на 256 (например, Kp = 2.0 -> 2.0 * 256 = 512)
-    led_thermal_config.kp           = 512;  // Kp = 2.0
-    led_thermal_config.ki           = 64;   // Ki = 0.25
-    led_thermal_config.k_predict    = 1024; // Kpredict = 4.0
-
-    led_thermal_config.max_i_term   = 200;
-    led_thermal_config.minimum_pwm  = 170;
-    led_thermal_config.filter_shift = 3;    // Фильтр EMA температуры по 8 выборкам
-
-    // Асимметричный шаг: гасим яркость быстро (по 3 единицы), возвращаем медленно (по 1 единице)
-    led_thermal_config.slew_attack  = 5;
-    led_thermal_config.slew_release = 2;
-    led_thermal_config.emergency_threshold = 30;
-
-    // 2. Считываем стартовое значение АЦП
-    uint16_t initial_adc = raw_temperature_adc;
-
-    // 3. Инициализируем структуру состояния регулятора
-    pi_reg_init(&led_thermal_state, &led_thermal_config, initial_adc);
-}
+extern uint16_t raw_temperature_adc; // определена в adc.c
 
 
 int main(void)
@@ -155,7 +124,6 @@ int main(void)
         if (tick_160hz())    /* ~6мс: ADC измерение + UI + softstart */
         {
             //EE_PRINTF("[MAIN] Tick 160Hz.\r\n");
-            adc_read();
             scan_ui1();
             ss_scan();
         }
@@ -163,11 +131,8 @@ int main(void)
         if (tick_50hz())     /* ~20мс: */
         {
             //EE_PRINTF("[MAIN] Tick 50Hz.\r\n");
-            uint16_t user_desired_pwm = 512;  // Максимальная мощность (без энкодера)
-
-            // Вычисляем необходимую величину ограничения мощности
-            uint16_t limiter = pi_reg_compute(&led_thermal_config, &led_thermal_state,
-                                            raw_temperature_adc, user_desired_pwm);
+            adc_read();
+            scan_limiters();
         }
 
         if (tick_5s())       /* 5с: сохранение EEPROM */

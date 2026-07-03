@@ -15,6 +15,7 @@
 #include "dac.h"
 #include "i2c.h"
 #include "timers.h"
+#include "limiters.h"
 
 #include "main.h"
 
@@ -22,7 +23,6 @@ uint8_t mode_default = DEFAULT_MODE; // режим, в котором старт
 
 uint8_t VLPT = LONG_HOLD_UI1; // переменная
 DRIVER_Mode_t driver_mode = MODE_OFF;
-// uint16_t sleep_remains;
 bool stop_bit = false;
 
 uint16_t step_tc; // step в котором драйвер светит в данный момент c учетом ТК
@@ -36,6 +36,8 @@ RUMP_Dir_t direction = DIR_UP; // 1 - up, 0 - down
 PSTEP_t ps; // храним то что было до двойного клика (включения макимума)
 
 uint8_t need_save = false;
+
+extern uint16_t limiter;
 
 
 /******************************************************************************************/
@@ -105,7 +107,7 @@ void ee_defaults(struct ee_data *e)
 
 uint16_t get_step_tc(uint16_t step)
 {
-	int16_t tc_step = (MAX_STEP - 0 /*pic.correction*/); // учитываем термоконтроль - отнимаем от заданного шага корреецию
+	int16_t tc_step = (MAX_STEP - limiter); // учитываем термоконтроль - отнимаем от заданного шага корреецию
 	uint16_t result = step <= tc_step ? step : (tc_step > 0 ? tc_step : 1);
 	//EE_PRINTF("[UI] get_step_tc step=%u tc=%u -> %u\r\n", step, tc_step, result);
 	return result;
@@ -182,7 +184,8 @@ void off_driver(uint8_t reset_step, SoftStartSpeed_t ss_speed)
 	direction = DIR_UP;
 
 	set_current(0, ss_speed);
-	// pi_control_reset(&pic);											// это для ТС
+
+	reset_limiters();											// это для ТС	!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 	if (ps.use_prev) // выполняется в случае если турбо было выключено.
 	{

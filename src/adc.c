@@ -29,7 +29,8 @@
 #include "debug.h"
 #include "config.h"
 
-uint32_t vbat_mv = 0;  /* Напряжение питания в мВ (обновляется в adc_read) */
+uint16_t vbat_mv = 0;  /* Напряжение питания в мВ (обновляется в adc_read) */
+uint16_t raw_temperature_adc = 0; // сырое значение температуры с АЦП (обновляется в adc_read)
 
 /* Таймаут циклов опроса флагов/битов АЦП (защита от зависания при сбое) */
 #define ADC_WAIT_TIMEOUT 100000
@@ -234,7 +235,7 @@ void adc_read(void)
     // Читаем результат регулярного преобразования (NTC).
     // Если случился таймаут выше, RDATAR/IDATAR1 могут содержать значение
     // от предыдущего цикла измерения — это не идеально, но не зависание.
-    uint16_t raw_temperature_adc = ADC1->RDATAR;
+    raw_temperature_adc = ADC1->RDATAR;
 
     // Читаем результат инжектированного преобразования (Vrefint)
     uint16_t vrefint_adc = ema_update(ADC1->IDATAR1);

@@ -1,59 +1,68 @@
 #include "pi_reg.h"
+#include <string.h>
 
-// Ограничение максимальной скорости изменения температуры за 1 шаг таймера (защита от шума АЦП)
-#define MAX_RAW_DT_THRESHOLD   8
+// Максимальное изменение сырого АЦП за один цикл вызова (защита от импульсных помех)
+#define MAX_ADC_DELTA_PER_CYCLE   8
+
+// Коэффициент фильтрации тренда скорости нагрева (EMA shift)
+#define HEAT_RATE_FILTER_SHIFT    3
 
 // Внутренний сдвиг для fixed-point представления heat_rate (масштаб *256)
-#define HR_SCALE_SHIFT         8
+#define HR_SCALE_SHIFT            8
 
-// Жесткие пределы безопасных значений для защиты от знакового переполнения int32_t при умножении
-#define MAX_ALLOWED_KP         4096  // Максимальный Kp = 16.0
-#define MAX_ALLOWED_KI         1024  // Максимальный Ki = 4.0
-#define MAX_ALLOWED_KPREDICT   8192  // Максимальный Kpredict = 32.0
-
-void pi_reg_init(pi_reg_state_t *state, const pi_reg_config_t *config, uint16_t initial_adc_10bit) {
-    if (!state || !config || config->filter_shift == 0 || config->filter_shift > 8) {
+void pi_reg_reset(pi_reg_state_t *state, const pi_reg_config_t *config, uint16_t initial_adc_10bit) {
+    if (!state) {
         return;
     }
-    state->filtered_temp = (uint32_t)initial_adc_10bit << config->filter_shift;
-    state->prev_temp_10bit = initial_adc_10bit;
-    state->heat_rate = 0;
-    state->integrator = 0;
-    state->last_limiter = 0;
-}
 
-/**
- * @brief Основной вычислительный цикл (вызывается каждые 20-50 мс).
- * Полностью оптимизирован, защищен от переполнений и снабжен аварийным обходом Slew Rate.
- */
-uint16_t pi_reg_compute(const pi_reg_config_t *config, pi_reg_state_t *state, uint16_t raw_adc_10bit, uint16_t user_pwm) {
-    // 0. Входной контроль (Параметры и Сдвиг). Защищает библиотеку от некорректных конфигов.
-    if (!state || !config || config->filter_shift == 0 || config->filter_shift > 8 ||
-        config->kp > MAX_ALLOWED_KP || config->ki > MAX_ALLOWED_KI || config->k_predict > MAX_ALLOWED_KPREDICT) {
-        return state ? state->last_limiter : 0;
+    // Использование sizeof(*state) защищает от ошибок при изменении имени или типа структуры
+    memset(state, 0, sizeof(*state));
+
+    if (!config || config->filter_shift == 0 || config->filter_shift > 8) {
+        return;
     }
 
-    // Вычисляем максимально возможное ограничение с учетом минимальной мощности драйвера
+    // Жесткое ограничение входного значения, если передали некорректные данные АЦП
+    uint16_t safe_adc = (initial_adc_10bit > ADC_MAX_VALUE) ? ADC_MAX_VALUE : initial_adc_10bit;
+
+    state->filtered_temp = (uint32_t)safe_adc << config->filter_shift;
+    state->prev_temp_10bit = safe_adc;
+}
+
+uint16_t pi_reg_compute(const pi_reg_config_t *config, pi_reg_state_t *state, uint16_t raw_adc_10bit, uint16_t user_pwm) {
+    // 0. Входной контроль конфигурации
+    if (!state || !config || config->filter_shift == 0 || config->filter_shift > 8 ||
+        config->kp > MAX_ALLOWED_KP || config->ki > MAX_ALLOWED_KI || 
+        config->k_predict > MAX_ALLOWED_KPREDICT || config->max_i_term > MAX_ALLOWED_MAX_I) {
+        return state ? state->current_limiter : 0;
+    }
+
+    // Защита от передачи 12-битного АЦП или случайных выбросов выше крышки шкалы
+    if (raw_adc_10bit > ADC_MAX_VALUE) {
+        raw_adc_10bit = ADC_MAX_VALUE;
+    }
+
+    // Вычисляем динамический потолок для limiter
     int32_t max_allowed_limiter = 0;
     if ((int32_t)user_pwm > (int32_t)config->minimum_pwm) {
         max_allowed_limiter = (int32_t)user_pwm - (int32_t)config->minimum_pwm;
     }
 
-    // 1. Фильтрация текущей температуры (EMA)
+    // 1. Фильтрация температуры (EMA)
     state->filtered_temp = state->filtered_temp - (state->filtered_temp >> config->filter_shift) + raw_adc_10bit;
     uint16_t current_temp_10bit = (uint16_t)(state->filtered_temp >> config->filter_shift);
 
-    // 2. Расчет тренда скорости (Честный fixed-point EMA)
+    // 2. Расчет тренда скорости изменения температуры
     int16_t raw_dT = (int16_t)current_temp_10bit - (int16_t)state->prev_temp_10bit;
     state->prev_temp_10bit = current_temp_10bit;
 
-    if (raw_dT > MAX_RAW_DT_THRESHOLD)  raw_dT = MAX_RAW_DT_THRESHOLD;
-    if (raw_dT < -MAX_RAW_DT_THRESHOLD) raw_dT = -MAX_RAW_DT_THRESHOLD;
+    if (raw_dT > MAX_ADC_DELTA_PER_CYCLE)  raw_dT = MAX_ADC_DELTA_PER_CYCLE;
+    if (raw_dT < -MAX_ADC_DELTA_PER_CYCLE) raw_dT = -MAX_ADC_DELTA_PER_CYCLE;
 
     int32_t raw_dT_fp = (int32_t)raw_dT << HR_SCALE_SHIFT;
-    state->heat_rate += (raw_dT_fp - state->heat_rate) >> 3;
+    state->heat_rate += (raw_dT_fp - state->heat_rate) >> HEAT_RATE_FILTER_SHIFT;
 
-    // 3. Вычисление ошибки статического ПИ-регулятора
+    // 3. Расчет статической ошибки ПИ-компоненты
     int32_t target_temp_10bit = (int32_t)config->setpoint << 1;
     int32_t start_temp_10bit = target_temp_10bit - ((int32_t)config->start_offset << 1);
     int32_t error = (int32_t)current_temp_10bit - start_temp_10bit;
@@ -61,46 +70,37 @@ uint16_t pi_reg_compute(const pi_reg_config_t *config, pi_reg_state_t *state, ui
     int32_t pi_term = 0;
 
     if (error > 0) {
-        // Ограничение ошибки для 10-битного АЦП. Гарантирует абсолютную безопасность p_term.
-        int32_t clipped_error = (error > 1023) ? 1023 : error;
-
+        int32_t clipped_error = (error > (int32_t)ADC_MAX_VALUE) ? (int32_t)ADC_MAX_VALUE : error;
         int32_t p_term = clipped_error * (int32_t)config->kp;
 
-        // Расчет delta_i и сложение математически прозрачны и 100% безопасны
         int32_t delta_i = clipped_error * (int32_t)config->ki;
         int32_t new_integrator = state->integrator + delta_i;
 
-        // Насыщение интегратора по заданному пользователем потолку
         int32_t max_i_scaled = (int32_t)config->max_i_term << PI_SCALE_SHIFT;
         if (new_integrator > max_i_scaled) {
             new_integrator = max_i_scaled;
         }
 
-        // Оцениваем, какой стала бы PI-составляющая ограничения с новым потенциальным интегратором
-        int32_t estimated_pi_limiter = (p_term + new_integrator) >> PI_SCALE_SHIFT;
-
-        // Если мы не уперлись в физический потолок мощности, разрешаем обновление интегратора (Anti-Windup)
-        if (estimated_pi_limiter < max_allowed_limiter) {
+        // Улучшенный Anti-Windup: предотвращает ложное отсекание при нулевом или минимальном ШИМ
+        if (max_allowed_limiter > 0 && state->current_limiter >= max_allowed_limiter) {
+            // Регулятор уже выжал максимум из доступного диапазона — фиксируем И-составляющую
+        } else {
             state->integrator = new_integrator;
         }
 
         pi_term = p_term + state->integrator;
     } else {
-        // Математически красивый Bleeding без мертвых зон
+        // Мягкое затухание интегратора вне зоны перегрева
         if (state->integrator > 0) {
             int32_t bleed = state->integrator >> 5;
-            if (bleed == 0) {
-                bleed = 1;
-            }
+            if (bleed == 0) bleed = 1;
             state->integrator -= bleed;
-            if (state->integrator < 0) {
-                state->integrator = 0;
-            }
+            if (state->integrator < 0) state->integrator = 0;
         }
         pi_term = state->integrator;
     }
 
-    // 4. Расчет динамического упреждения Feedforward с защитой от деления на ноль
+    // 4. Расчет Feedforward упреждения
     int32_t predict_term = 0;
     int32_t start_offset_10bit = (int32_t)config->start_offset << 1;
 
@@ -117,54 +117,26 @@ uint16_t pi_reg_compute(const pi_reg_config_t *config, pi_reg_state_t *state, ui
         }
     }
 
-    // 5. Итоговое целевое ограничение мощности
+    // 5. Формирование целевого лимитера
     int32_t target_limiter = (pi_term + predict_term) >> PI_SCALE_SHIFT;
 
-    // Ограничение диапазонов target_limiter относительно физического насыщения
-    if (target_limiter > max_allowed_limiter) {
-        target_limiter = max_allowed_limiter;
-    }
-    if (target_limiter < 0) {
-        target_limiter = 0;
-    }
+    if (target_limiter > max_allowed_limiter) target_limiter = max_allowed_limiter;
+    if (target_limiter < 0)                   target_limiter = 0;
 
-    // 6. Асимметричный Slew Rate Limiter с аварийным обходом (Emergency Bypass)
-    int32_t current_limiter = (int32_t)state->last_limiter;
+    // 6. Асимметричная скорость реакции (Мгновенный сброс / плавный возврат яркости)
+    int32_t working_limiter = (int32_t)state->current_limiter;
 
-    // Проверяем критический перегрев: если температура сильно выше уставки,
-    // отключаем плавность Slew Rate ради спасения кристалла светодиода
-    if (error > (int32_t)config->emergency_threshold) {
-        current_limiter = target_limiter;
-    }
-    else if (error <= 0 && predict_term == 0) {
-        // Режим мягкого остывания (штатный)
-        if (current_limiter > (int32_t)config->slew_release) {
-            current_limiter -= (int32_t)config->slew_release;
-        } else {
-            current_limiter = 0;
-        }
+    if (target_limiter > working_limiter) {
+        working_limiter = target_limiter;
     } else {
-        // Штатный режим изменения мощности (работает ограничение скорости 5-10 секунд)
-        int32_t limiter_diff = target_limiter - current_limiter;
-
-        if (limiter_diff > 0) {
-            // Мощность нужно увеличить (target > current) -> slew_attack
-            if (limiter_diff > (int32_t)config->slew_attack) {
-                current_limiter += (int32_t)config->slew_attack;
-            } else {
-                current_limiter = target_limiter;
-            }
-        } else if (limiter_diff < 0) {
-            // Мощность возвращается (Limiter падает) -> slew_release
-            if (limiter_diff < -(int32_t)config->slew_release) {
-                current_limiter -= (int32_t)config->slew_release;
-            } else {
-                current_limiter = target_limiter;
-            }
+        int32_t diff = working_limiter - target_limiter;
+        if (diff > (int32_t)config->slew_release) {
+            working_limiter -= (int32_t)config->slew_release;
+        } else {
+            working_limiter = target_limiter;
         }
     }
 
-    state->last_limiter = (uint16_t)current_limiter;
-    return state->last_limiter;
+    state->current_limiter = (uint16_t)working_limiter;
+    return state->current_limiter;
 }
-
