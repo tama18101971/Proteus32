@@ -79,6 +79,8 @@ int main(void)
 
     /* Интервалы таймеров (аналог millis в Arduino) */
 
+    reset_limiters(); // Сброс ограничителей
+
     while (1)
     {
         // wakeup_source_t ws = WS_NONE;
@@ -130,21 +132,32 @@ int main(void)
             scan_limiters();
         }
 
+        if (tick_2hz()) /* 500мс: */
+        {
+            // EE_PRINTF("[MAIN] Tick 2Hz.\r\n");
+            /*             EE_PRINTF("T:%d | E:%d | P:%d | I:%d | Pred:%d | Lim:%d | Temp: %d.%d C\r\n",
+                            dbg_data.temp,
+                            dbg_data.error,
+                            (int)(dbg_data.p_term >> 8),   // или делить на 256
+                            (int)(dbg_data.i_term >> 8),
+                            (int)(dbg_data.predict >> 8),
+                            dbg_data.limiter,
+                            temperature_c / 10, temperature_c % 10);
+             */
+
+            // Печать лога
+            EE_PRINTF("T:%d F:%ld I:%ld L:%d\n",
+                   raw_temperature_adc,
+                   (long)(led_thermal_state.filtered_temp >> 3),
+                   (long)(led_thermal_state.integrator >> 8),
+                   limiter);
+        }
+
         if (tick_5s()) /* 5с: сохранение EEPROM */
         {
             // EE_PRINTF("[MAIN] Tick 5 Sec.\r\n");
             handle_ee();
             // need_sleep = true;
-
-            // Выводим в UART (значения P, I, Predict делим на 256 для удобства анализа в реальных единицах ШИМ)
-            EE_PRINTF("T:%u | E:%ld | HR:%ld | P:%ld | I:%ld | Pred:%ld | Lim:%u\r\n",
-                   dbg_data.temp,
-                   dbg_data.error,
-                   dbg_data.heat_rate >> HR_SCALE_SHIFT, // Переводим скорость в "коды АЦП/шаг"
-                   dbg_data.p_term >> PI_SCALE_SHIFT,
-                   dbg_data.i_term >> PI_SCALE_SHIFT,
-                   dbg_data.predict >> PI_SCALE_SHIFT,
-                   dbg_data.limiter);
         }
     }
 }

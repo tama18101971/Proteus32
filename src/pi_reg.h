@@ -15,16 +15,6 @@
 #define PI_SCALE_SHIFT          8
 #define PI_SCALE_FACTOR         (1 << PI_SCALE_SHIFT)
 
-// Максимальное изменение сырого АЦП за один цикл вызова (защита от импульсных помех)
-#define MAX_ADC_DELTA_PER_CYCLE   8
-
-// Коэффициент фильтрации тренда скорости нагрева (EMA shift)
-#define HEAT_RATE_FILTER_SHIFT    3
-
-// Внутренний сдвиг для fixed-point представления heat_rate (масштаб *256)
-#define HR_SCALE_SHIFT            8
-
-
 /**
  * @brief Структура конфигурации терморегулятора.
  */
@@ -41,7 +31,7 @@ typedef struct {
 } pi_reg_config_t;
 
 /**
- * @brief Структура динамического состояния регулятора (RAM: 16 байт).
+ * @brief Структура динамического состояния регулятора (с полями отладки).
  */
 typedef struct {
     uint32_t filtered_temp;     // Хранилище EMA фильтра температуры (10 бит << filter_shift)
@@ -49,29 +39,18 @@ typedef struct {
     uint16_t prev_temp_10bit;   // Температура на прошлом шаге для расчета dT
     int32_t  integrator;        // Интегральная сумма ошибок (*256)
     uint16_t current_limiter;   // Текущее значение ограничения
+
+    // --- ПОЛЯ ОТЛАДКИ ---
+    int16_t  error;             // Текущая статическая ошибка (коды АЦП)
+    uint16_t p_term_out;        // Пропорциональная часть в масштабе ШИМ
+    uint16_t i_term_out;        // Интегральная часть в масштабе ШИМ
+    uint16_t predict_term_out;  // Компонента упреждения в масштабе ШИМ
 } pi_reg_state_t;
-
-/**
- * @brief Структура для съема внутренних параметров регулятора (только для отладки).
- */
-typedef struct {
-    uint16_t temp;          // Текущая отфильтрованная температура (10 бит)
-    int32_t  error;         // Текущая статическая ошибка
-    int32_t  heat_rate;     // Отфильтрованный тренд скорости (*256)
-    int32_t  p_term;        // Пропорциональная составляющая (до сдвига SCALE)
-    int32_t  i_term;        // Интегральная составляющая (до сдвига SCALE)
-    int32_t  predict;       // Компонента упреждения Feedforward (до сдвига SCALE)
-    uint16_t limiter;       // Итоговое ограничение ШИМ
-} pi_reg_debug_t;
-
 
 void pi_reg_reset(const pi_reg_config_t *config, pi_reg_state_t *state, uint16_t initial_adc_10bit);
 
-/**
- * @brief Макрос обратной совместимости. Использование sizeof(*state) гарантирует безопасность.
- */
 #define pi_reg_init(config, state, initial_adc_10bit) pi_reg_reset(config, state, initial_adc_10bit)
 
-uint16_t pi_reg_compute(const pi_reg_config_t *config, pi_reg_state_t *state, uint16_t raw_adc_10bit, uint16_t user_pwm, pi_reg_debug_t *dbg);
+uint16_t pi_reg_compute(const pi_reg_config_t *config, pi_reg_state_t *state, uint16_t raw_adc_10bit, uint16_t user_pwm);
 
 #endif /* PI_REG_H */

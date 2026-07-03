@@ -40,6 +40,7 @@ void     ema_init(uint16_t seed);
 uint16_t ema_update(uint16_t raw);
 
 extern uint16_t vbat_mv;  /* Напряжение питания в мВ */
+extern int16_t temperature_c;
 extern uint16_t raw_temperature_adc; /* Сырое значение температуры с АЦП */
 
 uint8_t bat_get_flashes(void);  /* Количество вспышек по заряду батареи (0..6) */

@@ -42,6 +42,7 @@ uint8_t need_save = false;
 void ON_POWER()
 {
 	EE_PRINTF("[UI] ON POWER.\r\n");
+	reset_limiters();
 	dac_pwrpin_on();
 	i2c_init(I2C_SPEED_400K);
 	for (volatile uint32_t i = 0; i < 24000; i++);  /* ~5мс — время включения DAC7571 */
@@ -98,7 +99,7 @@ void ee_defaults(struct ee_data *e)
 
 uint16_t get_step_tc(uint16_t step)
 {
-	int16_t tc_step = (MAX_STEP - limiter); // учитываем термоконтроль - отнимаем от заданного шага корреецию
+	int16_t tc_step = (MAX_STEP - 0); // учитываем термоконтроль - отнимаем от заданного шага корреецию
 	uint16_t result = step <= tc_step ? step : (tc_step > 0 ? tc_step : 1);
 	//EE_PRINTF("[UI] get_step_tc step=%u tc=%u -> %u\r\n", step, tc_step, result);
 	return result;
@@ -137,7 +138,7 @@ uint16_t getBright_CRT_9to12Bit(uint16_t val) {
 void out_set_stc(uint16_t step)
 {
 	uint16_t out = getBright_CRT_9to12Bit(step) + get_min_level(step);
-	//if (out > 4095) out = 4095;		// не удалять, блин - надо! С новым I2C не надо
+	if (out > 4095) out = 4095;		// не удалять, блин - надо! 
 	//EE_PRINTF("[UI] out_set_stc step=%u out=%u\r\n", step, out);
 	dac7571_set_voltage(out);
 }

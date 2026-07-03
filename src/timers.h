@@ -27,6 +27,7 @@ void tim2_stop(void);
 
 bool tick_160hz(void);
 bool tick_50hz(void);
+bool tick_2hz(void);
 bool tick_5s(void);
 void tick_5s_reset(void);
 

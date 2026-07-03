@@ -26,6 +26,7 @@
 #include "config.h"
 
 uint16_t vbat_mv = 0;  /* Напряжение питания в мВ (обновляется в adc_read) */
+int16_t temperature_c = 0;
 uint16_t raw_temperature_adc = 0; // сырое значение температуры с АЦП (обновляется в adc_read)
 
 /* Таймаут циклов опроса флагов/битов АЦП (защита от зависания при сбое) */
@@ -243,12 +244,12 @@ void adc_read(void)
     vbat_mv = (1200 * 1024) / vrefint_adc;
 
     // Расчет температуры по таблице
-    int16_t temperature = calc_temperature(raw_temperature_adc);
+    temperature_c = calc_temperature(raw_temperature_adc);
 
 #ifdef PRINT_ADC
     // Выводим результат
     EE_PRINTF("%04d, %04d -> Vbat: %ld mV | Temp: %d.%d C\r\n",
-              vrefint_adc, raw_temperature_adc, vbat_mv, temperature / 10, temperature % 10);
+              vrefint_adc, raw_temperature_adc, vbat_mv, temperature_c / 10, temperature_c % 10);
 #endif
 }
 
