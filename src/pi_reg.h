@@ -15,6 +15,16 @@
 #define PI_SCALE_SHIFT          8
 #define PI_SCALE_FACTOR         (1 << PI_SCALE_SHIFT)
 
+// Максимальное изменение сырого АЦП за один цикл вызова (защита от импульсных помех)
+#define MAX_ADC_DELTA_PER_CYCLE   8
+
+// Коэффициент фильтрации тренда скорости нагрева (EMA shift)
+#define HEAT_RATE_FILTER_SHIFT    3
+
+// Внутренний сдвиг для fixed-point представления heat_rate (масштаб *256)
+#define HR_SCALE_SHIFT            8
+
+
 /**
  * @brief Структура конфигурации терморегулятора.
  */
@@ -41,6 +51,20 @@ typedef struct {
     uint16_t current_limiter;   // Текущее значение ограничения
 } pi_reg_state_t;
 
+/**
+ * @brief Структура для съема внутренних параметров регулятора (только для отладки).
+ */
+typedef struct {
+    uint16_t temp;          // Текущая отфильтрованная температура (10 бит)
+    int32_t  error;         // Текущая статическая ошибка
+    int32_t  heat_rate;     // Отфильтрованный тренд скорости (*256)
+    int32_t  p_term;        // Пропорциональная составляющая (до сдвига SCALE)
+    int32_t  i_term;        // Интегральная составляющая (до сдвига SCALE)
+    int32_t  predict;       // Компонента упреждения Feedforward (до сдвига SCALE)
+    uint16_t limiter;       // Итоговое ограничение ШИМ
+} pi_reg_debug_t;
+
+
 void pi_reg_reset(const pi_reg_config_t *config, pi_reg_state_t *state, uint16_t initial_adc_10bit);
 
 /**
@@ -48,6 +72,6 @@ void pi_reg_reset(const pi_reg_config_t *config, pi_reg_state_t *state, uint16_t
  */
 #define pi_reg_init(config, state, initial_adc_10bit) pi_reg_reset(config, state, initial_adc_10bit)
 
-uint16_t pi_reg_compute(const pi_reg_config_t *config, pi_reg_state_t *state, uint16_t raw_adc_10bit, uint16_t user_pwm);
+uint16_t pi_reg_compute(const pi_reg_config_t *config, pi_reg_state_t *state, uint16_t raw_adc_10bit, uint16_t user_pwm, pi_reg_debug_t *dbg);
 
 #endif /* PI_REG_H */

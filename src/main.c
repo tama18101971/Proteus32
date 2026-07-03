@@ -27,12 +27,11 @@
 #include "adc.h"
 #include "timers.h"
 #include "limiters.h"
-
+#include "pi_reg.h"
 
 volatile wakeup_source_t wakeup_source = WS_NONE; /* Источник последнего пробуждения */
 
 uint8_t need_sleep = false; /* Флаг необходимости перейти в режим сна */
-
 
 int main(void)
 {
@@ -51,18 +50,18 @@ int main(void)
 
     sys_init();
 
-    AWU_init();         /* Включение PWR + LSI генератора */
-    AWU_int_init();     /* Настройка EXTI Line9 + NVIC */
+    AWU_init();              /* Включение PWR + LSI генератора */
+    AWU_int_init();          /* Настройка EXTI Line9 + NVIC */
     AWU_set_delay(AWU_15MS); /* Начальная задержка AWU */
 
-    led_init();         /* Инициализация GPIO для LED */
-    button_init();      /* Инициализация EXTI для кнопки */
+    led_init();    /* Инициализация GPIO для LED */
+    button_init(); /* Инициализация EXTI для кнопки */
 
-    adc_init();         /* Инициализация АЦП (NTC + Vrefint) */
+    adc_init(); /* Инициализация АЦП (NTC + Vrefint) */
 
     /* DAC + I2C */
-    dac_pwrpin_init();  // настраиваем ногу для управления питанием.
-    dac_pwrpin_on();    // включаем питание DAC
+    dac_pwrpin_init(); // настраиваем ногу для управления питанием.
+    dac_pwrpin_on();   // включаем питание DAC
     i2c_init(I2C_SPEED_400K);
     dac7571_set_voltage(0);
 
@@ -75,19 +74,19 @@ int main(void)
     // start_aux_array(buf_sos_red, AWU_120MS); /* Запуск тестового массива мигания */
 
     start_aux_beacon();
-    
-    need_sleep = true; 
+
+    need_sleep = true;
 
     /* Интервалы таймеров (аналог millis в Arduino) */
 
     while (1)
     {
-        //wakeup_source_t ws = WS_NONE;
+        // wakeup_source_t ws = WS_NONE;
 
         /* 1. Сон: останавливаем ADC и TIM2, засыпаем в STANDBY */
         if (need_sleep)
         {
-            //EE_PRINTF("[MAIN] Entering sleep mode...\r\n");
+            // EE_PRINTF("[MAIN] Entering sleep mode...\r\n");
             adc_stop();
             tim2_stop();
             start_aux_beacon();
@@ -97,7 +96,7 @@ int main(void)
         /* 2. Пробуждение по кнопке: восстанавливаем периферию */
         if ((wakeup_source == WS_BUTTON) && is_sleep_mode)
         {
-            //EE_PRINTF("[MAIN] Event source: BUTTON.\r\n");
+            // EE_PRINTF("[MAIN] Event source: BUTTON.\r\n");
             is_sleep_mode = false;
             need_sleep = false;
             wakeup_source = WS_NONE;
@@ -111,31 +110,41 @@ int main(void)
         /* 3. Пробуждение по AWU: обрабатываем AUX-команды */
         if (wakeup_source == WS_AWU)
         {
-           // EE_PRINTF("[MAIN] Event source: AWU.\r\n");
+            // EE_PRINTF("[MAIN] Event source: AWU.\r\n");
             wakeup_source = WS_NONE;
             handle_aux();
         }
 
         /* 4. Таймерные задачи (выполняются пока need_sleep == false) */
-        if (tick_160hz())    /* ~6мс: ADC измерение + UI + softstart */
+        if (tick_160hz()) /* ~6мс: ADC измерение + UI + softstart */
         {
-            //EE_PRINTF("[MAIN] Tick 160Hz.\r\n");
+            // EE_PRINTF("[MAIN] Tick 160Hz.\r\n");
             scan_ui1();
             ss_scan();
         }
 
-        if (tick_50hz())     /* ~20мс: */
+        if (tick_50hz()) /* ~20мс: */
         {
-            //EE_PRINTF("[MAIN] Tick 50Hz.\r\n");
+            // EE_PRINTF("[MAIN] Tick 50Hz.\r\n");
             adc_read();
             scan_limiters();
         }
 
-        if (tick_5s())       /* 5с: сохранение EEPROM */
+        if (tick_5s()) /* 5с: сохранение EEPROM */
         {
-            //EE_PRINTF("[MAIN] Tick 5 Sec.\r\n");
+            // EE_PRINTF("[MAIN] Tick 5 Sec.\r\n");
             handle_ee();
-            need_sleep = true;
+            // need_sleep = true;
+
+            // Выводим в UART (значения P, I, Predict делим на 256 для удобства анализа в реальных единицах ШИМ)
+            EE_PRINTF("T:%u | E:%ld | HR:%ld | P:%ld | I:%ld | Pred:%ld | Lim:%u\r\n",
+                   dbg_data.temp,
+                   dbg_data.error,
+                   dbg_data.heat_rate >> HR_SCALE_SHIFT, // Переводим скорость в "коды АЦП/шаг"
+                   dbg_data.p_term >> PI_SCALE_SHIFT,
+                   dbg_data.i_term >> PI_SCALE_SHIFT,
+                   dbg_data.predict >> PI_SCALE_SHIFT,
+                   dbg_data.limiter);
         }
     }
 }

@@ -4,6 +4,9 @@
 #include "limiters.h"
 #include "wl_flash.h"
 
+
+pi_reg_debug_t dbg_data;
+
 /* ============ СТРУКТУРЫ РЕГУЛЯТОРА ============ */
 
 static pi_reg_config_t led_thermal_config;
@@ -46,7 +49,7 @@ void scan_limiters(void)
     //pic.correction = (uint8_t)ABS(pi_control(&pic, calibr - exact_temperature(temperature))); // вычисляем коррекцию.
 
     // Вычисляем необходимую величину ограничения мощности
-    limiter = pi_reg_compute(&led_thermal_config, &led_thermal_state, raw_temperature_adc, step_user);
+    limiter = pi_reg_compute(&led_thermal_config, &led_thermal_state, raw_temperature_adc, step_user, &dbg_data);
 
     if (old_correction != limiter)
     {

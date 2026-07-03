@@ -1,14 +1,6 @@
 #include "pi_reg.h"
 #include <string.h>
 
-// Максимальное изменение сырого АЦП за один цикл вызова (защита от импульсных помех)
-#define MAX_ADC_DELTA_PER_CYCLE   8
-
-// Коэффициент фильтрации тренда скорости нагрева (EMA shift)
-#define HEAT_RATE_FILTER_SHIFT    3
-
-// Внутренний сдвиг для fixed-point представления heat_rate (масштаб *256)
-#define HR_SCALE_SHIFT            8
 
 void pi_reg_reset(const pi_reg_config_t *config, pi_reg_state_t *state, uint16_t initial_adc_10bit) {
     if (!state) {
@@ -29,7 +21,7 @@ void pi_reg_reset(const pi_reg_config_t *config, pi_reg_state_t *state, uint16_t
     state->prev_temp_10bit = safe_adc;
 }
 
-uint16_t pi_reg_compute(const pi_reg_config_t *config, pi_reg_state_t *state, uint16_t raw_adc_10bit, uint16_t user_pwm) {
+uint16_t pi_reg_compute(const pi_reg_config_t *config, pi_reg_state_t *state, uint16_t raw_adc_10bit, uint16_t user_pwm, pi_reg_debug_t *dbg) {
     // 0. Входной контроль конфигурации
     if (!state || !config || config->filter_shift == 0 || config->filter_shift > 8 ||
         config->kp > MAX_ALLOWED_KP || config->ki > MAX_ALLOWED_KI || 
@@ -122,6 +114,19 @@ uint16_t pi_reg_compute(const pi_reg_config_t *config, pi_reg_state_t *state, ui
 
     if (target_limiter > max_allowed_limiter) target_limiter = max_allowed_limiter;
     if (target_limiter < 0)                   target_limiter = 0;
+
+/* ================== ВСТАВКА ДЛЯ ОТЛАДКИ НАЧАЛО ================== */
+    if (dbg) {
+        dbg->temp = current_temp_10bit;
+        dbg->error = error;
+        dbg->heat_rate = state->heat_rate;
+        // Пересчитываем чистый P_term для отладки (так как в pi_term уже сидит сумма P + I)
+        dbg->p_term = (error > 0) ? (error * (int32_t)config->kp) : 0;
+        dbg->i_term = state->integrator;
+        dbg->predict = predict_term;
+        dbg->limiter = (uint16_t)target_limiter; // Записываем то, что ХОЧЕТ регулятор
+    }
+    /* =================== ВСТАВКА ДЛЯ ОТЛАДКИ КОНЕЦ =================== */
 
     // 6. Асимметричная скорость реакции (Мгновенный сброс / плавный возврат яркости)
     int32_t working_limiter = (int32_t)state->current_limiter;
