@@ -125,7 +125,7 @@ int main(void)
             ss_scan();
         }
 
-        if (tick_50hz()) /* ~20мс: */
+        if (tick_30hz()) /* ~33мс: */
         {
             // EE_PRINTF("[MAIN] Tick 50Hz.\r\n");
             adc_read();
@@ -146,11 +146,14 @@ int main(void)
              */
 
             // Печать лога
-            EE_PRINTF("T:%d F:%ld I:%ld L:%d\n",
-                   raw_temperature_adc,
-                   (long)(led_thermal_state.filtered_temp >> 3),
-                   (long)(led_thermal_state.integrator >> 8),
-                   limiter);
+            EE_PRINTF("T:%u E:%d HR:%ld P:%u I:%u PR:%u L:%u\r\n",
+                   led_thermal_state.current_temp_10bit,
+                   led_thermal_state.error,
+                   (long)led_thermal_state.heat_rate,
+                   led_thermal_state.p_term_out,
+                   led_thermal_state.i_term_out,
+                   led_thermal_state.predict_term_out,
+                   led_thermal_state.current_limiter);
         }
 
         if (tick_5s()) /* 5с: сохранение EEPROM */
