@@ -19,13 +19,8 @@
  */
 
 #include "awu.h"
-#include <stdint.h>
-#include <stdbool.h>
-#include "ch32v00x.h"
-#include "system_ch32v00x.h"
-#include "debug.h"
 #include "config.h"
-#include "button_gpio.h"
+#include "debug.h"
 
 uint8_t is_sleep_mode = false;
 

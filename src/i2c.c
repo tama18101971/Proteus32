@@ -3,7 +3,6 @@
  */
 
 #include "i2c.h"
-#include "ch32v00x.h"
 
 /* RCC: включение тактирования периферии */
 #define RCC_APB2PCENR_IOPCEN  (1 << 4)   /* GPIOC clock enable */

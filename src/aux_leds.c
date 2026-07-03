@@ -33,12 +33,9 @@
 
 #include "aux_leds.h"
 #include "main.h"
-#include "button_gpio.h"
 #include "led_gpio.h"
 #include "wl_flash.h"
 #include "adc.h"
-#include "ch32v00x.h"
-#include "system_ch32v00x.h"
 
 uint8_t vwarning = VWARNING_NONE;			// Текущий уровень предупреждения о напряжении
 uint8_t vwarning_old = VWARNING_NONE;		// Предыдущий уровень (для отслеживания изменений)

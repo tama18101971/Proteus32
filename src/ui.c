@@ -6,14 +6,12 @@
  */
 
 #include <stdbool.h>
-#include "debug.h"
 
 #include "ui.h"
 #include "array.h"
 #include "aux_leds.h"
 #include "wl_flash.h"
 #include "dac.h"
-#include "i2c.h"
 #include "timers.h"
 #include "limiters.h"
 

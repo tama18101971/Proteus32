@@ -1,11 +1,10 @@
 /* ============================================================
  * wl_flash.c — EEPROM-эмуляция во flash для CH32V003
  * ============================================================ */
-#include "wl_flash.h"       
-#include "ch32v00x.h"       
-#include <string.h>          
-#include "main.h"  
-#include "config.h"
+#include "wl_flash.h"
+#include "ch32v00x.h"
+#include <string.h>
+#include "main.h"
 #include "ui.h"
 
 // Гарантируем наличие флага аппаратной ошибки выравнивания/программирования для CH32V003

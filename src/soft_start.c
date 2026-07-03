@@ -17,7 +17,7 @@
  *   Через 100 вызовов: position = 300, enable = false
  */
 
-#include "stdbool.h"
+#include <stdbool.h>
 #include "soft_start.h"
 #include "ui.h"
 #include "config.h"

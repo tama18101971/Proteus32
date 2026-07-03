@@ -1,7 +1,6 @@
 #include "button_gpio.h"
 #include "ch32v003_gpio.h"
 #include "awu.h"
-#include "config.h"
 
 /*
  * button_gpio.c — Реализация обработчика кнопки (EXTI Line3)

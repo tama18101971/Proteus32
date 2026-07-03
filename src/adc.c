@@ -23,10 +23,6 @@
 
 #include "adc.h"
 #include "ch32v00x.h"
-#include "ch32v00x_adc.h"
-#include "ch32v00x_rcc.h"
-#include "ch32v00x_gpio.h"
-#include "debug.h"
 #include "config.h"
 
 uint16_t vbat_mv = 0;  /* Напряжение питания в мВ (обновляется в adc_read) */
