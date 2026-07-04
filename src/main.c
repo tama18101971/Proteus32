@@ -27,11 +27,12 @@
 #include "adc.h"
 #include "timers.h"
 #include "limiters.h"
-#include "pi_reg.h"
 
 volatile wakeup_source_t wakeup_source = WS_NONE; /* Источник последнего пробуждения */
 
 uint8_t need_sleep = false; /* Флаг необходимости перейти в режим сна */
+
+int16_t error; /* Текущая ошибка (filtered - setpoint) */
 
 int main(void)
 {
@@ -49,6 +50,11 @@ int main(void)
     EE_PRINTF("\r\n[MAIN] Boot...\r\n");
 
     sys_init();
+
+    /* Приветственное сообщение */
+    EE_PRINTF("\r\nthermal_limiter started\r\n");
+    EE_PRINTF("setpoint=%d Kp=%d Ki=%d max=%d\r\n",
+              config.temp_setpoint, config.Kp, config.Ki, config.max_limit);
 
     AWU_init();              /* Включение PWR + LSI генератора */
     AWU_int_init();          /* Настройка EXTI Line9 + NVIC */
@@ -135,25 +141,13 @@ int main(void)
         if (tick_2hz()) /* 500мс: */
         {
             // EE_PRINTF("[MAIN] Tick 2Hz.\r\n");
-            /*             EE_PRINTF("T:%d | E:%d | P:%d | I:%d | Pred:%d | Lim:%d | Temp: %d.%d C\r\n",
-                            dbg_data.temp,
-                            dbg_data.error,
-                            (int)(dbg_data.p_term >> 8),   // или делить на 256
-                            (int)(dbg_data.i_term >> 8),
-                            (int)(dbg_data.predict >> 8),
-                            dbg_data.limiter,
-                            temperature_c / 10, temperature_c % 10);
-             */
+            /* Вычислить ошибку для отладочного вывода */
+            error = state.filtered_temp - (int16_t)config.temp_setpoint;
 
-            // Печать лога
-            EE_PRINTF("T:%u E:%d HR:%ld P:%u I:%u PR:%u L:%u\r\n",
-                   led_thermal_state.current_temp_10bit,
-                   led_thermal_state.error,
-                   (long)led_thermal_state.heat_rate,
-                   led_thermal_state.p_term_out,
-                   led_thermal_state.i_term_out,
-                   led_thermal_state.predict_term_out,
-                   led_thermal_state.current_limiter);
+            /* Формат: T=сырой F=фильтр E=ошибка I=интегратор L=limiter P=P_term */
+            EE_PRINTF("T=%d F=%d E=%d I=%ld L=%ld P=%ld\r\n",
+                      raw_temperature_adc, state.filtered_temp, error,
+                      (long)state.integral, (long)limiter, (long)state.p_term_out);
         }
 
         if (tick_5s()) /* 5с: сохранение EEPROM */

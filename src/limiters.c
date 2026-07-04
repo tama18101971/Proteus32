@@ -1,37 +1,30 @@
 #include "adc.h"
 #include "ui.h"
-#include "pi_reg.h"
 #include "limiters.h"
 #include "wl_flash.h"
 #include "config.h"
 
 /* ============ СТРУКТУРЫ РЕГУЛЯТОРА ============ */
 
-static pi_reg_config_t led_thermal_config;
-pi_reg_state_t led_thermal_state;
+ThermalLimiterState  state;
+ThermalLimiterConfig config = {
+    .temp_setpoint = 700,    /* Заданная температура (код АЦП) */
+    .Kp            = 64,     /* Коэффициент P (реальное 0.25) */
+    .Ki            = 2,      /* Коэффициент I (реальное 0.008) */
+    .I_max         = 26000,  /* Ограничение интегратора */
+    .rate_warm     = 3,      /* Скорость гашения (быстро) */
+    .rate_cool     = 2,      /* Скорость восстановления (медленно) */
+    .max_limit     = 511,    /* Макс. limiter (9 бит) */
+    .filter_shift  = 3,      /* IIR: tau = 8 выборок = 0.26 сек */
+    .ntc_upper_leg = 1       /* NTC в верхнем плече делителя */
+};
 
 uint16_t limiter = 0;
 
 void sys_init(void)
 {
-    led_thermal_config.setpoint = 375;
-    led_thermal_config.start_offset = 60;
-
-    led_thermal_config.predict_distance = 50; // было 120
-
-    led_thermal_config.kp = 12 8;        // было 48
-    led_thermal_config.ki = 1;         // было 2
-    led_thermal_config.k_predict = 96; // было 128
-
-    led_thermal_config.max_i_term = 1200; // было 2000
-
-    led_thermal_config.minimum_pwm = 50;
-    led_thermal_config.filter_shift = 3;
-
-    led_thermal_config.slew_rise = 1;
-    led_thermal_config.slew_release = 10;
-
-    pi_reg_init(&led_thermal_config, &led_thermal_state, raw_temperature_adc);
+    /* Инициализация регулятора (обнуление состояния) */
+    ThermalLimiter_Init(&state, &config);
 }
 
 void scan_limiters(void)
@@ -43,7 +36,10 @@ void scan_limiters(void)
     if (driver_mode < MODE_ON)
         return;
 
-    limiter = pi_reg_compute(&led_thermal_config, &led_thermal_state, raw_temperature_adc, step_user);
+    /* Шаг 2: Вызвать регулятор → получить limiter
+        * limiter = 0..user_pwm
+        * pwm_out = user_pwm - limiter (пользователь управляет ШИМ) */
+    limiter = ThermalLimiter_Update(&state, &config, raw_temperature_adc, step_user);
 
     if (old_correction != limiter)
     {
@@ -65,5 +61,6 @@ void scan_limiters(void)
 
 void reset_limiters(void)
 {
-    pi_reg_reset(&led_thermal_config, &led_thermal_state, raw_temperature_adc);
+    ThermalLimiter_Reset(&state);
+    limiter = 0;
 }

@@ -6,13 +6,14 @@
  *
  */
 
-#include "pi_reg.h"
+#include "thermal_limiter.h"
 
 void sys_init(void);
 void scan_limiters(void);
 void reset_limiters(void);
 
 extern uint16_t limiter;
-extern pi_reg_state_t led_thermal_state;
+extern ThermalLimiterState  state;
+extern ThermalLimiterConfig config;
 
 #endif /* LIMITERS_H */
