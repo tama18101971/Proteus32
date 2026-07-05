@@ -28,34 +28,37 @@
 /* ------------------------------------------------------------------------ */
 
 /**
- * @brief Shared zero-mult decimation gate: fires (returns non-zero) only
- *        once every `2^shift` ticks - a free-running counter plus a single
+ * @brief Zero-mult decimation gate: fires (returns non-zero) only once
+ *        every `2^shift` ticks - a free-running counter plus a single
  *        bitmask `AND`, no multiply/divide. `shift==0` fires every tick.
  *
- *        Reused for two independent purposes with two independent shift
- *        values sharing the same free-running counter (that's fine - it's
- *        just a shared clock, gating different actions at different
- *        cadences is a standard technique, like deriving several slow
- *        enables off one hardware timer):
- *          - charge_integral() gates on config->ki_decimation_shift.
+ *        Takes a pointer to the CALLER-CHOSEN counter field rather than
+ *        the whole state, so two independent gates with two independent
+ *        shifts never share one counter:
+ *          - charge_integral() gates on state->ki_tick_counter /
+ *            config->ki_decimation_shift.
  *          - The Zone 2 overheat-latch leak gates on
- *            config->overheat_leak_decimation_shift (see
- *            THERMAL_FLAG_OVERHEAT_LATCH / Zone 2 below) - this MUST be a
- *            separate, independently tunable cadence from the charge one:
- *            THERMAL_OVERHEAT_LATCH_LEAK_SHIFT's per-fire amount is already
- *            floored to a fixed ~1 unit for the whole realistic integral
- *            range, so the fire *rate* here is the only remaining knob for
- *            how fast a past overheat is "forgotten".
+ *            state->leak_tick_counter / config->overheat_leak_decimation_shift
+ *            (see THERMAL_FLAG_OVERHEAT_LATCH / Zone 2 below).
+ *        These MUST stay separate counters: if both gates incremented the
+ *        SAME counter, the mask test would still be correct on AVERAGE
+ *        over a long run in one zone, but the very FIRST fire right after
+ *        a zone transition (e.g. Zone 3 charging -> Zone 2 latched leak)
+ *        would land wherever the OTHER gate's calls happened to leave the
+ *        counter's phase - anywhere from 1 tick to a full 2^shift ticks
+ *        later, unpredictably, instead of a bounded, zone-relative delay.
+ *        (This module used to share one counter for exactly that reason
+ *        and it was wrong - see ::ThermalLimiterState_t::leak_tick_counter.)
  *
- * @param state  Controller state (holds the shared tick counter).
- * @param shift  Decimation shift - gate fires once every 2^shift ticks.
- * @return       Non-zero on ticks where the gated action should run.
+ * @param counter  Pointer to the specific free-running counter to use.
+ * @param shift    Decimation shift - gate fires once every 2^shift ticks.
+ * @return         Non-zero on ticks where the gated action should run.
  */
-static inline uint8_t decimation_gate(ThermalLimiterState_t *state, uint8_t shift)
+static inline uint8_t decimation_gate(uint8_t *counter, uint8_t shift)
 {
-    state->ki_tick_counter++;
+    (*counter)++;
     uint8_t decim_mask = (uint8_t)((1u << shift) - 1u);
-    return (state->ki_tick_counter & decim_mask) == 0u;
+    return (*counter & decim_mask) == 0u;
 }
 
 /**
@@ -99,7 +102,7 @@ static inline int16_t charge_integral(ThermalLimiterState_t *state,
         return integral;
     }
 
-    if (!decimation_gate(state, config->ki_decimation_shift)) {
+    if (!decimation_gate(&state->ki_tick_counter, config->ki_decimation_shift)) {
         return integral;
     }
 
@@ -120,11 +123,12 @@ static inline int16_t charge_integral(ThermalLimiterState_t *state,
 
 void ThermalLimiter_Init(ThermalLimiterState_t *state)
 {
-    state->filtered_temp  = 0;
-    state->integral        = 0;
-    state->prev_limiter    = 0;
-    state->flags           = 0u;
-    state->ki_tick_counter = 0u;
+    state->filtered_temp   = 0;
+    state->integral         = 0;
+    state->prev_limiter     = 0;
+    state->flags            = 0u;
+    state->ki_tick_counter  = 0u;
+    state->leak_tick_counter = 0u;
 }
 
 uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
@@ -225,8 +229,14 @@ uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
 
         /* Truly safe again - disarm the overheat latch so the next
          * excursion's Zone 2 anticipation charging works normally (see
-         * THERMAL_FLAG_OVERHEAT_LATCH doc in thermal_limiter.h). */
+         * THERMAL_FLAG_OVERHEAT_LATCH doc in thermal_limiter.h). Also
+         * reset leak_tick_counter so the NEXT excursion's first leak fire
+         * (after it re-enters latched Zone 2) has a bounded, predictable
+         * delay of at most 2^overheat_leak_decimation_shift ticks, instead
+         * of inheriting whatever phase this excursion happened to leave
+         * behind. */
         state->flags &= (uint8_t)~THERMAL_FLAG_OVERHEAT_LATCH;
+        state->leak_tick_counter = 0u;
 
         int16_t fast_leak_enter = (int16_t)(t_threshold - THERMAL_FAST_LEAK_OFFSET);
         int16_t fast_leak_exit  = (int16_t)(fast_leak_enter + THERMAL_FAST_LEAK_HYSTERESIS);
@@ -298,9 +308,15 @@ uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
          * independent of the charge's ki_decimation_shift - this is the
          * only remaining knob able to slow the leak below ~30/sec, since
          * the per-fire amount is already pinned at its floor.
+         *
+         * Uses its OWN counter (state->leak_tick_counter), never
+         * state->ki_tick_counter - see decimation_gate() @details for why
+         * sharing one counter between two differently-shifted gates gives
+         * the leak's first fire after a zone transition an unpredictable
+         * phase instead of a bounded one.
          * ------------------------------------------------------------ */
         if (state->flags & THERMAL_FLAG_OVERHEAT_LATCH) {
-            if (decimation_gate(state, config->overheat_leak_decimation_shift)) {
+            if (decimation_gate(&state->leak_tick_counter, config->overheat_leak_decimation_shift)) {
                 int16_t decay = integral >> THERMAL_OVERHEAT_LATCH_LEAK_SHIFT;
                 if (decay == 0 && integral > 0) {
                     decay = 1; /* guarantee reaching 0, same rationale as Zone 1 */

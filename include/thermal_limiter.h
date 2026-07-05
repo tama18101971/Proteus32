@@ -248,11 +248,17 @@ typedef struct {
 /**
  * @brief Persistent state of a single thermal limiter instance.
  *
- * Entirely 16-bit-or-narrower fields - no int32_t. Total footprint is 8
- * bytes (no extra alignment padding vs. the previous 7-byte/8-byte-padded
- * layout - ki_tick_counter exactly fills what used to be a padding byte),
- * leaving ample headroom in the 2KB RAM budget for the rest of the
- * application.
+ * Entirely 16-bit-or-narrower fields - no int32_t. Total footprint is 10
+ * bytes (3x int16_t + 2x uint8_t + 1 byte of trailing alignment padding,
+ * since 9 raw bytes round up to the struct's 2-byte alignment). Grew from
+ * the previous 8-byte, zero-padding layout when leak_tick_counter was
+ * added as a genuinely separate field rather than being folded into spare
+ * `flags` bits: the currently configured overheat_leak_decimation_shift
+ * values (up to ~6-7) need more counter resolution than the ~5 free bits
+ * left in `flags` could reliably provide. The extra 2 bytes are
+ * negligible against the 2KB RAM budget - correctness of the decimation
+ * gate's phase was judged worth more here than preserving the exact
+ * previous byte count.
  */
 typedef struct {
     int16_t  filtered_temp;  /**< EMA-filtered raw ADC value (same domain/scale
@@ -275,6 +281,30 @@ typedef struct {
                                    ThermalLimiterConfig_t doc above). Wraps
                                    naturally at 256, harmless since the gate
                                    mask is always a power-of-2 <= 128. */
+    uint8_t  leak_tick_counter; /**< Free-running tick counter used only to
+                                   gate the Zone 2 overheat-latch leak per
+                                   config->overheat_leak_decimation_shift (see
+                                   THERMAL_FLAG_OVERHEAT_LATCH). Deliberately
+                                   SEPARATE from ki_tick_counter: sharing one
+                                   counter between two decimation_gate() calls
+                                   with different shifts (charge vs leak) is
+                                   correct only for the long-run AVERAGE fire
+                                   rate - the phase at which either gate first
+                                   fires after a zone transition depends on
+                                   whatever residual value the OTHER gate's
+                                   calls left behind, giving the leak's first
+                                   fire after entering Zone 2 an unpredictable
+                                   delay anywhere from 1 tick to a full
+                                   2^overheat_leak_decimation_shift ticks,
+                                   instead of a bounded, zone-transition-
+                                   relative one. Reset to 0 whenever the latch
+                                   clears (Zone 1) so each new excursion's
+                                   leak phase starts predictably. Only
+                                   increments while actually leaking (Zone 2,
+                                   latch set) - paused the rest of the time,
+                                   same as ki_tick_counter is effectively
+                                   paused whenever charge_integral() isn't
+                                   called. */
 } ThermalLimiterState_t;
 
 /* ------------------------------------------------------------------------ */
