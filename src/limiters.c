@@ -8,7 +8,9 @@
 
 ThermalLimiterState_t  state;
 const ThermalLimiterConfig_t config = {
-    .kp_left_shift        = 4,   /* Zone 3 P: error << 4 (сильная реакция, тормозит перелёт) */
+    .kp_left_shift        = 5,   /* Zone 3 P: error << 5 — прежнее значение 4 давало
+                                     установившийся перелёт ~+17 кодов (P=272 при error=17);
+                                     при том же P error нужен вдвое меньше (~8-9) */
     .ki_decimation_shift  = 7,   /* Заряд I раз в 128 тиков (~4.3 сек) */
     .ki_left_shift        = 0,   /* Zones 2/3 I: error << 0 (плавный заряд) */
     .t_anticipate_offset  = 30,  /* Зона anticipation: [670, 700) — компромисс между
@@ -17,7 +19,7 @@ const ThermalLimiterConfig_t config = {
     .filter_shift         = 1,   /* EMA:  */
     .max_drop_rate        = 8,   /* Скорость гашения (240/сек) */
     .max_recovery_rate    = 3,   /* Скорость восстановления (90/сек) */
-    .overheat_leak_decimation_shift = 5  /* Утечка Zone2-latch раз в 8 тик */
+    .overheat_leak_decimation_shift = 6  /* Утечка Zone2-latch раз в X тик */
 
 };
 

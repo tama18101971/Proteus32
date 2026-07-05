@@ -184,14 +184,14 @@ uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
 ### Текущая конфигурация (limiters.c)
 ```c
 #define T_SET 700u              // Уставка температуры (код АЦП)
-.kp_left_shift = 4;            // P: error << 4 (сильная реакция)
+.kp_left_shift = 5;            // P: error << 5 (сильная реакция, Zone 3)
 .ki_left_shift = 0;            // I: error << 0 (плавный заряд)
 .ki_decimation_shift = 7;      // Заряд раз в 128 тиков (~4.3 сек)
 .t_anticipate_offset = 30;     // Зона anticipation: [670, 700)
-.filter_shift = 2;             // EMA: tau = 4 выборки = 0.13 сек
+.filter_shift = 1;             // EMA: tau = 2 выборки = 0.067 сек
 .max_drop_rate = 8;            // Скорость гашения (240/сек)
 .max_recovery_rate = 3;        // Скорость восстановления (90/сек)
-.overheat_leak_decimation_shift = 2; // Утечка Zone2-latch раз в 4 тика (~7.5/сек)
+.overheat_leak_decimation_shift = 5; // Утечка Zone2-latch раз в 32 тика (~1/сек)
 ```
 
 ### Отладочный вывод (main.c, tick_2hz)
