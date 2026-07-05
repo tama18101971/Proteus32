@@ -75,6 +75,7 @@ typedef struct {
     int16_t  filtered_temp;   /* Отфильтрованная температура */
     int16_t  prev_filtered_temp; /* Предыдущая отфильтрованная температура */
     uint16_t prev_limiter;    /* Предыдущее значение ограничителя */
+    int16_t  prev_error;      /* Предыдущая ошибка (для изменения интегратора) */
     int32_t  p_term_out;      /* Последний P-терм (для отладки) */
 } ThermalLimiterState;
 

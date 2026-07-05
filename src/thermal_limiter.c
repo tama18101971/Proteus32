@@ -144,10 +144,8 @@ uint16_t ThermalLimiter_Update(ThermalLimiterState *s, const ThermalLimiterConfi
 {
     int16_t error;
     int32_t P_term, I_term, output_signed;
-    int32_t test_integral;
     uint16_t target, limiter;
     int error_sign;
-    int error_positive; /* 1 = температура выше уставки (перегрев) */
 
     /* ====================================================================
      * ШАГ 1: IIR-фильтр низкой частоты
@@ -166,6 +164,8 @@ uint16_t ThermalLimiter_Update(ThermalLimiterState *s, const ThermalLimiterConfi
      *   фильтр инициализируется сырым значением без задержки.
      *   Это предотвращает 1-секундный «стартовый транзиент».
      */
+    s->prev_filtered_temp = s->filtered_temp;  /* Сохраняем ДО обновления */
+
     if (s->filtered_temp == 0 && s->prev_limiter == 0) {
         s->filtered_temp = (int16_t)adc_raw;
     } else {
@@ -209,39 +209,61 @@ uint16_t ThermalLimiter_Update(ThermalLimiterState *s, const ThermalLimiterConfi
      */
     if (error >= 0) {
         error_sign = 1;
-        error_positive = 1;
     } else {
         error_sign = -1;
-        error_positive = 0;
         error = -error;  /* берём модуль для вычислений */
     }
 
     P_term = tl_div_round((int32_t)error * (int32_t)cfg->Kp, 1 << TL_GAIN_SHIFT);
     P_term *= error_sign;
 
+    /* Вычисляем текущий I_term для проверки насыщения */
+    I_term = tl_div_round(s->integral * (int32_t)cfg->Ki, 1 << TL_GAIN_SHIFT);
+    output_signed = P_term + I_term;
+    if (output_signed < 0) output_signed = 0;
+    if (output_signed > (int32_t)cfg->max_limit) output_signed = (int32_t)cfg->max_limit;
+
     /* ====================================================================
-     * ШАГ 4: Интегральная составляющая (I) + Anti-Windup
+     * ШАГ 4: Интегральная составляющая (I)
      * ====================================================================
-     * Классическая PI-схема:
-     *   - error > 0 (перегрев): integral += error
-     *   - error <= 0 (недогрев/норма): integral decay к нулю
+     * Интегратор накапливается ТОЛЬКО при стационарной ошибке:
+     *   - HR > 2: НЕ копим (P справляется, температура растёт)
+     *   - -2 <= HR <= 2: Медленно копим (устраняем стационарную ошибку)
+     *   - HR < -2: НЕ копим (система сама охлаждается)
      *
-     * Anti-Windup: I-вклад не должен превышать max_limit.
+     * Anti-Windup: проверяем выход ПОСЛЕ обновления integral.
      */
-    if (error_positive && error > 5) {
-        /* Только при ошибке > 5 накапливаем интегратор (deadband) */
-        /* Deadband: при малой ошибке (E < 5) не накапливаем */
-        if (error > 5) {
-            test_integral = s->integral + (int32_t)error;
-            int32_t max_i_contribution = (int32_t)cfg->max_limit << TL_GAIN_SHIFT;
-            if (test_integral * (int32_t)cfg->Ki <= max_i_contribution) {
-                if (test_integral > cfg->I_max)
-                    test_integral = cfg->I_max;
-                s->integral = test_integral;
+    int16_t heat_rate = s->filtered_temp - s->prev_filtered_temp;
+
+    if (error_sign > 0 && error > 0) {
+        int32_t delta_i = (int32_t)error >> 2;  /* Медленное накопление */
+
+        /* Накопление только при стационарной ошибке (HR ≈ 0) */
+        if (heat_rate <= 2 && heat_rate >= -2) {
+            /* Anti-Windup: проверяем НОВЫЙ выход после интегрирования */
+            int32_t new_integral = s->integral + delta_i;
+            int32_t new_I_term = tl_div_round(new_integral * (int32_t)cfg->Ki, 1 << TL_GAIN_SHIFT);
+            int32_t new_output = P_term + new_I_term;
+            if (new_output < 0) new_output = 0;
+
+            if (new_output <= (int32_t)cfg->max_limit) {
+                /* Новый выход не насыщен — накапливаем */
+                if (new_integral > cfg->I_max)
+                    new_integral = cfg->I_max;
+                if (new_integral < 0)
+                    new_integral = 0;
+                s->integral = new_integral;
             }
+            /* Иначе: новый выход насыщен — интегратор заморожен */
         }
+
+        /* Ограничение интегратора */
+        if (s->integral > cfg->I_max)
+            s->integral = cfg->I_max;
+        if (s->integral < 0)
+            s->integral = 0;
     } else {
-        /* Быстрое стравливание при охлаждении */
+        /* Ошибка <= 0 — быстрый decay */
         if (s->integral > 0) {
             int32_t decay = s->integral >> 5;
             if (decay == 0) decay = 1;
@@ -249,6 +271,8 @@ uint16_t ThermalLimiter_Update(ThermalLimiterState *s, const ThermalLimiterConfi
             if (s->integral < 0) s->integral = 0;
         }
     }
+
+    s->prev_error = error;
 
     /* Вычисляем итоговую I-составляющую */
     I_term = tl_div_round(s->integral * (int32_t)cfg->Ki, 1 << TL_GAIN_SHIFT);
