@@ -203,7 +203,7 @@ uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
          * left over from a previous limiting event is bled off with a
          * two-tier decay:
          *   - "Very cold"  (t_cur below the fast-leak line): fast leak,
-         *     halve the accumulator every tick (`integral >>= 1`) for
+         *     ~25% of itself every tick (`integral -= integral >> 2`) for
          *     quick recovery.
          *   - "Near threshold": gentle leak, subtract 1/32nd of itself
          *     each tick (`integral -= integral >> 5`).
@@ -218,10 +218,11 @@ uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
          *     Without this, t_cur sitting right on the boundary (EMA/ADC
          *     noise) would flip the decay rate every tick.
          *
-         *  2) Guaranteed-zero floor: `integral >> 5` truncates to 0 for
-         *     any |integral| < 32, so a bare `integral -= integral >> 5`
-         *     would stall forever at some small residual (e.g. integral=20
-         *     never decays) instead of actually reaching 0. Forcing a
+         *  2) Guaranteed-zero floor: `integral >> THERMAL_SLOW_LEAK_SHIFT`
+         *     (or `>> THERMAL_FAST_LEAK_SHIFT`) truncates to 0 for any
+         *     |integral| smaller than the shift denominator, so a bare
+         *     `integral -= integral >> shift` would stall forever at some
+         *     small residual instead of actually reaching 0. Forcing a
          *     minimum decay step of 1 whenever the shift alone would
          *     produce 0 guarantees the accumulator empties completely in
          *     a bounded number of ticks.
@@ -253,7 +254,11 @@ uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
         }
 
         if (state->flags & THERMAL_FLAG_FAST_LEAK) {
-            integral >>= 1;                                    /* fast leak (/2) */
+            int16_t decay = integral >> THERMAL_FAST_LEAK_SHIFT; /* fast leak (~25%/tick) */
+            if (decay == 0 && integral > 0) {
+                decay = 1;                                     /* guarantee reaching 0 */
+            }
+            integral -= decay;
         } else {
             int16_t decay = integral >> THERMAL_SLOW_LEAK_SHIFT; /* slow leak (/32) */
             if (decay == 0 && integral > 0) {

@@ -88,8 +88,17 @@ extern "C" {
 #define THERMAL_PWM_MAX            512u
 
 /** Zone 1 "very cold" fast-leak offset (ADC counts below `t_threshold`
- *  at which the integrator is halved instead of slow-leaked), per spec. */
+ *  at which the integrator fast-decays (~25%/tick) instead of slow-leaked
+ *  (~3%/tick), per spec. */
 #define THERMAL_FAST_LEAK_OFFSET   30
+
+/** Zone 1 "very cold" fast-leak shift: `integral -= (integral >> 2)` (~25%/tick).
+ *  Previously this was `integral >>= 1` (50%/tick), which drained 512→0 in
+ *  ~10 ticks (~0.3 sec at 30 Hz) — too fast for a thermally inert object.
+ *  At shift=2 the same range takes ~20 ticks (~0.67 sec), still fast enough
+ *  for genuine cold-object recovery but no longer an instant snap to full
+ *  brightness that risks overshooting the next heating cycle. */
+#define THERMAL_FAST_LEAK_SHIFT    2u
 
 /** Zone 1 "near threshold" slow-leak shift: `integral -= (integral >> 5)`. */
 #define THERMAL_SLOW_LEAK_SHIFT    5u
