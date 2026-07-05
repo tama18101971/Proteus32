@@ -154,6 +154,7 @@ filter_shift;         // EMA фильтр температуры (биты сд�
 max_drop_rate;        // Скорость гашения (быстро)
 max_recovery_rate;    // Скорость восстановления (медленно, 2-3x меньше max_drop_rate)
 overheat_leak_decimation_shift; // Утечка Zone2-latch раз в 2^N тиков (независимо от заряда)
+max_limiter;          // Потолок лимитера (0..255) — ограничивает максимальное затемнение
 ```
 
 ### Состояние (ThermalLimiterState_t) — 8 байт
@@ -189,9 +190,10 @@ uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
 .ki_decimation_shift = 7;      // Заряд раз в 128 тиков (~4.3 сек)
 .t_anticipate_offset = 30;     // Зона anticipation: [670, 700)
 .filter_shift = 1;             // EMA: tau = 2 выборки = 0.067 сек
-.max_drop_rate = 8;            // Скорость гашения (240/сек)
-.max_recovery_rate = 3;        // Скорость восстановления (90/сек)
-.overheat_leak_decimation_shift = 5; // Утечка Zone2-latch раз в 32 тика (~1/сек)
+.max_drop_rate = 3;            // Скорость гашения (90/сек)
+.max_recovery_rate = 1;        // Скорость восстановления (30/сек)
+.overheat_leak_decimation_shift = 6; // Утечка Zone2-latch раз в 64 тика (~2.1 сек)
+.max_limiter = 255;            // Потолок лимитера: полный диапазон (не ограничено)
 ```
 
 ### Отладочный вывод (main.c, tick_2hz)

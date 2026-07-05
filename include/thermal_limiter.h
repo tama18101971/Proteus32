@@ -213,6 +213,11 @@ typedef struct {
                                          restore speed while cooling down). Should
                                          be 2-3x smaller than max_drop_rate to avoid
                                          visible flicker/surges. */
+    uint8_t  max_limiter;          /**< Hard ceiling on the Limiter output (0..255).
+                                         When reached, brightness cannot be cut any
+                                         further regardless of P or I terms.
+                                         Ensures a minimum brightness floor:
+                                         pwm_out >= user_pwm - max_limiter. */
     uint8_t  overheat_leak_decimation_shift; /**< Zone 2 overheat-latch leak gate
                                          (see THERMAL_FLAG_OVERHEAT_LATCH): the
                                          integrator loses a fixed ~1 unit only

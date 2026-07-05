@@ -14,13 +14,13 @@ const ThermalLimiterConfig_t config = {
     .ki_decimation_shift  = 7,   /* Заряд I раз в 128 тиков (~4.3 сек) */
     .ki_left_shift        = 0,   /* Zones 2/3 I: error << 0 (плавный заряд) */
     .t_anticipate_offset  = 30,  /* Зона anticipation: [670, 700) — компромисс между
-                                    20 (слишком узко, полный сброс I каждый цикл) и
-                                    50 (слишком широко, I рос при остывании) */
-    .filter_shift         = 1,   /* EMA:  */
-    .max_drop_rate        = 3,//8,   /* Скорость гашения (240/сек) */
-    .max_recovery_rate    = 1,//3,   /* Скорость восстановления (90/сек) */
-    .overheat_leak_decimation_shift = 6  /* Утечка Zone2-latch раз в X тик */
-
+                                     20 (слишком узко, полный сброс I каждый цикл) и
+                                     50 (слишком широко, I рос при остывании) */
+    .filter_shift         = 1,   /* EMA: tau = 2 выборки = 0.067 сек */
+    .max_drop_rate        = 3,   /* Скорость гашения (90/сек) */
+    .max_recovery_rate    = 1,   /* Скорость восстановления (30/сек) */
+    .overheat_leak_decimation_shift = 6, /* Утечка Zone2-latch раз в 64 тика (~2.1 сек) */
+    .max_limiter          = 255  /* Потолок лимитера: яркость не ниже 511-255=256 (~50%) */
 };
 
 uint16_t limiter = 0;

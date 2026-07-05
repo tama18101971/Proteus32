@@ -415,6 +415,13 @@ uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
         next_limiter = (int16_t)user_pwm;
     }
 
+    /* Hard brightness floor: max_limiter caps how far the Limiter can
+     * climb, guaranteeing pwm_out = user_pwm - limiter >= user_pwm - max_limiter.
+     * Applied AFTER slew filter so the rate limiter cannot mask this cap. */
+    if (next_limiter > (int16_t)config->max_limiter) {
+        next_limiter = (int16_t)config->max_limiter;
+    }
+
     state->prev_limiter = next_limiter;
 
     /* --------------------------------------------------------------------
