@@ -36,10 +36,11 @@
  *  ------------------------------------------------------------------------
  *    Zone 1 "Safe"        (t_cur <  t_threshold)            -> P=0, I decays.
  *    Zone 2 "Anticipation"(t_threshold <= t_cur < t_set)     -> P=0, I charges
- *                                                                (unless the
+ *                                                                (or gently
+ *                                                                decays if the
  *                                                                overheat
- *                                                                latch is
- *                                                                set - see
+ *                                                                latch is set
+ *                                                                - see
  *                                                                THERMAL_FLAG_OVERHEAT_LATCH).
  *    Zone 3 "Overheat"    (t_cur >= t_set)                   -> P active, I charges,
  *                                                                latch set.
@@ -94,6 +95,20 @@ extern "C" {
 #define THERMAL_SLOW_LEAK_SHIFT    5u
 
 /**
+ * Zone 2 overheat-latch leak shift: `integral -= (integral >> 8)`, fired on
+ * the cadence gated by ThermalLimiterConfig_t::overheat_leak_decimation_shift
+ * (NOT every tick, unlike THERMAL_SLOW_LEAK_SHIFT). Deliberately much
+ * gentler than Zone 1's slow-leak: for the whole realistic 0..511 integral
+ * range this shift alone truncates to a fixed ~1 unit *per fire* (the
+ * "guarantee reaching 0" floor dominates), so raising this constant further
+ * cannot slow the leak down any more - overheat_leak_decimation_shift is
+ * the actual speed knob, controlling how often that ~1-unit decrement
+ * fires. See THERMAL_FLAG_OVERHEAT_LATCH / thermal_limiter.c Zone 2 for
+ * the full history of leak designs tried and rejected before this one.
+ */
+#define THERMAL_OVERHEAT_LATCH_LEAK_SHIFT 8u
+
+/**
  * Hysteresis band (ADC counts) between the fast-leak *enter* line
  * (`t_threshold - THERMAL_FAST_LEAK_OFFSET`) and the *exit* line the
  * filtered temperature must climb back past before the decay switches
@@ -115,19 +130,27 @@ extern "C" {
                                                 reaches Zone 3 (t_cur >= t_set)
                                                 during the current excursion
                                                 above t_threshold. While set,
-                                                Zone 2 charging is suppressed:
-                                                a real overheat has already
-                                                happened and been corrected,
-                                                so continuing to charge while
+                                                Zone 2 stops charging and
+                                                instead gently leaks the
+                                                integrator (same slow-leak
+                                                formula as Zone 1): a real
+                                                overheat has already happened
+                                                and been corrected, so
+                                                continuing to charge while
                                                 merely retreating back down
                                                 through the anticipation band
                                                 would just re-inflate the
                                                 integrator for a threat that
-                                                already passed. Cleared only
-                                                once t_cur actually drops
-                                                below t_threshold (Zone 1),
-                                                arming Zone 2 again for the
-                                                next excursion. */
+                                                already passed - but freezing
+                                                it solid instead would stall
+                                                brightness recovery until
+                                                t_cur happened to cross all
+                                                the way down to t_threshold.
+                                                Cleared only once t_cur
+                                                actually drops below
+                                                t_threshold (Zone 1), arming
+                                                Zone 2's charging again for
+                                                the next excursion. */
 
 /* ------------------------------------------------------------------------ */
 /* Configuration (read-only, typically `const` / flash-resident)            */
@@ -159,6 +182,12 @@ extern "C" {
  * behavior; raise it (e.g. 5-7) for slow, high-thermal-mass objects so
  * the integrator ramps over the same many-second timescale the real
  * plant does, instead of slamming into anti-windup almost immediately.
+ *
+ * `overheat_leak_decimation_shift` is the same zero-mult decimation
+ * technique applied to the OTHER direction: how fast the integrator is
+ * allowed to forget a past overheat event once retreating back through
+ * Zone 2 (see THERMAL_FLAG_OVERHEAT_LATCH). It is independent of
+ * `ki_decimation_shift` - charge and leak cadence do not have to match.
  */
 typedef struct {
     uint8_t  kp_left_shift;        /**< Proportional gain, Zone 3 only:
@@ -184,6 +213,26 @@ typedef struct {
                                          restore speed while cooling down). Should
                                          be 2-3x smaller than max_drop_rate to avoid
                                          visible flicker/surges. */
+    uint8_t  overheat_leak_decimation_shift; /**< Zone 2 overheat-latch leak gate
+                                         (see THERMAL_FLAG_OVERHEAT_LATCH): the
+                                         integrator loses a fixed ~1 unit only
+                                         once every 2^overheat_leak_decimation_shift
+                                         ticks, instead of every tick. Needed
+                                         because THERMAL_OVERHEAT_LATCH_LEAK_SHIFT's
+                                         per-tick amount is already floored to a
+                                         minimum of 1 for the whole realistic
+                                         integral range (0..511) - increasing that
+                                         shift further cannot slow the leak down
+                                         any more, since the floor already
+                                         dominates. This decimation is the actual
+                                         speed knob: too fast (0-1) and a brief
+                                         few-second noise dip right at t_set fully
+                                         drains a large integral before the
+                                         temperature even resumes rising, forcing
+                                         a full recharge from scratch; too slow
+                                         and genuine cooling won't visibly recover
+                                         brightness for a long time. Recommended
+                                         range: 1..4. */
 } ThermalLimiterConfig_t;
 
 /* ------------------------------------------------------------------------ */

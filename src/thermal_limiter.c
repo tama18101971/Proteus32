@@ -28,8 +28,39 @@
 /* ------------------------------------------------------------------------ */
 
 /**
+ * @brief Shared zero-mult decimation gate: fires (returns non-zero) only
+ *        once every `2^shift` ticks - a free-running counter plus a single
+ *        bitmask `AND`, no multiply/divide. `shift==0` fires every tick.
+ *
+ *        Reused for two independent purposes with two independent shift
+ *        values sharing the same free-running counter (that's fine - it's
+ *        just a shared clock, gating different actions at different
+ *        cadences is a standard technique, like deriving several slow
+ *        enables off one hardware timer):
+ *          - charge_integral() gates on config->ki_decimation_shift.
+ *          - The Zone 2 overheat-latch leak gates on
+ *            config->overheat_leak_decimation_shift (see
+ *            THERMAL_FLAG_OVERHEAT_LATCH / Zone 2 below) - this MUST be a
+ *            separate, independently tunable cadence from the charge one:
+ *            THERMAL_OVERHEAT_LATCH_LEAK_SHIFT's per-fire amount is already
+ *            floored to a fixed ~1 unit for the whole realistic integral
+ *            range, so the fire *rate* here is the only remaining knob for
+ *            how fast a past overheat is "forgotten".
+ *
+ * @param state  Controller state (holds the shared tick counter).
+ * @param shift  Decimation shift - gate fires once every 2^shift ticks.
+ * @return       Non-zero on ticks where the gated action should run.
+ */
+static inline uint8_t decimation_gate(ThermalLimiterState_t *state, uint8_t shift)
+{
+    state->ki_tick_counter++;
+    uint8_t decim_mask = (uint8_t)((1u << shift) - 1u);
+    return (state->ki_tick_counter & decim_mask) == 0u;
+}
+
+/**
  * @brief Shift-charge the integrator by `delta << ki_left_shift`, gated by
- *        the Ki-decimation counter and the Clamping Integral Lock, with
+ *        decimation_gate() and the Clamping Integral Lock, with
  *        overflow-safe wide arithmetic.
  *
  * @details
@@ -68,17 +99,7 @@ static inline int16_t charge_integral(ThermalLimiterState_t *state,
         return integral;
     }
 
-    /* Ki-decimation gate: since ki_left_shift can only amplify (minimum 1x
-     * per tick), a plant with large thermal inertia that dwells in Zone
-     * 2/3 for hundreds of ticks would otherwise saturate the integrator in
-     * a couple of seconds. Charging only once every 2^ki_decimation_shift
-     * ticks - a free-running counter plus a single bitmask `AND`, still
-     * zero mult/div - yields an effective fractional Ki without ever
-     * dividing. decim_mask==0 (ki_decimation_shift==0) charges every tick,
-     * matching the original always-charge behavior. */
-    state->ki_tick_counter++;
-    uint8_t decim_mask = (uint8_t)((1u << config->ki_decimation_shift) - 1u);
-    if ((state->ki_tick_counter & decim_mask) != 0u) {
+    if (!decimation_gate(state, config->ki_decimation_shift)) {
         return integral;
     }
 
@@ -244,13 +265,49 @@ uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
          * overheat happened and P/I already corrected it), continuing to
          * charge while merely retreating back down through this whole
          * band re-inflates the integrator for a threat that has already
-         * passed, well past what's needed to hold at t_set. Skip charging
-         * entirely while the latch is set (see THERMAL_FLAG_OVERHEAT_LATCH)
-         * - integral just holds at its current value until Zone 1 actually
-         * leaks it. The latch only arms Zone 2 again once t_cur genuinely
-         * drops below t_threshold.
+         * passed, well past what's needed to hold at t_set. While the
+         * latch is set (see THERMAL_FLAG_OVERHEAT_LATCH), skip charging
+         * and instead gently leak the integrator so brightness recovers
+         * smoothly as t_cur keeps falling, rather than freezing solid
+         * until t_cur happens to cross all the way down to t_threshold.
+         * The latch only re-arms Zone 2's charging once t_cur genuinely
+         * drops below t_threshold (Zone 1) and clears it.
+         *
+         * Three leak designs were tried and rejected before this one:
+         *   - Plain hold (no leak at all): brightness stayed frozen for
+         *     as long as t_cur takes to fall the full t_anticipate_offset
+         *     back to t_threshold - too slow to feel like it's recovering.
+         *   - THERMAL_SLOW_LEAK_SHIFT every tick (Zone 1's rate): a
+         *     percentage-of-current-value decay is large when integral is
+         *     large, draining a large integral in a handful of seconds
+         *     off a single noisy EMA/ADC downward tick - snapping
+         *     brightness back to 100% on noise and risking an immediate
+         *     re-overheat.
+         *   - THERMAL_OVERHEAT_LATCH_LEAK_SHIFT alone, applied every tick,
+         *     no further decimation: for the whole realistic integral
+         *     range (0..511) that shift's `integral >> shift` already
+         *     floors to 0, so the "guarantee reaching 0" rule forces a
+         *     constant ~1 unit/tick (~30/sec) regardless of how large the
+         *     shift is made - raising the shift further cannot slow this
+         *     down any more. A brief few-second noise dip right at t_set
+         *     still fully drained a large integral (e.g. 200+) before
+         *     t_cur even resumed rising, forcing a full recharge from
+         *     scratch on the very next excursion.
+         * The fix: gate the (still floor-guaranteed ~1 unit) leak by
+         * config->overheat_leak_decimation_shift, a cadence completely
+         * independent of the charge's ki_decimation_shift - this is the
+         * only remaining knob able to slow the leak below ~30/sec, since
+         * the per-fire amount is already pinned at its floor.
          * ------------------------------------------------------------ */
-        if (!(state->flags & THERMAL_FLAG_OVERHEAT_LATCH)) {
+        if (state->flags & THERMAL_FLAG_OVERHEAT_LATCH) {
+            if (decimation_gate(state, config->overheat_leak_decimation_shift)) {
+                int16_t decay = integral >> THERMAL_OVERHEAT_LATCH_LEAK_SHIFT;
+                if (decay == 0 && integral > 0) {
+                    decay = 1; /* guarantee reaching 0, same rationale as Zone 1 */
+                }
+                integral -= decay;
+            }
+        } else {
             int16_t error = t_cur - t_threshold;
             integral = charge_integral(state, config, integral, error, p_term, user_pwm);
         }
