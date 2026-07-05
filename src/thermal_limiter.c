@@ -234,8 +234,9 @@ uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
          * (after it re-enters latched Zone 2) has a bounded, predictable
          * delay of at most 2^overheat_leak_decimation_shift ticks, instead
          * of inheriting whatever phase this excursion happened to leave
-         * behind. */
-        state->flags &= (uint8_t)~THERMAL_FLAG_OVERHEAT_LATCH;
+         * behind. Also clear Zone 3 hysteresis latch: well below
+         * t_threshold there is no question about which zone we're in. */
+        state->flags &= (uint8_t)~(THERMAL_FLAG_OVERHEAT_LATCH | THERMAL_FLAG_IN_ZONE3);
         state->leak_tick_counter = 0u;
 
         int16_t fast_leak_enter = (int16_t)(t_threshold - THERMAL_FAST_LEAK_OFFSET);
@@ -261,13 +262,23 @@ uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
             integral -= decay;
         }
 
-    } else if (t_cur < (int16_t)t_set) {
+    } else if (t_cur < (int16_t)t_set &&
+               !(state->flags & THERMAL_FLAG_IN_ZONE3)) {
         /* ------------------------------------------------------------
          * Zone 2 - Anticipation: gentle early limiting. P stays 0 to avoid
          * jitter right around the threshold; only the dominant Integrator
          * charges, shift-scaled (no Ki multiplication) via the shared,
          * overflow-safe, decimation-gated helper (see charge_integral()):
          *   error = t_cur - t_threshold          (0 .. t_anticipate_offset)
+         *
+         * The THERMAL_FLAG_IN_ZONE3 guard: if we just left Zone 3 on the
+         * previous tick but t_cur hasn't yet fallen below
+         * t_set - THERMAL_ZONE3_HYSTERESIS, this branch is skipped and
+         * the controller stays in Zone 3 instead. This prevents rapid
+         * toggling between Zone 2 and Zone 3 when EMA noise bounces
+         * t_cur around t_set (e.g. 699,700,699,700...), which would
+         * otherwise cause P to flicker on/off every tick and
+         * OVERHEAT_LATCH to be constantly re-armed.
          *
          * Overheat-latch gate: this charge basis only decays to zero at
          * t_threshold, which can be tens of ADC codes below t_set - if
@@ -348,13 +359,21 @@ uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
          *     Zone 2 has already charged the integrator while approaching
          *     t_set, so Zone 3 only needs to add MORE charge if t_cur
          *     actually overshoots past t_set - not just for sitting at it.
+         *
+         *     Zone 3 hysteresis: set THERMAL_FLAG_IN_ZONE3 here, cleared
+         *     only when t_cur falls below t_set - THERMAL_ZONE3_HYSTERESIS
+         *     (Zone 1 already clears it unconditionally at t_threshold).
+         *     While set, the Zone 2 branch is bypassed entirely, which
+         *     prevents the P term, integrator charging law, and
+         *     OVERHEAT_LATCH from toggling every tick when EMA/ADC noise
+         *     bounces t_cur right around t_set.
          * ------------------------------------------------------------ */
 
         /* A real overheat is happening right now - arm the latch so that
          * once t_cur retreats back into Zone 2, that zone's anticipation
          * charging stays suppressed (see THERMAL_FLAG_OVERHEAT_LATCH doc
          * and the Zone 2 gate above). */
-        state->flags |= THERMAL_FLAG_OVERHEAT_LATCH;
+        state->flags |= THERMAL_FLAG_OVERHEAT_LATCH | THERMAL_FLAG_IN_ZONE3;
 
         int16_t error = t_cur - (int16_t)t_set;
 
@@ -371,6 +390,15 @@ uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
         p_term = (int16_t)p_wide;
 
         integral = charge_integral(state, config, integral, error, p_term, user_pwm);
+
+        /* Hysteresis exit: drop the Zone 3 latch once t_cur genuinely
+         * falls below t_set - THERMAL_ZONE3_HYSTERESIS, not just one
+         * noisy code below t_set. This prevents the Zone 2 / Zone 3
+         * toggle that would otherwise happen when EMA noise bounces
+         * t_cur around t_set (see THERMAL_FLAG_IN_ZONE3 doc). */
+        if (t_cur < (int16_t)((int16_t)t_set - (int16_t)THERMAL_ZONE3_HYSTERESIS)) {
+            state->flags &= (uint8_t)~THERMAL_FLAG_IN_ZONE3;
+        }
     }
 
     /* --------------------------------------------------------------------

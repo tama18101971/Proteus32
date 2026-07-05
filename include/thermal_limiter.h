@@ -119,6 +119,21 @@ extern "C" {
  */
 #define THERMAL_FAST_LEAK_HYSTERESIS 8
 
+/**
+ * Hysteresis band (ADC counts) preventing rapid Zone 2 ↔ Zone 3 toggling
+ * when filtered temperature sits right on t_set. Zone 3 is *entered*
+ * immediately at `t_cur >= t_set`, but Zone 3 is *exited* only once
+ * `t_cur < t_set - THERMAL_ZONE3_HYSTERESIS`. While the flag
+ * THERMAL_FLAG_IN_ZONE3 remains set, the Zone 2 branch is skipped
+ * entirely (the controller stays in Zone 3 even if EMA/ADC noise
+ * temporarily dips t_cur one code below t_set).
+ *
+ * Value of 2 codes ≈ 1.0-1.4°C in the 43-50°C operating range, which
+ * is well within the EMA noise band and invisible to the end-user, but
+ * sufficient to stop P and OVERHEAT_LATCH from toggling every tick.
+ */
+#define THERMAL_ZONE3_HYSTERESIS 2
+
 /** Bits packed into ::ThermalLimiterState_t::flags. Kept as a single
  *  uint8_t bitfield (instead of two separate bool fields) so the extra
  *  fast-leak latch below costs zero additional RAM. */
@@ -150,8 +165,21 @@ extern "C" {
                                                 t_threshold (Zone 1), arming
                                                 Zone 2's charging again for
                                                 the next excursion. */
+#define THERMAL_FLAG_IN_ZONE3    0x08u /**< Hysteresis latch preventing rapid
+                                             Zone 2 ↔ Zone 3 toggling when
+                                             t_cur oscillates near t_set (see
+                                             THERMAL_ZONE3_HYSTERESIS). Set on
+                                             first entry into Zone 3
+                                             (t_cur >= t_set); stays set until
+                                             t_cur falls below
+                                             t_set - THERMAL_ZONE3_HYSTERESIS,
+                                             at which point Zone 2 regains
+                                             control. While set, the Zone 2
+                                             branch is skipped entirely.
+                                             Cleared in Zone 1 alongside
+                                             THERMAL_FLAG_OVERHEAT_LATCH. */
 
-#define THERMAL_FLAG_ERROR        0x08u /**Аппаратная ошибка. */
+#define THERMAL_FLAG_ERROR        0x10u /**Аппаратная ошибка. */
 
 /* ------------------------------------------------------------------------ */
 /* Configuration (read-only, typically `const` / flash-resident)            */

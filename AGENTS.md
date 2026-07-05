@@ -128,11 +128,13 @@ src/
 - Арбитраж: `Limiter = max(P, I)` — какой термин требует большего ограничения, тот и побеждает
 
 ### Три зоны ошибки (относительно `t_threshold = t_set - t_anticipate_offset`):
-| Зона | Условие | P | I |
-|------|---------|---|---|
-| 1 "Safe" | `t_cur < t_threshold` | 0 | Утечка (fast/slow decay), сбрасывает overheat-latch |
-| 2 "Anticipation" | `t_threshold <= t_cur < t_set` | 0 | Заряд (кроме случая, когда установлен overheat-latch — см. ниже) |
-| 3 "Overheat" | `t_cur >= t_set` | Активен | Заряд от `error` (t_cur - t_set), устанавливает overheat-latch |
+| Зона | Условие входа | Условие выхода | P | I |
+|------|---------------|----------------|---|---|
+| 1 "Safe" | `t_cur < t_threshold` | — | 0 | Утечка (fast/slow decay), сбрасывает overheat-latch + Zone3 hysteresis |
+| 2 "Anticipation" | `t_threshold <= t_cur < t_set`, без Zone3 hysteresis | — | 0 | Заряд (кроме overheat-latch — см. ниже) |
+| 3 "Overheat" | `t_cur >= t_set` | `t_cur < t_set - THERMAL_ZONE3_HYSTERESIS` | Активен | Заряд от `error` (t_cur - t_set), overheat-latch + Zone3 hysteresis |
+
+**Zone 3 hysteresis** (`THERMAL_ZONE3_HYSTERESIS = 2`): Zone 3 входит немедленно при `t_cur >= t_set`, но выходит только при `t_cur < t_set - 2`. Пока `THERMAL_FLAG_IN_ZONE3` установлен, ветка Zone 2 полностью пропускается. Это предотвращает дребезг P и переключение закона зарядки интегратора при колебаниях EMA-фильтра вокруг уставки (699, 700, 699, 700...). Защёлка сбрасывается в Zone 1 (безусловно) и в Zone 3 (при `t_cur < t_set - 2`).
 
 ### Overheat-latch (THERMAL_FLAG_OVERHEAT_LATCH)
 Без учёта направления изменения температуры (архитектура без D-члена) Zone 2 заряжала I всё время, пока `t_cur >= t_threshold` — включая случаи, когда температура уже пошла на убыль после реального перегрева, просто "по пути" через широкую зону anticipation обратно в Zone 1. Это вызывало неограниченный рост I во время остывания.
