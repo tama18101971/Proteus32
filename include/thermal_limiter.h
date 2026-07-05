@@ -125,7 +125,6 @@ extern "C" {
 #define THERMAL_FLAG_INITIALIZED  0x01u /**< EMA filter has been seeded once. */
 #define THERMAL_FLAG_FAST_LEAK    0x02u /**< Zone 1 fast-leak hysteresis latch
                                               (see THERMAL_FAST_LEAK_HYSTERESIS). */
-#define THERMAL_FLAG_ERROR        0x03u /**Аппаратная ошибка. */
 #define THERMAL_FLAG_OVERHEAT_LATCH 0x04u /**< Set the moment t_cur first
                                                 reaches Zone 3 (t_cur >= t_set)
                                                 during the current excursion
@@ -151,6 +150,8 @@ extern "C" {
                                                 t_threshold (Zone 1), arming
                                                 Zone 2's charging again for
                                                 the next excursion. */
+
+#define THERMAL_FLAG_ERROR        0x08u /**Аппаратная ошибка. */
 
 /* ------------------------------------------------------------------------ */
 /* Configuration (read-only, typically `const` / flash-resident)            */
