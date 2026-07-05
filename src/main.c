@@ -149,6 +149,11 @@ int main(void)
             EE_PRINTF("T=%u F=%d I=%d L=%d P=%u\r\n",
                    raw_temperature_adc, state.filtered_temp,
                    state.integral, state.prev_limiter, step_user);
+
+            /* Serial Plotter: Label:value, каждый на отдельной строке */
+            //EE_PRINTF("F:%d\r\n", state.filtered_temp);
+            //EE_PRINTF("S:%u\r\n", T_SET);
+            //EE_PRINTF("L:%d\r\n", state.prev_limiter);
         }
 
         if (tick_5s()) /* 5с: сохранение EEPROM */

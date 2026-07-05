@@ -17,8 +17,8 @@ const ThermalLimiterConfig_t config = {
                                     20 (слишком узко, полный сброс I каждый цикл) и
                                     50 (слишком широко, I рос при остывании) */
     .filter_shift         = 1,   /* EMA:  */
-    .max_drop_rate        = 8,   /* Скорость гашения (240/сек) */
-    .max_recovery_rate    = 3,   /* Скорость восстановления (90/сек) */
+    .max_drop_rate        = 3,//8,   /* Скорость гашения (240/сек) */
+    .max_recovery_rate    = 1,//3,   /* Скорость восстановления (90/сек) */
     .overheat_leak_decimation_shift = 6  /* Утечка Zone2-latch раз в X тик */
 
 };
