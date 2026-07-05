@@ -130,9 +130,17 @@ src/
 ### Три зоны ошибки (относительно `t_threshold = t_set - t_anticipate_offset`):
 | Зона | Условие | P | I |
 |------|---------|---|---|
-| 1 "Safe" | `t_cur < t_threshold` | 0 | Утечка (fast/slow decay) |
-| 2 "Anticipation" | `t_threshold <= t_cur < t_set` | 0 | Заряд |
-| 3 "Overheat" | `t_cur >= t_set` | Активен | Заряд |
+| 1 "Safe" | `t_cur < t_threshold` | 0 | Утечка (fast/slow decay), сбрасывает overheat-latch |
+| 2 "Anticipation" | `t_threshold <= t_cur < t_set` | 0 | Заряд (кроме случая, когда установлен overheat-latch — см. ниже) |
+| 3 "Overheat" | `t_cur >= t_set` | Активен | Заряд от `error` (t_cur - t_set), устанавливает overheat-latch |
+
+### Overheat-latch (THERMAL_FLAG_OVERHEAT_LATCH)
+Без учёта направления изменения температуры (архитектура без D-члена) Zone 2 заряжала I всё время, пока `t_cur >= t_threshold` — включая случаи, когда температура уже пошла на убыль после реального перегрева, просто "по пути" через широкую зону anticipation обратно в Zone 1. Это вызывало неограниченный рост I во время остывания.
+
+Решение — битовый флаг-защёлка (аналогично `THERMAL_FLAG_FAST_LEAK`, без производной):
+- Zone 3 устанавливает защёлку (`state->flags |= THERMAL_FLAG_OVERHEAT_LATCH`) при первом входе в реальный перегрев.
+- Пока защёлка установлена, Zone 2 **не заряжает** I (только удерживает текущее значение) — заряд anticipation имеет смысл только при первом подходе к уставке, а не при отступлении после уже случившегося перегрева.
+- Zone 1 сбрасывает защёлку при возврате в безопасную зону, вооружая Zone 2 для следующего цикла нагрева.
 
 ### Конфигурация (ThermalLimiterConfig_t)
 ```c
@@ -173,10 +181,10 @@ uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
 ### Текущая конфигурация (limiters.c)
 ```c
 #define T_SET 700u              // Уставка температуры (код АЦП)
-.kp_left_shift = 3;            // P: error << 3 (умеренная реакция)
+.kp_left_shift = 4;            // P: error << 4 (сильная реакция)
 .ki_left_shift = 0;            // I: error << 0 (плавный заряд)
-.ki_decimation_shift = 6;      // Заряд раз в 64 тика (~2.1 сек)
-.t_anticipate_offset = 80;     // Зона anticipation: [620, 700) — широкая
+.ki_decimation_shift = 7;      // Заряд раз в 128 тиков (~4.3 сек)
+.t_anticipate_offset = 30;     // Зона anticipation: [670, 700)
 .filter_shift = 2;             // EMA: tau = 4 выборки = 0.13 сек
 .max_drop_rate = 8;            // Скорость гашения (240/сек)
 .max_recovery_rate = 3;        // Скорость восстановления (90/сек)

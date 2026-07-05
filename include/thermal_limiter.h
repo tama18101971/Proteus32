@@ -35,8 +35,14 @@
  *  Three-Zone Error Model (relative to `t_threshold = t_set - t_anticipate_offset`):
  *  ------------------------------------------------------------------------
  *    Zone 1 "Safe"        (t_cur <  t_threshold)            -> P=0, I decays.
- *    Zone 2 "Anticipation"(t_threshold <= t_cur < t_set)     -> P=0, I charges.
- *    Zone 3 "Overheat"    (t_cur >= t_set)                   -> P active, I charges.
+ *    Zone 2 "Anticipation"(t_threshold <= t_cur < t_set)     -> P=0, I charges
+ *                                                                (unless the
+ *                                                                overheat
+ *                                                                latch is
+ *                                                                set - see
+ *                                                                THERMAL_FLAG_OVERHEAT_LATCH).
+ *    Zone 3 "Overheat"    (t_cur >= t_set)                   -> P active, I charges,
+ *                                                                latch set.
  *
  *  Failsafe:
  *  ------------------------------------------------------------------------
@@ -105,6 +111,23 @@ extern "C" {
 #define THERMAL_FLAG_FAST_LEAK    0x02u /**< Zone 1 fast-leak hysteresis latch
                                               (see THERMAL_FAST_LEAK_HYSTERESIS). */
 #define THERMAL_FLAG_ERROR        0x03u /**Аппаратная ошибка. */
+#define THERMAL_FLAG_OVERHEAT_LATCH 0x04u /**< Set the moment t_cur first
+                                                reaches Zone 3 (t_cur >= t_set)
+                                                during the current excursion
+                                                above t_threshold. While set,
+                                                Zone 2 charging is suppressed:
+                                                a real overheat has already
+                                                happened and been corrected,
+                                                so continuing to charge while
+                                                merely retreating back down
+                                                through the anticipation band
+                                                would just re-inflate the
+                                                integrator for a threat that
+                                                already passed. Cleared only
+                                                once t_cur actually drops
+                                                below t_threshold (Zone 1),
+                                                arming Zone 2 again for the
+                                                next excursion. */
 
 /* ------------------------------------------------------------------------ */
 /* Configuration (read-only, typically `const` / flash-resident)            */

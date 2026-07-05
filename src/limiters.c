@@ -8,14 +8,15 @@
 
 ThermalLimiterState_t  state;
 const ThermalLimiterConfig_t config = {
-    .kp_left_shift        = 3,   /* Zone 3 P: error << 3 (умеренная реакция, слью-фильтр успевает) */
-    .ki_decimation_shift  = 6,   /* Заряд I раз в 64 тика (~2.1 сек) — плавный рост
-                                    интегратора без рывков. */
+    .kp_left_shift        = 4,   /* Zone 3 P: error << 4 (сильная реакция, тормозит перелёт) */
+    .ki_decimation_shift  = 7,   /* Заряд I раз в 128 тиков (~4.3 сек) */
     .ki_left_shift        = 0,   /* Zones 2/3 I: error << 0 (плавный заряд) */
-    .t_anticipate_offset  = 80,  /* Зона anticipation: [620, 700) — широкая, раннее ограничение */
+    .t_anticipate_offset  = 30,  /* Зона anticipation: [670, 700) — компромисс между
+                                    20 (слишком узко, полный сброс I каждый цикл) и
+                                    50 (слишком широко, I рос при остывании) */
     .filter_shift         = 2,   /* EMA: tau = 4 выборки = 0.13 сек */
-    .max_drop_rate        = 8,   /* Скорость гашения (240/сек — быстрая реакция) */
-    .max_recovery_rate    = 3    /* Скорость восстановления (90/сек — плавное) */
+    .max_drop_rate        = 8,   /* Скорость гашения (240/сек) */
+    .max_recovery_rate    = 3    /* Скорость восстановления (90/сек) */
 };
 
 uint16_t limiter = 0;

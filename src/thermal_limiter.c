@@ -44,7 +44,11 @@
  * @param state     Controller state (for the decimation tick counter).
  * @param config    Controller configuration (ki_left_shift/ki_decimation_shift).
  * @param integral  Current integrator value.
- * @param delta     Un-shifted charge basis (`error`, or `t_cur - t_threshold`).
+ * @param delta     Un-shifted charge basis: `t_cur - t_threshold` in Zone 2,
+ *                  `t_cur - t_set` (i.e. `error`) in Zone 3 - both decay to
+ *                  zero once t_cur settles back at the respective boundary,
+ *                  so the integrator stops climbing once the temperature
+ *                  plateaus instead of ratcheting up indefinitely.
  * @param p_term    This tick's Proportional term (Clamping Integral Lock test).
  * @param user_pwm  Current user brightness request (Clamping Integral Lock
  *                  test, and the upper clamp of the returned integral).
@@ -197,6 +201,12 @@ uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
          *     produce 0 guarantees the accumulator empties completely in
          *     a bounded number of ticks.
          * ------------------------------------------------------------ */
+
+        /* Truly safe again - disarm the overheat latch so the next
+         * excursion's Zone 2 anticipation charging works normally (see
+         * THERMAL_FLAG_OVERHEAT_LATCH doc in thermal_limiter.h). */
+        state->flags &= (uint8_t)~THERMAL_FLAG_OVERHEAT_LATCH;
+
         int16_t fast_leak_enter = (int16_t)(t_threshold - THERMAL_FAST_LEAK_OFFSET);
         int16_t fast_leak_exit  = (int16_t)(fast_leak_enter + THERMAL_FAST_LEAK_HYSTERESIS);
 
@@ -227,9 +237,23 @@ uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
          * charges, shift-scaled (no Ki multiplication) via the shared,
          * overflow-safe, decimation-gated helper (see charge_integral()):
          *   error = t_cur - t_threshold          (0 .. t_anticipate_offset)
+         *
+         * Overheat-latch gate: this charge basis only decays to zero at
+         * t_threshold, which can be tens of ADC codes below t_set - if
+         * t_cur has ALREADY reached Zone 3 once this excursion (a real
+         * overheat happened and P/I already corrected it), continuing to
+         * charge while merely retreating back down through this whole
+         * band re-inflates the integrator for a threat that has already
+         * passed, well past what's needed to hold at t_set. Skip charging
+         * entirely while the latch is set (see THERMAL_FLAG_OVERHEAT_LATCH)
+         * - integral just holds at its current value until Zone 1 actually
+         * leaks it. The latch only arms Zone 2 again once t_cur genuinely
+         * drops below t_threshold.
          * ------------------------------------------------------------ */
-        int16_t error = t_cur - t_threshold;
-        integral = charge_integral(state, config, integral, error, p_term, user_pwm);
+        if (!(state->flags & THERMAL_FLAG_OVERHEAT_LATCH)) {
+            int16_t error = t_cur - t_threshold;
+            integral = charge_integral(state, config, integral, error, p_term, user_pwm);
+        }
 
     } else {
         /* ------------------------------------------------------------
@@ -238,10 +262,27 @@ uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
          *   error  = t_cur - t_set                         (>= 0)
          *   P      = error << kp_left_shift                (fast reaction,
          *            overflow-safe via widened intermediate - see below)
-         *   integral charges from (t_cur - t_threshold), not from error,
-         *     so the charge rate stays continuous across the Zone2->Zone3
-         *     boundary instead of jumping down.
+         *   integral charges from `error` (t_cur - t_set), NOT from
+         *     (t_cur - t_threshold): charging must decay to zero once
+         *     t_cur settles back at t_set, otherwise the integrator keeps
+         *     ratcheting up by a constant ~t_anticipate_offset every
+         *     decimation window even after the temperature has plateaued
+         *     exactly at the set-point, eventually saturating for no
+         *     reason and causing a large limit-cycle swing. This does
+         *     introduce a small downward step in charge rate right at the
+         *     Zone2->Zone3 boundary (from ~t_anticipate_offset down to 0)
+         *     instead of a continuous ramp, but that step is harmless:
+         *     Zone 2 has already charged the integrator while approaching
+         *     t_set, so Zone 3 only needs to add MORE charge if t_cur
+         *     actually overshoots past t_set - not just for sitting at it.
          * ------------------------------------------------------------ */
+
+        /* A real overheat is happening right now - arm the latch so that
+         * once t_cur retreats back into Zone 2, that zone's anticipation
+         * charging stays suppressed (see THERMAL_FLAG_OVERHEAT_LATCH doc
+         * and the Zone 2 gate above). */
+        state->flags |= THERMAL_FLAG_OVERHEAT_LATCH;
+
         int16_t error = t_cur - (int16_t)t_set;
 
         /* Overflow-safe P: widen to int32_t for the shift (free on RV32EC's
@@ -256,8 +297,7 @@ uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
         }
         p_term = (int16_t)p_wide;
 
-        integral = charge_integral(state, config, integral,
-                                    (int16_t)(t_cur - t_threshold), p_term, user_pwm);
+        integral = charge_integral(state, config, integral, error, p_term, user_pwm);
     }
 
     /* --------------------------------------------------------------------
