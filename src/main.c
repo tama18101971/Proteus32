@@ -51,11 +51,6 @@ int main(void)
 
     sys_init();
 
-    /* Приветственное сообщение */
-    EE_PRINTF("\r\nthermal_limiter started\r\n");
-    EE_PRINTF("setpoint=%d Kp=%d Ki=%d max=%d\r\n",
-              config.temp_setpoint, config.Kp, config.Ki, config.max_limit);
-
     AWU_init();              /* Включение PWR + LSI генератора */
     AWU_int_init();          /* Настройка EXTI Line9 + NVIC */
     AWU_set_delay(AWU_15MS); /* Начальная задержка AWU */
@@ -86,6 +81,14 @@ int main(void)
     /* Интервалы таймеров (аналог millis в Arduino) */
 
     reset_limiters(); // Сброс ограничителей
+
+    /* Приветственное сообщение */
+    EE_PRINTF("\r\nthermal_limiter started\r\n");
+    EE_PRINTF("setpoint=%u kp_shift=%u ki_shift=%u ki_decim=%u offset=%u\r\n",
+           T_SET, config.kp_left_shift, config.ki_left_shift,
+           config.ki_decimation_shift, config.t_anticipate_offset);
+
+
 
     while (1)
     {
@@ -141,13 +144,11 @@ int main(void)
         if (tick_2hz()) /* 500мс: */
         {
             // EE_PRINTF("[MAIN] Tick 2Hz.\r\n");
-            /* Вычислить ошибку для отладочного вывода */
-            error = state.filtered_temp - (int16_t)config.temp_setpoint;
 
-            /* Формат: T=сырой F=фильтр E=ошибка I=интегратор L=limiter P=P_term */
-            EE_PRINTF("T=%d F=%d E=%d I=%ld L=%ld P=%ld\r\n",
-                      raw_temperature_adc, state.filtered_temp, error,
-                      (long)state.integral, (long)limiter, (long)state.p_term_out);
+            /* Формат: T=сырой F=t_cur(фильтр) I=интегратор L=limiter P=PWM */
+            EE_PRINTF("T=%u F=%d I=%d L=%d P=%u\r\n",
+                   raw_temperature_adc, state.filtered_temp,
+                   state.integral, state.prev_limiter, step_user);
         }
 
         if (tick_5s()) /* 5с: сохранение EEPROM */

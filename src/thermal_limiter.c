@@ -1,344 +1,328 @@
-/*
- * thermal_limiter.c
+/**
+ * @file    thermal_limiter.c
+ * @brief   Implementation of the zero-multiplication Thermal Power Limiter
+ *          (see thermal_limiter.h for the full architectural rationale).
  *
- * Реализация терморегулятора мощности светодиода
+ * @details
+ *  Every stage below uses only:
+ *    - 16-bit integer add/sub,
+ *    - bitwise shifts (`<<` / `>>`) instead of multiply/divide,
+ *    - compare-and-clamp,
+ *  so it compiles to a small, deterministic RV32EC instruction sequence on
+ *  the CH32V003 - no software multiply/divide routine is ever linked in for
+ *  the control math itself.
  *
- * Структура алгоритма (вызывается каждые 33 мс / 30 Гц):
+ *  Per tick, exactly one of three mutually-exclusive zones is evaluated:
+ *    Zone 1 "Safe"         : t_cur <  t_threshold           -> P=0, I leaks.
+ *    Zone 2 "Anticipation" : t_threshold <= t_cur < t_set    -> P=0, I charges.
+ *    Zone 3 "Overheat"     : t_cur >= t_set                  -> P active, I charges.
  *
- *   [АЦП raw] --> [IIR фильтр] --> [ошибка] --> [P + I] --> [slew rate] --> [limiter]
- *                                         ^                      |
- *                                         |                      v
- *                                   [setpoint]           [user_pwm - limiter = PWM]
- *
- * Свойства:
- *   - Только целочисленная арифметика (нет float)
- *   - Аппаратно-независимый (работает на любом МК)
- *   - Асимметричное ограничение скорости (нагрев быстрее охлаждения)
- *   - Защита от насыщения интегратора (anti-windup)
- *   - Фильтрация шума АЦП (IIR)
+ *  The raw Limiter is `max(P, I)` (Intermittent Proportional + Dominant
+ *  Integrator arbitration) rather than `P + I` - see step 5 below.
  */
 
 #include "thermal_limiter.h"
 
-/*
- * tl_div_round — деление целых чисел с округлением
+/* ------------------------------------------------------------------------ */
+/* Internal helpers                                                          */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * @brief Shift-charge the integrator by `delta << ki_left_shift`, gated by
+ *        the Ki-decimation counter and the Clamping Integral Lock, with
+ *        overflow-safe wide arithmetic.
  *
- * Вычисляет (num / den) с округлением к ближайшему.
- * Корректно работает с отрицательными числами (округление к нулю).
+ * @details
+ *  RV32EC still carries a full 32-bit register file (RV32E only shrinks the
+ *  register *count*, not their *width*) - so widening to int32_t here for
+ *  the shift/add/clamp costs nothing extra in registers or cycles versus
+ *  doing it in int16_t; it just avoids silently overflowing int16_t (UB)
+ *  for aggressively configured `ki_left_shift` values. Nothing 32-bit is
+ *  ever stored back into ::ThermalLimiterState_t - only int16_t crosses
+ *  that boundary, preserving the module's RAM-footprint guarantee.
  *
- * Пример:
- *   tl_div_round(100, 3) = 33   (100/3 = 33.33 → 33)
- *   tl_div_round(-100, 3) = -33 (-100/3 = -33.33 → -33)
- *   tl_div_round(10, 8) = 1     (10/8 = 1.25 → 1)
- *
- * Параметры:
- *   num — числитель (знаковое, 32 бита)
- *   den — знаменатель (беззнаковый, 16 бит, должен быть > 0)
- *
- * Возвращает:
- *   Результат деления с округлением (знаковый, 32 бита)
+ * @param state     Controller state (for the decimation tick counter).
+ * @param config    Controller configuration (ki_left_shift/ki_decimation_shift).
+ * @param integral  Current integrator value.
+ * @param delta     Un-shifted charge basis (`error`, or `t_cur - t_threshold`).
+ * @param p_term    This tick's Proportional term (Clamping Integral Lock test).
+ * @param user_pwm  Current user brightness request (Clamping Integral Lock
+ *                  test, and the upper clamp of the returned integral).
+ * @return          Updated integral, already clamped to [0, user_pwm].
  */
-static int32_t tl_div_round(int32_t num, uint16_t den)
+static inline int16_t charge_integral(ThermalLimiterState_t *state,
+                                       const ThermalLimiterConfig_t *config,
+                                       int16_t integral,
+                                       int16_t delta,
+                                       int16_t p_term,
+                                       uint16_t user_pwm)
 {
-    if (num >= 0)
-        return (num + (int32_t)(den / 2)) / (int32_t)den;
-    return -(((-num) + (int32_t)(den / 2)) / (int32_t)den);
-}
-
-/*
- * ThermalLimiter_Init — инициализация состояния регулятора
- *
- * Обнуляет:
- *   - integral: интегральный аккумулятор (ошибки не накоплены)
- *   - filtered_temp: фильтр температуры (значение 0 → при первом вызове
- *     фильтр инициализируется текущим АЦП без задержки)
- *   - prev_limiter: ограничитель (0 = полная яркость)
- *
- * Параметры:
- *   s   — структура состояния (RAM)
- *   cfg — конфигурация (не используется, но передается для единообразия)
- */
-void ThermalLimiter_Init(ThermalLimiterState *s, const ThermalLimiterConfig *cfg)
-{
-    s->integral = 0;
-    s->filtered_temp = 0;
-    s->prev_filtered_temp = 0;
-    s->prev_limiter = 0;
-    (void)cfg;
-}
-
-/*
- * ThermalLimiter_Reset — полный сброс состояния
- *
- * Используется при:
- *   - Горячем перезапуске (смена уставки без перезагрузки)
- *   - Выходе из режима экономии (standby)
- *   - Обнаружении аварийной ситуации
- *
- * Эквивалентен вызову ThermalLimiter_Init().
- */
-void ThermalLimiter_Reset(ThermalLimiterState *s)
-{
-    s->integral = 0;
-    s->filtered_temp = 0;
-    s->prev_filtered_temp = 0;
-    s->prev_limiter = 0;
-}
-
-/*
- * ThermalLimiter_Update — основной алгоритм регулирования
- *
- * Вызывается каждые 33 мс (30 Гц) из периодического таймера или
- * из основного цикла с задержкой Delay_Ms(33).
- *
- * Алгоритм пошагово:
- *
- *   ШАГ 1: IIR-фильтрация температуры
- *     Формула: filtered += (raw - filtered) >> shift
- *     При shift=5:tau = 32 выборки = 1.06 секунды
- *     Сглаживает шум АЦП, но добавляет задержку.
- *     При первом вызове: filtered = raw (мгновенная инициализация)
- *
- *   ШАГ 2: Вычисление ошибки
- *     error = filtered - setpoint (при NTC в верхнем плече)
- *     error > 0 → перегрев (нужно уменьшить PWM)
- *     error < 0 → недогрев (нужно увеличить PWM)
- *
- *   ШАГ 3: Пропорциональная составляющая P
- *     P = (|error| * Kp) >> 8 * sign(error)
- *     Реагирует на текущую ошибку. Быстро, но не устраняет
- *     постоянную ошибку (steady-state error).
- *
- *   ШАГ 4: Интегральная составляющая I (с anti-windup)
- *     integral += error
- *     I = (|integral| * Ki) >> 8 * sign(integral)
- *     Устраняет постоянную ошибку. Растет со временем.
- *     Anti-windup: если P+I >= max_limit, интегратор не растет.
- *     Предотвращает «раскачку» при резком изменении уставки.
- *
- *   ШАГ 5: Суммирование и ограничение
- *     output = P + I
- *     clamp(output, 0, max_limit)
- *
- *   ШАГ 6: Ограничение скорости (asymmetric slew rate)
- *     При нагреве (limiter растет): max +rate_warm за вызов
- *     При охлаждении (limiter падает): max -rate_cool за вызов
- *     Отношение 3:1 по умолчанию (быстро гасим, медленно возвращаем)
- *
- *   ШАГ 7: Финальное ограничение
- *     limiter = min(limiter, user_pwm)
- *     Гарантирует, что яркость не упадет ниже 0.
- *
- * Параметры:
- *   s       — состояние регулятора (обновляется)
- *   cfg     — конфигурация (не изменяется)
- *   adc_raw — сырые данные АЦП NTC (0-1023)
- *   user_pwm — заданная яркость (0-511, 9 бит)
- *
- * Возвращает:
- *   limiter (0..user_pwm) — величина ограничения мощности
- *   Итоговый ШИМ = user_pwm - limiter
- */
-uint16_t ThermalLimiter_Update(ThermalLimiterState *s, const ThermalLimiterConfig *cfg,
-                               uint16_t adc_raw, uint16_t user_pwm)
-{
-    int16_t error;
-    int32_t P_term, I_term, output_signed;
-    uint16_t target, limiter;
-    int error_sign;
-
-    /* ====================================================================
-     * ШАГ 1: IIR-фильтр низкой частоты
-     * ====================================================================
-     * Формула: filtered += (raw - filtered) >> filter_shift
-     *
-     * Это экспоненциальный скользящий средний (Exponential Moving Average).
-     * При filter_shift = N, постоянная времени tau = 2^N выборок.
-     *
-     * Примеры:
-     *   shift=4: tau=16 выборок = 0.53 сек  (быстрый, но шумный)
-     *   shift=5: tau=32 выборки = 1.06 сек  (компромисс)
-     *   shift=8: tau=256 выборок = 8.5 сек  (медленный, чистый)
-     *
-     * При(filtered_temp == 0 && prev_limiter == 0) — первый вызов:
-     *   фильтр инициализируется сырым значением без задержки.
-     *   Это предотвращает 1-секундный «стартовый транзиент».
-     */
-    s->prev_filtered_temp = s->filtered_temp;  /* Сохраняем ДО обновления */
-
-    if (s->filtered_temp == 0 && s->prev_limiter == 0) {
-        s->filtered_temp = (int16_t)adc_raw;
-    } else {
-        s->filtered_temp += (int16_t)(((int16_t)adc_raw - s->filtered_temp) >> cfg->filter_shift);
+    /* Clamping Integral Lock: P has already saturated the output at or
+     * beyond user_pwm - stop charging, it can't add anything the
+     * arbitration step downstream would actually use. */
+    if (p_term >= (int16_t)user_pwm) {
+        return integral;
     }
 
-    /* ====================================================================
-     * ШАГ 2: Вычисление ошибки регулирования
-     * ====================================================================
-     * Знак ошибки зависит от положения NTC в делителе:
-     *
-     *   NTC в верхнем плече (ntc_upper_leg = 1):
-     *     V_ADC = Vdd * R_lower / (R_NTC + R_lower)
-     *     R_NTC падает → V_ADC растет → ADC растет
-     *     error = filtered - setpoint (перегрев → положительная ошибка)
-     *
-     *   NTC в нижнем плече (ntc_upper_leg = 0):
-     *     V_ADC = Vdd * R_NTC / (R_NTC + R_lower)
-     *     R_NTC падает → V_ADC падает → ADC падает
-     *     error = setpoint - filtered (перегрев → положительная ошибка)
-     *
-     * После этого блока error >= 0 означает перегрев.
-     */
-    if (cfg->ntc_upper_leg) {
-        error = s->filtered_temp - (int16_t)cfg->temp_setpoint;
-    } else {
-        error = (int16_t)cfg->temp_setpoint - s->filtered_temp;
+    /* Ki-decimation gate: since ki_left_shift can only amplify (minimum 1x
+     * per tick), a plant with large thermal inertia that dwells in Zone
+     * 2/3 for hundreds of ticks would otherwise saturate the integrator in
+     * a couple of seconds. Charging only once every 2^ki_decimation_shift
+     * ticks - a free-running counter plus a single bitmask `AND`, still
+     * zero mult/div - yields an effective fractional Ki without ever
+     * dividing. decim_mask==0 (ki_decimation_shift==0) charges every tick,
+     * matching the original always-charge behavior. */
+    state->ki_tick_counter++;
+    uint8_t decim_mask = (uint8_t)((1u << config->ki_decimation_shift) - 1u);
+    if ((state->ki_tick_counter & decim_mask) != 0u) {
+        return integral;
     }
 
-    /* ====================================================================
-     * ШАГ 3: Пропорциональная составляющая (P)
-     * ====================================================================
-     * P_term = (|error| * Kp) >> TL_GAIN_SHIFT * sign(error)
-     *
-     * Формат Kp: Q8 (значение / 256).
-     * Пример: Kp=4, error=100:
-     *   P = (100 * 4) >> 8 = 400 / 256 = 1
-     *
-     * P обеспечивает быструю реакцию на ошибку, но не устраняет
-     * постоянную ошибку (steady-state error). Для этого нужен I.
-     */
-    if (error >= 0) {
-        error_sign = 1;
-    } else {
-        error_sign = -1;
-        error = -error;  /* берём модуль для вычислений */
+    /* Overflow-safe shift + accumulate + clamp, all in one widened
+     * expression (see @details above). */
+    int32_t wide = (int32_t)integral + ((int32_t)delta << config->ki_left_shift);
+    if (wide > (int32_t)user_pwm) {
+        wide = (int32_t)user_pwm;
+    } else if (wide < 0) {
+        wide = 0;
+    }
+    return (int16_t)wide;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Public API                                                                */
+/* ------------------------------------------------------------------------ */
+
+void ThermalLimiter_Init(ThermalLimiterState_t *state)
+{
+    state->filtered_temp  = 0;
+    state->integral        = 0;
+    state->prev_limiter    = 0;
+    state->flags           = 0u;
+    state->ki_tick_counter = 0u;
+}
+
+uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
+                                ThermalLimiterState_t *state,
+                                uint16_t t_raw,
+                                uint16_t t_set,
+                                uint16_t user_pwm)
+{
+    /* --------------------------------------------------------------------
+     * a) Failsafe: t_raw pinned at either ADC rail (0 or >=1023) can only
+     *    happen if the NTC divider wire has broken open or shorted - a
+     *    healthy divider never produces a rail-to-rail code. Bypass the
+     *    entire loop (do NOT touch filtered_temp/integral with a garbage
+     *    reading) and report the fault on the debug UART. This tick's
+     *    OUTPUT is forced to 0 (Limiter = user_pwm) regardless, but
+     *    `prev_limiter` itself is deliberately left untouched: forcing it
+     *    to user_pwm here would make the slew filter treat every glitch -
+     *    even a single noisy ADC sample - as if the LED had just been
+     *    fully shut down, imposing a slow max_recovery_rate-limited ramp
+     *    back to full brightness once the reading recovers, even though
+     *    nothing was thermally wrong. Leaving it alone lets a transient,
+     *    single-tick glitch resolve with zero extra recovery lag next
+     *    tick, while a genuine, sustained fault still forces PWM=0 on
+     *    every single affected tick (safety is never weakened - only the
+     *    post-recovery smoothing behavior improves).
+     * ------------------------------------------------------------------ */
+    if (t_raw == THERMAL_ADC_MIN || t_raw >= THERMAL_ADC_MAX) {
+        state->flags = THERMAL_FLAG_ERROR;
+        return 0u; /* PWM = user_pwm - Limiter = user_pwm - user_pwm = 0 */
     }
 
-    P_term = tl_div_round((int32_t)error * (int32_t)cfg->Kp, 1 << TL_GAIN_SHIFT);
-    P_term *= error_sign;
+    /* Seed the filter on the very first call so the EMA does not "ramp up"
+     * from 0 -> t_raw, which would otherwise look like a huge fake
+     * temperature spike to the control loop. */
+    if (!(state->flags & THERMAL_FLAG_INITIALIZED)) {
+        state->filtered_temp = (int16_t)t_raw;
+        state->flags        |= THERMAL_FLAG_INITIALIZED;
+    }
 
-    /* Вычисляем текущий I_term для проверки насыщения */
-    I_term = tl_div_round(s->integral * (int32_t)cfg->Ki, 1 << TL_GAIN_SHIFT);
-    output_signed = P_term + I_term;
-    if (output_signed < 0) output_signed = 0;
-    if (output_signed > (int32_t)cfg->max_limit) output_signed = (int32_t)cfg->max_limit;
+    /* --------------------------------------------------------------------
+     * b) Raw Low-Pass Filtering - EMA computed directly in the raw 10-bit
+     *    ADC domain, no separate scaled "temperature" variable:
+     *      filtered_temp += (t_raw - filtered_temp) >> filter_shift
+     *    The ">> filter_shift" is the *only* place the division-by-2^n is
+     *    replaced with a shift; t_cur below is simply filtered_temp itself.
+     * ------------------------------------------------------------------ */
+    state->filtered_temp = (int16_t)(state->filtered_temp +
+                            (((int16_t)t_raw - state->filtered_temp) >> config->filter_shift));
 
-    /* ====================================================================
-     * ШАГ 4: Интегральная составляющая (I)
-     * ====================================================================
-     * Интегратор накапливается ТОЛЬКО при стационарной ошибке:
-     *   - HR > 2: НЕ копим (P справляется, температура растёт)
-     *   - -2 <= HR <= 2: Медленно копим (устраняем стационарную ошибку)
-     *   - HR < -2: НЕ копим (система сама охлаждается)
+    int16_t t_cur = state->filtered_temp;
+
+    /* --------------------------------------------------------------------
+     * c) Two-Zone Intermittent Error & Integration Logic.
      *
-     * Anti-Windup: проверяем выход ПОСЛЕ обновления integral.
-     */
-    int16_t heat_rate = s->filtered_temp - s->prev_filtered_temp;
+     *    t_threshold = t_set - t_anticipate_offset, clamped to >= 0 so a
+     *    mis-configured offset larger than t_set cannot underflow into a
+     *    huge positive value when read back as unsigned elsewhere - kept
+     *    signed int16_t here since t_set/offset are both well within the
+     *    10-bit ADC range (<=1023), no overflow risk.
+     * ------------------------------------------------------------------ */
+    int16_t t_threshold = (int16_t)t_set - (int16_t)config->t_anticipate_offset;
+    if (t_threshold < 0) {
+        t_threshold = 0;
+    }
 
-    if (error_sign > 0 && error > 0) {
-        int32_t delta_i = (int32_t)error >> 2;  /* Медленное накопление */
+    int16_t p_term   = 0;             /* Proportional term - only Zone 3 sets this. */
+    int16_t integral = state->integral;
 
-        /* Накопление только при стационарной ошибке (HR ≈ 0) */
-        if (heat_rate <= 2 && heat_rate >= -2) {
-            /* Anti-Windup: проверяем НОВЫЙ выход после интегрирования */
-            int32_t new_integral = s->integral + delta_i;
-            int32_t new_I_term = tl_div_round(new_integral * (int32_t)cfg->Ki, 1 << TL_GAIN_SHIFT);
-            int32_t new_output = P_term + new_I_term;
-            if (new_output < 0) new_output = 0;
+    if (t_cur < t_threshold) {
+        /* ------------------------------------------------------------
+         * Zone 1 - Safe: no proportional or integral charge. Any integral
+         * left over from a previous limiting event is bled off with a
+         * two-tier decay:
+         *   - "Very cold"  (t_cur below the fast-leak line): fast leak,
+         *     halve the accumulator every tick (`integral >>= 1`) for
+         *     quick recovery.
+         *   - "Near threshold": gentle leak, subtract 1/32nd of itself
+         *     each tick (`integral -= integral >> 5`).
+         *
+         * Two fixes vs. a naive two-tier decay:
+         *
+         *  1) Hysteresis latch (THERMAL_FLAG_FAST_LEAK): the switch
+         *     between fast/slow decay is a Schmitt trigger, not a bare
+         *     comparison - entering fast-leak requires dropping below
+         *     `fast_leak_enter`, but *leaving* fast-leak requires climbing
+         *     back past `fast_leak_enter + THERMAL_FAST_LEAK_HYSTERESIS`.
+         *     Without this, t_cur sitting right on the boundary (EMA/ADC
+         *     noise) would flip the decay rate every tick.
+         *
+         *  2) Guaranteed-zero floor: `integral >> 5` truncates to 0 for
+         *     any |integral| < 32, so a bare `integral -= integral >> 5`
+         *     would stall forever at some small residual (e.g. integral=20
+         *     never decays) instead of actually reaching 0. Forcing a
+         *     minimum decay step of 1 whenever the shift alone would
+         *     produce 0 guarantees the accumulator empties completely in
+         *     a bounded number of ticks.
+         * ------------------------------------------------------------ */
+        int16_t fast_leak_enter = (int16_t)(t_threshold - THERMAL_FAST_LEAK_OFFSET);
+        int16_t fast_leak_exit  = (int16_t)(fast_leak_enter + THERMAL_FAST_LEAK_HYSTERESIS);
 
-            if (new_output <= (int32_t)cfg->max_limit) {
-                /* Новый выход не насыщен — накапливаем */
-                if (new_integral > cfg->I_max)
-                    new_integral = cfg->I_max;
-                if (new_integral < 0)
-                    new_integral = 0;
-                s->integral = new_integral;
+        if (state->flags & THERMAL_FLAG_FAST_LEAK) {
+            if (t_cur >= fast_leak_exit) {
+                state->flags &= (uint8_t)~THERMAL_FLAG_FAST_LEAK;
             }
-            /* Иначе: новый выход насыщен — интегратор заморожен */
+        } else {
+            if (t_cur < fast_leak_enter) {
+                state->flags |= THERMAL_FLAG_FAST_LEAK;
+            }
         }
 
-        /* Ограничение интегратора */
-        if (s->integral > cfg->I_max)
-            s->integral = cfg->I_max;
-        if (s->integral < 0)
-            s->integral = 0;
-    } else {
-        /* Ошибка <= 0 — быстрый decay */
-        if (s->integral > 0) {
-            int32_t decay = s->integral >> 5;
-            if (decay == 0) decay = 1;
-            s->integral -= decay;
-            if (s->integral < 0) s->integral = 0;
+        if (state->flags & THERMAL_FLAG_FAST_LEAK) {
+            integral >>= 1;                                    /* fast leak (/2) */
+        } else {
+            int16_t decay = integral >> THERMAL_SLOW_LEAK_SHIFT; /* slow leak (/32) */
+            if (decay == 0 && integral > 0) {
+                decay = 1;                                     /* guarantee reaching 0 */
+            }
+            integral -= decay;
         }
-    }
 
-    s->prev_error = error;
+    } else if (t_cur < (int16_t)t_set) {
+        /* ------------------------------------------------------------
+         * Zone 2 - Anticipation: gentle early limiting. P stays 0 to avoid
+         * jitter right around the threshold; only the dominant Integrator
+         * charges, shift-scaled (no Ki multiplication) via the shared,
+         * overflow-safe, decimation-gated helper (see charge_integral()):
+         *   error = t_cur - t_threshold          (0 .. t_anticipate_offset)
+         * ------------------------------------------------------------ */
+        int16_t error = t_cur - t_threshold;
+        integral = charge_integral(state, config, integral, error, p_term, user_pwm);
 
-    /* Вычисляем итоговую I-составляющую */
-    I_term = tl_div_round(s->integral * (int32_t)cfg->Ki, 1 << TL_GAIN_SHIFT);
-
-    /* Сохраняем P для отладки */
-    s->p_term_out = P_term;
-
-    /* ====================================================================
-     * ШАГ 5: Суммирование P + I и ограничение
-     * ==================================================================== */
-    output_signed = P_term + I_term;
-
-    if (output_signed < 0)
-        output_signed = 0;
-    if (output_signed > (int32_t)cfg->max_limit)
-        output_signed = (int32_t)cfg->max_limit;
-
-    target = (uint16_t)output_signed;
-
-    /* ====================================================================
-     * ШАГ 6: Ограничение скорости изменения (Asymmetric Slew Rate)
-     * ====================================================================
-     * Предотвращает резкие скачки яркости, даже при быстром
-     * изменении температуры.
-     *
-     * Асимметрия:
-     *   Нагрев (limiter растет, яркость падает): быстрое гашение
-     *     rate_warm = 3 кода/вызов → ~90 кодов/сек
-     *   Охлаждение (limiter падает, яркость растет): медленное восстановление
-     *     rate_cool = 1 код/вызов → ~30 кодов/сек
-     *
-     * Соотношение 3:1 (по ТЗ: скорость восстановления в 2-3 раза меньше).
-     *
-     * Это исключает:
-     *   - Видимое мерцание
-     *   - Резкие изменения яркости
-     *   - Автоколебания
-     */
-    if (s->prev_limiter < target) {
-        /* limiter растет (уменьшаем яркость) — быстрое гашение */
-        uint16_t delta = target - s->prev_limiter;
-        if (delta > cfg->rate_warm)
-            delta = cfg->rate_warm;
-        limiter = s->prev_limiter + delta;
-    } else if (s->prev_limiter > target) {
-        /* limiter падает (увеличиваем яркость) — медленное восстановление */
-        uint16_t delta = s->prev_limiter - target;
-        if (delta > cfg->rate_cool)
-            delta = cfg->rate_cool;
-        limiter = s->prev_limiter - delta;
     } else {
-        /* limiter не изменился */
-        limiter = s->prev_limiter;
+        /* ------------------------------------------------------------
+         * Zone 3 - Overheat: full aggressive Proportional correction plus
+         * continued Integrator charging.
+         *   error  = t_cur - t_set                         (>= 0)
+         *   P      = error << kp_left_shift                (fast reaction,
+         *            overflow-safe via widened intermediate - see below)
+         *   integral charges from (t_cur - t_threshold), not from error,
+         *     so the charge rate stays continuous across the Zone2->Zone3
+         *     boundary instead of jumping down.
+         * ------------------------------------------------------------ */
+        int16_t error = t_cur - (int16_t)t_set;
+
+        /* Overflow-safe P: widen to int32_t for the shift (free on RV32EC's
+         * 32-bit register file, see charge_integral() @details), then clamp
+         * to THERMAL_PWM_MAX before narrowing - any P at or above that is
+         * indistinguishable downstream from a smaller-but-still-saturating
+         * P (both mean "fully limited"), so clamping loses no information
+         * while making the narrowing to int16_t always well-defined. */
+        int32_t p_wide = (int32_t)error << config->kp_left_shift;
+        if (p_wide > (int32_t)THERMAL_PWM_MAX) {
+            p_wide = (int32_t)THERMAL_PWM_MAX;
+        }
+        p_term = (int16_t)p_wide;
+
+        integral = charge_integral(state, config, integral,
+                                    (int16_t)(t_cur - t_threshold), p_term, user_pwm);
     }
 
-    s->prev_limiter = limiter;
+    /* --------------------------------------------------------------------
+     * d) Dynamic 16-bit Anti-Windup: keep the integrator directly scaled
+     *    within [0, user_pwm] - a simple compare-and-clamp, no division.
+     * ------------------------------------------------------------------ */
+    if (integral > (int16_t)user_pwm) {
+        integral = (int16_t)user_pwm;
+    }
+    if (integral < 0) {
+        integral = 0;
+    }
+    state->integral = integral;
 
-    /* ====================================================================
-     * ШАГ 7: Финальное ограничение
-     * ====================================================================
-     * limiter <= user_pwm гарантируется всегда.
-     * Это означает: PWM = user_pwm - limiter >= 0.
-     * Яркость никогда не упадет ниже 0.
-     */
-    if (limiter > user_pwm)
-        limiter = user_pwm;
+    /* --------------------------------------------------------------------
+     * Intermittent Core Arbitration: raw_limiter = max(P, I) instead of
+     * P + I - the Integrator is the dominant baseline, P is only an
+     * intermittent spike-correction that briefly outranks it in Zone 3.
+     * Clamp to the valid [0, user_pwm] Limiter domain before the slew
+     * filter runs (P is unclamped above and can exceed user_pwm).
+     * ------------------------------------------------------------------ */
+    int16_t raw_limiter = (p_term > integral) ? p_term : integral;
+    if (raw_limiter < 0) {
+        raw_limiter = 0;
+    }
+    if (raw_limiter > (int16_t)user_pwm) {
+        raw_limiter = (int16_t)user_pwm;
+    }
 
-    return limiter;
+    /* --------------------------------------------------------------------
+     * e) Unified Slew Rate Filter - single signed delta + single-pass
+     *    clamp instead of separate increasing/decreasing branch trees.
+     *      delta > max_drop_rate      -> capped growth  (heating up)
+     *      delta < -max_recovery_rate -> capped decay    (cooling down)
+     *      else                       -> pass target through unchanged
+     *    max_recovery_rate should be configured 2-3x smaller than
+     *    max_drop_rate: cut brightness fast, restore it slowly.
+     * ------------------------------------------------------------------ */
+    int16_t last_limiter = state->prev_limiter;
+    int16_t delta         = raw_limiter - last_limiter;
+    int16_t next_limiter;
+
+    if (delta > (int16_t)config->max_drop_rate) {
+        next_limiter = (int16_t)(last_limiter + (int16_t)config->max_drop_rate);
+    } else if (delta < -(int16_t)config->max_recovery_rate) {
+        next_limiter = (int16_t)(last_limiter - (int16_t)config->max_recovery_rate);
+    } else {
+        next_limiter = raw_limiter;
+    }
+
+    /* Cheap safety net: the slew step above can in principle push the
+     * value slightly outside [0, user_pwm] (e.g. right after user_pwm is
+     * lowered externally). Still just compares - no division. */
+    if (next_limiter < 0) {
+        next_limiter = 0;
+    }
+    if (next_limiter > (int16_t)user_pwm) {
+        next_limiter = (int16_t)user_pwm;
+    }
+
+    state->prev_limiter = next_limiter;
+
+    /* --------------------------------------------------------------------
+     * Final applied duty cycle. Safe by construction: 0 <= next_limiter <= user_pwm.
+     * ------------------------------------------------------------------ */
+    //return (uint16_t)((int16_t)user_pwm - next_limiter);
+    return next_limiter;
 }

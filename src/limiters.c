@@ -6,17 +6,16 @@
 
 /* ============ СТРУКТУРЫ РЕГУЛЯТОРА ============ */
 
-ThermalLimiterState  state;
-ThermalLimiterConfig config = {
-    .temp_setpoint = 700,    /* Заданная температура (код АЦП) */
-    .Kp            = 4096,   /* Коэффициент P (реальное 16.0) */
-    .Ki            = 4,      /* Коэффициент I (реальное 0.016) */
-    .I_max         = 8000,   /* Ограничение интегратора */
-    .rate_warm     = 5,      /* Скорость гашения (быстро) */
-    .rate_cool     = 1,      /* Скорость восстановления (медленно) */
-    .max_limit     = 511,    /* Макс. limiter (9 бит) */
-    .filter_shift  = 3,      /* IIR: tau = 8 выборок = 0.26 сек */
-    .ntc_upper_leg = 1       /* NTC в верхнем плече делителя */
+ThermalLimiterState_t  state;
+const ThermalLimiterConfig_t config = {
+    .kp_left_shift        = 3,   /* Zone 3 P: error << 3 (умеренная реакция, слью-фильтр успевает) */
+    .ki_decimation_shift  = 6,   /* Заряд I раз в 64 тика (~2.1 сек) — плавный рост
+                                    интегратора без рывков. */
+    .ki_left_shift        = 0,   /* Zones 2/3 I: error << 0 (плавный заряд) */
+    .t_anticipate_offset  = 80,  /* Зона anticipation: [620, 700) — широкая, раннее ограничение */
+    .filter_shift         = 2,   /* EMA: tau = 4 выборки = 0.13 сек */
+    .max_drop_rate        = 8,   /* Скорость гашения (240/сек — быстрая реакция) */
+    .max_recovery_rate    = 3    /* Скорость восстановления (90/сек — плавное) */
 };
 
 uint16_t limiter = 0;
@@ -24,7 +23,7 @@ uint16_t limiter = 0;
 void sys_init(void)
 {
     /* Инициализация регулятора (обнуление состояния) */
-    ThermalLimiter_Init(&state, &config);
+    ThermalLimiter_Init(&state);
 }
 
 void scan_limiters(void)
@@ -39,7 +38,7 @@ void scan_limiters(void)
     /* Шаг 2: Вызвать регулятор → получить limiter
         * limiter = 0..user_pwm
         * pwm_out = user_pwm - limiter (пользователь управляет ШИМ) */
-    limiter = ThermalLimiter_Update(&state, &config, raw_temperature_adc, step_user);
+    limiter = ThermalLimiter_Update(&config, &state, raw_temperature_adc, T_SET, step_user);
 
     if (old_correction != limiter)
     {
@@ -61,6 +60,7 @@ void scan_limiters(void)
 
 void reset_limiters(void)
 {
-    ThermalLimiter_Reset(&state);
+    /* Инициализация регулятора (обнуление состояния) */
+    ThermalLimiter_Init(&state);
     limiter = 0;
 }

@@ -1,33 +1,61 @@
-/*
- * thermal_limiter.h
+/**
+ * @file    thermal_limiter.h
+ * @brief   Ultra-optimized, zero-multiplication Thermal Power Limiter for a
+ *          high-power LED, targeting the WCH CH32V003 (RV32EC, no hardware
+ *          divider, costly software multiply, 16KB Flash / 2KB RAM).
  *
- * Терморегулятор мощности светодиода для CH32V003
+ * @details
+ *  Architecture: "Intermittent Proportional + Dominant Integrator".
+ *  ------------------------------------------------------------------------
+ *  Classic academic PI controllers sum `Limiter = P + I`. On a core with no
+ *  hardware divider and expensive multiplication this is both wasteful (two
+ *  scaled terms have to be computed every tick even when only one matters)
+ *  and hard to tune without real multiplies for the gains.
  *
- * Описание:
- *   Цифровой PI-регулятор, автоматически ограничивающий мощность
- *   мощного светодиода для поддержания заданной температуры.
+ *  Instead this module treats:
+ *    - the **Integrator** as the slow, dominant thermal baseline model
+ *      (it is what actually holds the LED at the set-point over time), and
+ *    - the **Proportional** term as a fast, intermittent correction that
+ *      only exists at all once the system is at/above `t_set` (Zone 3),
+ *      used to catch rapid thermal spikes the slow integrator can't react
+ *      to in time.
  *
- *   Принцип работы:
- *     1. Измеряется температура светодиода через NTC-термистор (10-бит АЦП)
- *     2. Температура фильтруется IIR-фильтром низкой частоты
- *     3. PI-регулятор вычисляет величину ограничения (limiter)
- *     4. Итоговый ШИМ = пользовательский ШИМ - limiter
- *     5. Ограничитель никогда не увеличивает яркость сверх заданной
+ *  The two terms are never added. Every tick the raw limiter is simply
+ *  `max(P, I)` (see ::ThermalLimiter_Update / thermal_limiter.c step 5) -
+ *  whichever term currently demands more brightness reduction wins.
  *
- * Ограничения:
- *   - Только целочисленная арифметика (без float)
- *   - Минимальное использование Flash/RAM
- *   - Вызов каждые 33 мс (30 Гц)
+ *  Zero-Multiplication / Zero-Division Constraint:
+ *  ------------------------------------------------------------------------
+ *  There is NOT a single `*` or `/` anywhere in the hot loop. All "gains"
+ *  (`kp_left_shift`, `ki_left_shift`) are bit counts consumed by `<<`, and
+ *  all decays/filters use `>>`. This compiles down to nothing but
+ *  add/sub/shift/compare RV32EC instructions - no call to a software
+ *  multiply or divide routine is ever emitted for the control math itself.
  *
- * Аппаратная зависимость:
- *   - НЕТ. Файл не зависит от конкретного МК.
- *   - Все настройки передаются через конфигурационную структуру.
+ *  Three-Zone Error Model (relative to `t_threshold = t_set - t_anticipate_offset`):
+ *  ------------------------------------------------------------------------
+ *    Zone 1 "Safe"        (t_cur <  t_threshold)            -> P=0, I decays.
+ *    Zone 2 "Anticipation"(t_threshold <= t_cur < t_set)     -> P=0, I charges.
+ *    Zone 3 "Overheat"    (t_cur >= t_set)                   -> P active, I charges.
  *
- * Память:
- *   - ThermalLimiterState: 8 байт RAM (состояние фильтра и интегратора)
- *   - ThermalLimiterConfig: 14 байт (const, хранится в Flash)
+ *  Failsafe:
+ *  ------------------------------------------------------------------------
+ *  A `t_raw` reading of exactly 0 or >= 1023 (10-bit rail-to-rail) can only
+ *  happen if the NTC divider has failed open or shorted. In that case the
+ *  entire control loop is bypassed for that tick: the Limiter is forced to
+ *  `user_pwm` (i.e. output PWM = 0, LED fully OFF) and `"E_THERMAL_RUNAWAY\n"`
+ *  is emitted on the debug UART.
  *
- * Автор: MiReg Project
+ *  Register/type footprint:
+ *  ------------------------------------------------------------------------
+ *  The persistent state (::ThermalLimiterState_t) is built entirely out of
+ *  `int16_t` / `uint8_t` fields - no `int32_t` is used anywhere in the loop
+ *  or state, since RV32EC still has to move/mask 32-bit values through the
+ *  same 32-bit register file with extra sign-extension overhead when they
+ *  are stored back into narrower memory; keeping everything 16-bit-wide in
+ *  memory (and letting the compiler widen transiently in registers only
+ *  where the intermediate `<<`/`>>` truly needs it) keeps both the RAM
+ *  footprint and the generated instruction count minimal.
  */
 
 #ifndef THERMAL_LIMITER_H
@@ -35,168 +63,183 @@
 
 #include <stdint.h>
 
-/*
- * TL_GAIN_SHIFT — масштабирование коэффициентов усиления P и I
- *
- * Коэффициенты Kp и Ki хранятся в формате Q8 (значение * 256).
- * Например, Kp = 4 означает реальное усиление 4/256 = 0.015625.
- *
- * Формула: P_term = (|error| * Kp) >> TL_GAIN_SHIFT
- *
- * Это позволяет работать с дробными коэффициентами, используя
- * только целочисленную арифметику.
- */
-#define TL_GAIN_SHIFT 8
-
-/*
- * ThermalLimiterState — состояние регулятора (RAM)
- *
- * Хранит промежуточные данные между вызовами ThermalLimiter_Update().
- * Инициализируется нулями при вызове ThermalLimiter_Init().
- *
- * Поля:
- *   integral      — накопленная ошибка интегральной составляющей (int32_t).
- *                   Растет, когда температура выше уставки, уменьшается — ниже.
- *                   Используется для устранения постоянной ошибки регулирования.
- *                   Ограничивается I_max для предотвращения насыщения (anti-windup).
- *
- *   filtered_temp — отфильтрованная температура (int16_t).
- *                   Значение IIR-фильтра низкой частоты.
- *                   Сглаживает шум АЦП, но добавляет задержку.
- *
- *   prev_limiter  — предыдущее значение ограничителя (uint16_t).
- *                   Используется для ограничения скорости изменения
- *                   мощности (asymmetric slew rate limiter).
- *
- * Итого: 8 байт RAM
- */
-typedef struct {
-    int32_t  integral;        /* Интегратор ошибки */
-    int16_t  filtered_temp;   /* Отфильтрованная температура */
-    int16_t  prev_filtered_temp; /* Предыдущая отфильтрованная температура */
-    uint16_t prev_limiter;    /* Предыдущее значение ограничителя */
-    int16_t  prev_error;      /* Предыдущая ошибка (для изменения интегратора) */
-    int32_t  p_term_out;      /* Последний P-терм (для отладки) */
-} ThermalLimiterState;
-
-/*
- * ThermalLimiterConfig — конфигурация регулятора (const, Flash)
- *
- * Все настраиваемые параметры собраны в одной структуре.
- * Структура не изменяется во время работы (const).
- *
- * Поля:
- *   temp_setpoint — заданная температура в кодах АЦП (0-1023).
- *                   Определяется экспериментально: замерить АЦП при
- *                   желаемой температуре. Пример: 700 = ~70% шкалы АЦП.
- *
- *   Kp            — коэффициент пропорционального усиления (Q8 формат).
- *                   Определяет, насколько сильно реагирует регулятор
- *                   на текущую ошибку температуры. Чем больше — тем
- *                   агрессивнее, но возможны колебания.
- *                   Значение по умолчанию 4 → реальное усиление 0.016.
- *
- *   Ki            — коэффициент интегрального усиления (Q8 формат).
- *                   Устраняет постоянную ошибку регулирования.
- *                   Должен быть меньше Kp. Значение по умолчанию 2.
- *
- *   I_max         — ограничение интегратора (модуль).
- *                   Защита от насыщения (anti-windup).
- *                   Если ошибка накопилась слишком сильно, интегратор
- *                   перестает расти. Значение 100000.
- *
- *   rate_warm     — максимальное изменение limiter за один вызов
- *                   при нагреве (уменьшении яркости).
- *                   Значение 3 → максимум 3 кода за 33 мс → ~90 кодов/с.
- *
- *   rate_cool     — максимальное изменение limiter за один вызов
- *                   при охлаждении (увеличении яркости).
- *                   Значение 1 → максимум 1 код за 33 мс → ~30 кодов/с.
- *                   Отношение rate_warm/rate_cool = 3:1 (по ТЗ).
- *
- *   max_limit     — абсолютный предел ограничителя (9 бит = 511).
- *                   Limiter никогда не превысит это значение.
- *
- *   filter_shift  — сдвиг IIR-фильтра (4-8 типично).
- *                   Определяет постоянную времени фильтра:
- *                   tau = 2^filter_shift * T_вызова.
- *                   При shift=5, T=33мс: tau = 32*33 = ~1.06 секунды.
- *                   Больше shift → медленнее фильтр → лучше шумоподавление.
- *
- *   ntc_upper_leg — положение NTC в делителе напряжения:
- *                     1 = NTC в верхнем плече (ADC растет с температурой)
- *                     0 = NTC в нижнем плече (ADC падает с температурой)
- *                   Определяет знак ошибки в PI-регуляторе.
- *
- * Итого: 14 байт (const, в Flash)
- */
-typedef struct {
-    uint16_t temp_setpoint;   /* Заданная температура (код АЦП) */
-    uint16_t Kp;              /* Коэффициент P (формат Q8) */
-    uint16_t Ki;              /* Коэффициент I (формат Q8) */
-    int32_t  I_max;           /* Ограничение интегратора */
-    uint16_t rate_warm;       /* Скорость уменьшения яркости (кодов/вызов) */
-    uint16_t rate_cool;       /* Скорость увеличения яркости (кодов/вызов) */
-    uint16_t max_limit;       /* Максимальное значение limiter (9 бит) */
-    uint8_t  filter_shift;    /* Сдвиг IIR-фильтра (постоянная времени) */
-    uint8_t  ntc_upper_leg;   /* Положение NTC: 1=верх, 0=низ */
-} ThermalLimiterConfig;
-
-/*
- * ThermalLimiter_Init — инициализация регулятора
- *
- * Обнуляет все внутренние переменные состояния.
- * Вызывается один раз при запуске перед основным циклом.
- *
- * Параметры:
- *   s   — указатель на структуру состояния (RAM)
- *   cfg — указатель на конфигурацию (const, Flash)
- *
- * Примечание:
- *   Первый вызов ThermalLimiter_Update() автоматически инициализирует
- *   фильтр текущим значением АЦП (без задержки).
- */
-void ThermalLimiter_Init(ThermalLimiterState *s, const ThermalLimiterConfig *cfg);
-
-/*
- * ThermalLimiter_Update — основной вызов регулятора (30 Гц)
- *
- * Алгоритм:
- *   1. Фильтрация температуры (IIR)
- *   2. Вычисление ошибки (filtered - setpoint)
- *   3. Пропорциональная составляющая P
- *   4. Интегральная составляющая I (с anti-windup)
- *   5. Суммирование P + I
- *   6. Ограничение по max_limit
- *   7. Ограничение скорости изменения (asymmetric slew rate)
- *   8. Финальное ограничение по user_pwm
- *
- * Параметры:
- *   s       — состояние регулятора (обновляется внутри)
- *   cfg     — конфигурация (не изменяется)
- *   adc_raw — сырые данные АЦП (0-1023)
- *   user_pwm — заданная пользователем яркость (0-511)
- *
- * Возвращает:
- *   limiter (0..user_pwm) — величина ограничения.
- *   Итоговый ШИМ = user_pwm - limiter.
- *
- * Гарантия:
- *   limiter <= user_pwm всегда (никогда не увеличивает яркость).
- *   limiter >= 0 всегда (яркость не падает ниже 0).
- */
-uint16_t ThermalLimiter_Update(ThermalLimiterState *s, const ThermalLimiterConfig *cfg,
-                               uint16_t adc_raw, uint16_t user_pwm);
-
-/*
- * ThermalLimiter_Reset — сброс состояния регулятора
- *
- * Обнуляет фильтр, интегратор и предыдущий limiter.
- * Используется при горячем перезапуске или смене уставки.
- *
- * Параметры:
- *   s — указатель на структуру состояния
- */
-void ThermalLimiter_Reset(ThermalLimiterState *s);
-
+#ifdef __cplusplus
+extern "C" {
 #endif
+
+/* ------------------------------------------------------------------------ */
+/* Compile-time constants                                                   */
+/* ------------------------------------------------------------------------ */
+
+/** 10-bit ADC domain limits for `t_raw` - values at/beyond these rails are
+ *  physically impossible for a healthy NTC divider and indicate a broken or
+ *  shorted sensor wire (see ::ThermalLimiter_Update failsafe check). */
+#define THERMAL_ADC_MIN            0u
+#define THERMAL_ADC_MAX            1023u
+
+/** 9-bit user PWM / Limiter domain (0..512 inclusive, per spec). */
+#define THERMAL_PWM_MAX            512u
+
+/** Zone 1 "very cold" fast-leak offset (ADC counts below `t_threshold`
+ *  at which the integrator is halved instead of slow-leaked), per spec. */
+#define THERMAL_FAST_LEAK_OFFSET   30
+
+/** Zone 1 "near threshold" slow-leak shift: `integral -= (integral >> 5)`. */
+#define THERMAL_SLOW_LEAK_SHIFT    5u
+
+/**
+ * Hysteresis band (ADC counts) between the fast-leak *enter* line
+ * (`t_threshold - THERMAL_FAST_LEAK_OFFSET`) and the *exit* line the
+ * filtered temperature must climb back past before the decay switches
+ * back from fast (/2) to slow (/32). Without this band, `t_cur` sitting
+ * right on the boundary (residual EMA/ADC noise) would flip the decay
+ * rate every tick - see ::ThermalLimiterState_t::flags /
+ * THERMAL_FLAG_FAST_LEAK and thermal_limiter.c Zone 1 for the latch logic.
+ */
+#define THERMAL_FAST_LEAK_HYSTERESIS 8
+
+/** Bits packed into ::ThermalLimiterState_t::flags. Kept as a single
+ *  uint8_t bitfield (instead of two separate bool fields) so the extra
+ *  fast-leak latch below costs zero additional RAM. */
+#define THERMAL_FLAG_INITIALIZED  0x01u /**< EMA filter has been seeded once. */
+#define THERMAL_FLAG_FAST_LEAK    0x02u /**< Zone 1 fast-leak hysteresis latch
+                                              (see THERMAL_FAST_LEAK_HYSTERESIS). */
+#define THERMAL_FLAG_ERROR        0x03u /**Аппаратная ошибка. */
+
+/* ------------------------------------------------------------------------ */
+/* Configuration (read-only, typically `const` / flash-resident)            */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * @brief Tunable, shift-based parameters of the thermal limiter.
+ *
+ * Every gain here is a bit-shift count, not a multiplicative coefficient -
+ * there is no Q-format scale factor to divide back out. Intended to live in
+ * flash (`static const`) since it never changes at runtime.
+ *
+ * Effective integral gain & thermal-inertia note:
+ * ------------------------------------------------------------------------
+ * `ki_left_shift` alone can only ever *amplify* (minimum factor is 1x at
+ * shift=0) - there is no symmetric right-shift to attenuate it, since the
+ * spec forbids anything but left-shift gains. For a plant with large
+ * thermal mass/inertia the filtered error can sit at a small, roughly
+ * constant value for hundreds of ticks (many seconds) while dwelling in
+ * Zone 2/3; charging the integrator by at least 1x that error *every
+ * single tick* at 30Hz saturates it against user_pwm in a couple of
+ * seconds - long before the real thermal event would warrant a full
+ * shutdown. `ki_decimation_shift` fixes this without ever introducing a
+ * multiply or divide: the integral is only charged once every
+ * `2^ki_decimation_shift` ticks (gated by a free-running counter and a
+ * bitmask `AND`), giving an effective, still zero-mult gain of
+ * `2^(ki_left_shift - ki_decimation_shift)` - i.e. a genuine fractional
+ * Ki. Set to 0 (default) to keep the original "charge every tick"
+ * behavior; raise it (e.g. 5-7) for slow, high-thermal-mass objects so
+ * the integrator ramps over the same many-second timescale the real
+ * plant does, instead of slamming into anti-windup almost immediately.
+ */
+typedef struct {
+    uint8_t  kp_left_shift;        /**< Proportional gain, Zone 3 only:
+                                         P = (t_cur - t_set) << kp_left_shift. */
+    uint8_t  ki_left_shift;        /**< Integral gain, Zones 2 & 3:
+                                         integral += (error << ki_left_shift). */
+    uint8_t  ki_decimation_shift;  /**< Zero-mult "fractional Ki" gate: only charge
+                                         the integrator once every 2^ki_decimation_shift
+                                         ticks. 0 = charge every tick (original
+                                         behavior). See note above - use larger
+                                         values (5-7) for high-thermal-inertia
+                                         objects to avoid near-instant integrator
+                                         saturation. Recommended range: 0..7. */
+    uint16_t t_anticipate_offset;  /**< ADC counts below t_set where Zone 2
+                                         ("anticipation") begins:
+                                         t_threshold = t_set - t_anticipate_offset. */
+    uint8_t  filter_shift;         /**< EMA filter shift, applied directly in the
+                                         raw ADC domain:
+                                         filtered_temp += (t_raw - filtered_temp) >> filter_shift. */
+    uint16_t max_drop_rate;        /**< Max Limiter increase per tick (brightness
+                                         cut speed while heating up). */
+    uint16_t max_recovery_rate;    /**< Max Limiter decrease per tick (brightness
+                                         restore speed while cooling down). Should
+                                         be 2-3x smaller than max_drop_rate to avoid
+                                         visible flicker/surges. */
+} ThermalLimiterConfig_t;
+
+/* ------------------------------------------------------------------------ */
+/* Runtime state (RAM-resident, minimal footprint)                          */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * @brief Persistent state of a single thermal limiter instance.
+ *
+ * Entirely 16-bit-or-narrower fields - no int32_t. Total footprint is 8
+ * bytes (no extra alignment padding vs. the previous 7-byte/8-byte-padded
+ * layout - ki_tick_counter exactly fills what used to be a padding byte),
+ * leaving ample headroom in the 2KB RAM budget for the rest of the
+ * application.
+ */
+typedef struct {
+    int16_t  filtered_temp;  /**< EMA-filtered raw ADC value (same domain/scale
+                                   as t_raw, i.e. 0..1023 nominally). This IS
+                                   `t_cur` - no separate scaled temperature
+                                   variable exists. */
+    int16_t  integral;       /**< Dominant integrator accumulator, directly
+                                   scaled in Limiter units and clamped to
+                                   [0, user_pwm] every tick (see step 4d). */
+    int16_t  prev_limiter;   /**< Previous tick's post-slew-limit Limiter
+                                   value (0..512), used by the slew filter. */
+    uint8_t  flags;           /**< Bitfield, see THERMAL_FLAG_INITIALIZED /
+                                   THERMAL_FLAG_FAST_LEAK above. Packed into a
+                                   single byte (instead of two bool fields) so
+                                   the Zone 1 hysteresis latch is free in terms
+                                   of RAM footprint. */
+    uint8_t  ki_tick_counter;/**< Free-running tick counter used only to gate
+                                   integral charging per config->ki_decimation_shift
+                                   (zero-mult fractional-Ki substitute, see
+                                   ThermalLimiterConfig_t doc above). Wraps
+                                   naturally at 256, harmless since the gate
+                                   mask is always a power-of-2 <= 128. */
+} ThermalLimiterState_t;
+
+/* ------------------------------------------------------------------------ */
+/* Public API                                                                */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * @brief Reset a limiter instance to its power-on-safe state.
+ *
+ * Must be called once before the first ThermalLimiter_Update() call.
+ *
+ * @param state  State instance to initialize.
+ */
+void ThermalLimiter_Init(ThermalLimiterState_t *state);
+
+/**
+ * @brief Run one iteration of the thermal power limiter control loop.
+ *
+ * Non-blocking, deterministic execution time - a fixed handful of integer
+ * add/sub/shift/compare operations, no multiply, no divide. Safe to call
+ * from a timer ISR or a ~30Hz task.
+ *
+ * @param config    Controller configuration/tuning (typically `static const`).
+ * @param state     Persistent controller state (RAM).
+ * @param t_raw     Raw 10-bit ADC reading from the NTC divider (0..1023).
+ *                  Higher value == higher temperature (NTC in upper arm).
+ *                  A value of exactly 0 or >= 1023 triggers the failsafe
+ *                  (sensor open/short) and immediately shuts down the LED.
+ * @param t_set     10-bit ADC target set-point (0..1023).
+ * @param user_pwm  9-bit user-requested brightness (0..512). The controller
+ *                  output can only reduce this value, never exceed it.
+ *
+ * @return          Final PWM duty value to apply to the LED driver
+ *                   (0..user_pwm).
+ */
+uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
+                                ThermalLimiterState_t *state,
+                                uint16_t t_raw,
+                                uint16_t t_set,
+                                uint16_t user_pwm);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* THERMAL_LIMITER_H */
