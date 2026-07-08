@@ -58,12 +58,24 @@ int main(void)
     led_init();    /* Инициализация GPIO для LED */
     button_init(); /* Инициализация EXTI для кнопки */
 
+/*     while(1){
+        on_grn_h();
+        on_red_h();
+        Delay_Ms(2000);
+        off_grn();
+        off_red();
+        Delay_Ms(2000);
+        on_grn_l();
+        on_red_l();
+        Delay_Ms(5000);
+    }
+ */
     adc_init(); /* Инициализация АЦП (NTC + Vrefint) */
 
     /* DAC + I2C */
     dac_pwrpin_init(); // настраиваем ногу для управления питанием.
     dac_pwrpin_on();   // включаем питание DAC
-    i2c_init(I2C_SPEED_400K);
+    i2c_init(400000);
     dac7571_set_voltage(0);
 
     if (read_ee() == FAILED) /* Загрузка настроек из EEPROM (или инициализация по умолчанию) */
@@ -115,7 +127,7 @@ int main(void)
             adc_init();
             tim2_start();
             dac_pwrpin_init();
-            i2c_init(I2C_SPEED_400K);
+            i2c_init(400000);
         }
 
         /* 3. Пробуждение по AWU: обрабатываем AUX-команды */
