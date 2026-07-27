@@ -21,12 +21,14 @@
 #include "i2c.h"
 #include "dac.h"
 #include "button_gpio.h"
+#include "button.h"
 #include "aux_leds.h"
 #include "wl_flash.h"
 #include "ui.h"
 #include "adc.h"
 #include "timers.h"
 #include "limiters.h"
+#include "array.h"
 
 volatile wakeup_source_t wakeup_source = WS_NONE; /* Источник последнего пробуждения */
 
@@ -56,7 +58,7 @@ int main(void)
     AWU_set_delay(AWU_15MS); /* Начальная задержка AWU */
 
     led_init();    /* Инициализация GPIO для LED */
-    button_init(); /* Инициализация EXTI для кнопки */
+    button_gpio_init(); /* Инициализация EXTI для кнопки */
 
 /*     while(1){
         on_grn_h();
@@ -78,10 +80,33 @@ int main(void)
     i2c_init(400000);
     dac7571_set_voltage(0);
 
-    if (read_ee() == FAILED) /* Загрузка настроек из EEPROM (или инициализация по умолчанию) */
-    {
-        init_ee();
-    }
+ //   if (read_ee() == FAILED) /* Загрузка настроек из EEPROM (или инициализация по умолчанию) */
+ //   {
+ //       init_ee();
+ //   }
+
+    ee_defaults(&ee); /* RAM-инициализация по умолчанию (без обращения к Flash).
+                        * Единый источник правды для ee.slots[], default__ui1/2 и т.д.,
+                        * см. src/ui.c. Ниже — только оверрайды для текущего тестового стенда. */
+
+    ee.uif.off_bckl       = true;          // ee_defaults() не трогает это поле (остаётся false)
+    ee.aux.bcklight_color = BCK_COLOR_GRN; // default: BCK_COLOR_RED
+    ee.aux.beacon_mode    = BCON_4S;       // default: BCON_1S
+    ee.aux.beacon_on      = false;         // default: true
+    ee.aux.beacon_type    = 1;             // default: GRN_LED(2); тестовый стенд хочет RED_LED(1)
+    ee.eng.min_level      = 5;             // default: 1
+
+
+    /* Инициализация FSM кнопки и UI */
+    static const btn_config_t btn_cfg = {
+        .hold_ticks = BTN_HOLD_TICKS,
+        .repeat_ticks = BTN_REPEAT_TICKS,
+        .release_ticks = BTN_RELEASE_TICKS,
+        .max_clicks = BTN_MAX_CLICKS,
+        .long_click_ticks = BTN_LONG_CLICK_TICKS,
+    };
+    button_init(&btn_cfg);
+    ui_init();
 
     // start_aux_cmd(INFO_GRN, true, IDM_BEACON, AWU_120MS);
     // start_aux_array(buf_sos_red, AWU_120MS); /* Запуск тестового массива мигания */
@@ -95,7 +120,7 @@ int main(void)
     reset_limiters(); // Сброс ограничителей
 
     /* Приветственное сообщение */
-    EE_PRINTF("\r\nthermal_limiter started\r\n");
+    //EE_PRINTF("\r\nthermal_limiter started\r\n");
     EE_PRINTF("setpoint=%u kp_shift=%u ki_shift=%u ki_decim=%u offset=%u\r\n",
            T_SET, config.kp_left_shift, config.ki_left_shift,
            config.ki_decimation_shift, config.t_anticipate_offset);
@@ -139,10 +164,11 @@ int main(void)
         }
 
         /* 4. Таймерные задачи (выполняются пока need_sleep == false) */
-        if (tick_160hz()) /* ~6мс: ADC измерение + UI + softstart */
+        if (tick_160hz()) /* ~6мс: UI (button FSM + dispatcher) + softstart */
         {
             // EE_PRINTF("[MAIN] Tick 160Hz.\r\n");
-            scan_ui1();
+            button_tick();
+            ui_process();
             ss_scan();
         }
 
@@ -171,8 +197,8 @@ int main(void)
         if (tick_5s()) /* 5с: сохранение EEPROM */
         {
             // EE_PRINTF("[MAIN] Tick 5 Sec.\r\n");
-            handle_ee();
-            // need_sleep = true;
+//            handle_ee();
+            need_sleep = true;
         }
     }
 }

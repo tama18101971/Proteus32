@@ -218,7 +218,7 @@ uint32_t flash_search_address(uint32_t StartAddress, struct ee_data *out_valid_d
  * ============================================================ */
 static int erase_flash_page(uint32_t page_start)
 {
-    EE_PRINTF("[EEPROM] Erasing page 0x%08lX\r\n", page_start);  
+    //EE_PRINTF("[EEPROM] Erasing page 0x%08lX\r\n", page_start);  
     __disable_irq();                        
 
     FLASH->KEYR = FLASH_KEY1;              
@@ -258,14 +258,14 @@ int read_ee(void)
     ResAddress = flash_search_address(PAGE_WRITE_START_ADDR, &temp_ee);  
     
     if (MaxSeq == 0) {           
-        EE_PRINTF("[EEPROM] EMPTY OR ALL SLOTS CORRUPTED\r\n");    
+       //EE_PRINTF("[EEPROM] EMPTY OR ALL SLOTS CORRUPTED\r\n");    
         return 0;                           
     }
 
-    EE_PRINTF("[EEPROM] Active slot found! Next Write Addr: 0x%08lX, MaxSeq: %lu\r\n", ResAddress, MaxSeq);  
+    //EE_PRINTF("[EEPROM] Active slot found! Next Write Addr: 0x%08lX, MaxSeq: %lu\r\n", ResAddress, MaxSeq);  
 
     if (temp_ee.version != EE_VERSION) {       
-        EE_PRINTF("[EEPROM] VERSION MISMATCH %u != %u\r\n", temp_ee.version, EE_VERSION);  
+        //EE_PRINTF("[EEPROM] VERSION MISMATCH %u != %u\r\n", temp_ee.version, EE_VERSION);  
         return 0;                           
     }
 
@@ -294,7 +294,7 @@ if (ResAddress == 0) {
         // Заходим на новую страницу в первый слот — обязательно стираем её
         if (!is_page_erased(page_start)) {
             if (!erase_flash_page(page_start)) {
-                EE_PRINTF("[EEPROM] Page Erase Failed!\r\n");
+                //EE_PRINTF("[EEPROM] Page Erase Failed!\r\n");
                 return 0;
             }
         }
@@ -310,8 +310,7 @@ if (ResAddress == 0) {
             // стирания Flash — страница целиком, поэтому восстанавливаем:
             // сохраняем слот 0, стираем страницу, пишем слот 0 обратно,
             // и продолжаем запись во второй (теперь чистый) слот.
-            EE_PRINTF("[EEPROM] Slot anomaly at 0x%08lX, recovering page 0x%08lX\r\n",
-                      ResAddress, page_start);
+            //EE_PRINTF("[EEPROM] Slot anomaly at 0x%08lX, recovering page 0x%08lX\r\n",  ResAddress, page_start);
 
             struct ee_data slot0_backup;
             flash_read_struct(page_start, &slot0_backup);
@@ -332,7 +331,7 @@ if (ResAddress == 0) {
                         if (memcmp(&slot0_backup, &verify0, EE_STRUCT_SIZE) == 0)
                         {
                             recovered = 1;
-                            EE_PRINTF("[EEPROM] Page 0x%08lX recovered, slot0 restored\r\n", page_start);
+                            //EE_PRINTF("[EEPROM] Page 0x%08lX recovered, slot0 restored\r\n", page_start);
                         }
                     }
                 }
@@ -340,7 +339,7 @@ if (ResAddress == 0) {
 
             if (!recovered)
             {
-                EE_PRINTF("[EEPROM] Recovery failed, falling back to next page\r\n");
+                //EE_PRINTF("[EEPROM] Recovery failed, falling back to next page\r\n");
                 ResAddress = page_start + FLASH_PAGE_SIZE;
                 if (ResAddress >= PAGE_WRITE_END_ADDR)
                 {
@@ -354,11 +353,11 @@ if (ResAddress == 0) {
         }
     }
 
-EE_PRINTF("[EEPROM] Writing to 0x%08lX seq=%lu\r\n", ResAddress, ee.seq);
+//EE_PRINTF("[EEPROM] Writing to 0x%08lX seq=%lu\r\n", ResAddress, ee.seq);
 
     if (!flash_write_struct_raw(ResAddress, &ee))
     {
-        EE_PRINTF("[EEPROM] Hardware Flash Write Error!\r\n");
+        //EE_PRINTF("[EEPROM] Hardware Flash Write Error!\r\n");
         return 0;
     }
 
@@ -366,7 +365,7 @@ EE_PRINTF("[EEPROM] Writing to 0x%08lX seq=%lu\r\n", ResAddress, ee.seq);
     struct ee_data verify_buf;
     flash_read_struct(ResAddress, &verify_buf);
     if (memcmp(&ee, &verify_buf, EE_STRUCT_SIZE) != 0) {
-        EE_PRINTF("[EEPROM] Verification FAILED after write!\r\n");
+        //EE_PRINTF("[EEPROM] Verification FAILED after write!\r\n");
         return 0; 
     }
 
@@ -378,7 +377,7 @@ EE_PRINTF("[EEPROM] Writing to 0x%08lX seq=%lu\r\n", ResAddress, ee.seq);
         ResAddress = PAGE_WRITE_START_ADDR;
     }
 
-    EE_PRINTF("[EEPROM] Write & Verify Successful\r\n");
+    //EE_PRINTF("[EEPROM] Write & Verify Successful\r\n");
     return 1;                              
 }
 
@@ -391,7 +390,7 @@ EE_PRINTF("[EEPROM] Writing to 0x%08lX seq=%lu\r\n", ResAddress, ee.seq);
    После вызова этой функции обычно вызывают write_ee() для сохранения во flash */
 void init_ee(void)
 {
-    EE_PRINTF("[EEPROM] Init defaults\r\n");
+    //EE_PRINTF("[EEPROM] Init defaults\r\n");
     memset(&ee, 0, EE_STRUCT_SIZE);
     ((uint8_t *)&ee)[4] = EE_VERSION;
     ee_defaults(&ee);

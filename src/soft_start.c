@@ -40,7 +40,7 @@ ss_st ss;
  * Важно: после вызова ss_init() нужно вызывать ss_scan() пока ss.enable == true */
 void ss_init(uint16_t target, uint16_t previous, SoftStartSpeed_t speed)
 {
-	EE_PRINTF("[SS] init target=%u prev=%u speed=%u\r\n", target, previous, speed);
+	//EE_PRINTF("[SS] init target=%u prev=%u speed=%u\r\n", target, previous, speed);
 	if (target == previous)
 		return;                                     /* Уже на месте — soft start не нужен */
 

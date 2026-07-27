@@ -29,6 +29,6 @@ extern volatile uint8_t button_event;
 extern volatile wakeup_source_t wakeup_source;
 extern uint8_t need_sleep;
 
-void button_init(void);
+void button_gpio_init(void);
 
 #endif // BUTTON_GPIO_H

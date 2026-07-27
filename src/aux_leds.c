@@ -727,9 +727,11 @@ void stop_aux_strobe(bool stop_lsi) {
  */
 void slot_batt_ind(void) {
 #ifdef USE_BATTIND
-	stop_aux_beacon(false);
-	uint32_t cmd = set_aux_count(bat_get_flashes());
-	start_aux_cmd(cmd, true, IDM_OTHER, AWU_120MS);
+	// stop_aux_beacon(false);
+	(void)bat_get_flashes();
+	//EE_PRINTF("[AUX] slot_batt_ind flashes=%u\r\n", (unsigned)bat_get_flashes());
+	// uint32_t cmd = set_aux_count(bat_get_flashes());
+	// start_aux_cmd(cmd, true, IDM_OTHER, AWU_120MS);
 #endif
 }
 
@@ -737,14 +739,16 @@ void slot_batt_ind(void) {
  * @brief Включение (одна зелёная вспышка)
  */
 void aux_on(void) {
-	start_aux_cmd(INFO_GRN, true, IDM_OTHER, AWU_120MS);
+	EE_PRINTF("[AUX] info green\r\n");
+	// start_aux_cmd(INFO_GRN, true, IDM_OTHER, AWU_120MS);
 }
 
 /**
  * @brief Выключение (одна красная вспышка)
  */
 void aux_off(void) {
-	start_aux_cmd(INFO_RED, true, IDM_OTHER, AWU_120MS);
+	EE_PRINTF("[AUX] info red\r\n");
+	// start_aux_cmd(INFO_RED, true, IDM_OTHER, AWU_120MS);
 }
 
 /**
@@ -752,12 +756,14 @@ void aux_off(void) {
  * @param count — количество (0 = одна красная, иначе count зелёных)
  */
 void aux_count(uint8_t count) {
-	uint32_t cmd;
-	if (count)
-		cmd = 0b00000000000000010100000100000010 | (count << 4);	// зеленые, если не ноль
-	else
-		cmd = 0b00000000000000010010001000010001;					// одна красная, если 0
-	start_aux_cmd(cmd, true, IDM_OTHER, AWU_120MS);
+	(void)count;
+	EE_PRINTF("[AUX] count=%u\r\n", (unsigned)count);
+	// uint32_t cmd;
+	// if (count)
+	// 	cmd = 0b00000000000000010100000100000010 | (count << 4);	// зеленые, если не ноль
+	// else
+	// 	cmd = 0b00000000000000010010001000010001;					// одна красная, если 0
+	// start_aux_cmd(cmd, true, IDM_OTHER, AWU_120MS);
 }
 
 /**********************************************************************************************/

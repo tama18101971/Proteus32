@@ -7,7 +7,7 @@
  *
  * Кнопка: PC3 → EXTI Line3 → EXTI7_0_IRQHandler
  *
- * Инициализация (button_init):
+ * Инициализация (button_gpio_init):
  *   1. Тактирование GPIOC + AFIO
  *   2. PC3 = Input Pull-Up
  *   3. EXTI3 → GPIOC
@@ -46,7 +46,7 @@ void EXTI7_0_IRQHandler(void)
 /*********************************************************************
  * Button initialization (GPIO + EXTI + NVIC)
  *********************************************************************/
-void button_init(void)
+void button_gpio_init(void)
 {
     // 1. Включаем тактирование GPIOC и AFIO
     RCC->APB2PCENR |= (1 << 4) | (1 << 0);  // RCC_APB2Periph_GPIOC | RCC_APB2Periph_AFIO
