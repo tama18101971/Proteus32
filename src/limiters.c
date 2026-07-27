@@ -1,8 +1,8 @@
 #include "adc.h"
 #include "ui.h"
 #include "limiters.h"
-#include "wl_flash.h"
-#include "config.h"
+#include "app_data.h"
+#include "proteus_config.h"
 
 /* ============ СТРУКТУРЫ РЕГУЛЯТОРА ============ */
 

@@ -23,7 +23,7 @@
 #include "button_gpio.h"
 #include "button.h"
 #include "aux_leds.h"
-#include "wl_flash.h"
+#include "app_data.h"
 #include "ui.h"
 #include "adc.h"
 #include "timers.h"
@@ -86,15 +86,13 @@ int main(void)
  //       init_ee();
  //   }
 
-    ee_defaults(&ee); /* RAM-инициализация по умолчанию (без обращения к Flash).
-                        * Единый источник правды для ee.slots[], default__ui1/2 и т.д.,
-                        * см. src/ui.c. Ниже — только оверрайды для текущего тестового стенда. */
+    ee_defaults(); /* RAM-инициализация по умолчанию (без обращения к Flash). */
 
-    ee.uif.off_bckl       = true;          // ee_defaults() не трогает это поле (остаётся false)
-    ee.aux.bcklight_color = BCK_COLOR_GRN; // default: BCK_COLOR_RED
-    ee.aux.beacon_mode    = BCON_4S;       // default: BCON_1S
-    ee.aux.beacon_on      = false;         // default: true
-    ee.aux.beacon_type    = 1;             // default: GRN_LED(2); тестовый стенд хочет RED_LED(1)
+    EE.uif.off_bckl       = true;          // ee_defaults() не трогает это поле (остаётся false)
+    EE.aux.bcklight_color = BCK_COLOR_GRN; // default: BCK_COLOR_RED
+    EE.aux.beacon_mode    = BCON_4S;       // default: BCON_1S
+    EE.aux.beacon_on      = false;         // default: true
+    EE.aux.beacon_type    = 1;             // default: GRN_LED(2); тестовый стенд хочет RED_LED(1)
     ob_SetMl(5);                           // default: 1
 
 
@@ -198,7 +196,7 @@ int main(void)
         if (tick_5s()) /* 5с: сохранение EEPROM */
         {
             // EE_PRINTF("[MAIN] Tick 5 Sec.\r\n");
-//            handle_ee();
+            handle_ee();
             need_sleep = true;
         }
     }

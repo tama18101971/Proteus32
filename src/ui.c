@@ -18,7 +18,7 @@
 #include "ui_table.h"
 #include "array.h"
 #include "aux_leds.h"
-#include "wl_flash.h"
+#include "app_data.h"
 #include "dac.h"
 #include "timers.h"
 #include "limiters.h"
@@ -57,8 +57,8 @@ uint8_t need_save = false;
 
 uint8_t clicks_count = 0;
 uint8_t ui_table_idx = 1;       // runtime selector for dispatch tables
-uint8_t ramp_speed = 2;          // replaces ee.eng.rump_speed (session only)
-uint8_t pid_time = 3;            // replaces ee.eng.pid_time (session only)
+uint8_t ramp_speed = 2;          // replaces EE.eng.rump_speed (session only)
+uint8_t pid_time = 3;            // replaces EE.eng.pid_time (session only)
 uint8_t volt_max_mode = CMODE_TURBO;
 uint8_t volt_stop_mode = CMODE_TURBO; // "без ограничений" по умолчанию (как в Proteus84: MODES_QTY-1);
                                        // динамическое снижение по напряжению батареи не портировано
@@ -96,46 +96,26 @@ void OFF_POWER(void)
     dac_pwrpin_off();
 }
 
-void ee_defaults(struct ee_data *e)
+void ee_defaults(void)
 {
-    /* Engineering */
-    //e->eng.min_level = 1;
-    //e->eng.vc = 0;
-    //e->eng.tc = 0;
+    EE.version = EE_VERSION;
 
-    /* Interface */
-    e->uif.ui_index = 1;
-    e->uif.use_memory = 0;
+    EE.uif.ui_index = 1;
+    EE.uif.use_memory = 0;
 
-    /* Backlight */
-    e->aux.bcklight_color = BCK_COLOR_RED;
-    e->aux.bcklight_type = BCK_TYPE_ON;
+    EE.aux.bcklight_color = BCK_COLOR_RED;
+    EE.aux.bcklight_type = BCK_TYPE_ON;
 
-    /* Beacon */
-    e->aux.beacon_mode = BCON_1S;
-    e->aux.beacon_on = true;
-    e->aux.beacon_type = GRN_LED;
+    EE.aux.beacon_mode = BCON_1S;
+    EE.aux.beacon_on = true;
+    EE.aux.beacon_type = GRN_LED;
 
-    /* User settings */
-    e->usr.eaux_onoff = false;
-    e->usr.id_plus_sid = false;
-    e->usr.t_calibr = 6;
+    EE.usr.eaux_onoff = false;
+    EE.usr.id_plus_sid = false;
+    EE.usr.t_calibr = 6;
 
-    /* UI defaults */
-    e->default__ui1 = DEFAULT_STEP;
-    e->default__ui2 = DEFAULT_MODE;
-
-    /* Slots */
-    //ob_SetSlot(0, SLOT_BATT_IND);
-    //ob_SetSlot(1, SLOT_BEACON);
-    //ob_SetSlot(2, SLOT_STROBE);
-    //ob_SetSlot(3, SLOT_TACTICAL);
-    //ob_SetSlot(4, SLOT_BLOCK);
-    //ob_SetSlot(5, SLOT_EMPTY);
-    //ob_SetSlot(6, SLOT_EMPTY);
-    //ob_SetSlot(7, SLOT_MEMORY);
-    //ob_SetSlot(8, SLOT_BACKLIGHT);
-    //ob_SetSlot(9, SLOT_IPSMODE);
+    EE.default__ui1 = DEFAULT_STEP;
+    EE.default__ui2 = DEFAULT_MODE;
 }
 
 uint16_t get_step_tc(uint16_t step)
@@ -175,7 +155,7 @@ uint8_t on_driver(void)
 {
     EE_PRINTF("[UI] ON driver.\r\n");
 
-    if (ee.uif.ui_index)
+    if (EE.uif.ui_index)
         step_tactic = 0;
 
     if (driver_mode < MODE_BLOCK_C)
@@ -301,7 +281,7 @@ void on_xmode_ui1(void)
 {
     ps.use_prev = false;
     on_driver();
-    set_current(ee.uif.use_memory ? (step_user ? step_user : step_default) : ee.default__ui1, SS_FAST);
+    set_current(EE.uif.use_memory ? (step_user ? step_user : step_default) : EE.default__ui1, SS_FAST);
 }
 
 void on_turbo_ui1(void)
@@ -369,8 +349,8 @@ void slot_tactical(void)
 
 void slot_backlight(void)
 {
-    ee.aux.bcklight_type = !ee.aux.bcklight_type;
-    onoff_indicator(ee.aux.bcklight_type);
+    EE.aux.bcklight_type = !EE.aux.bcklight_type;
+    onoff_indicator(EE.aux.bcklight_type);
 }
 
 void slot_beacon(void)
@@ -382,15 +362,15 @@ void slot_beacon(void)
     }
     else
     {
-        ee.aux.beacon_on = !ee.aux.beacon_on;
-        onoff_indicator(ee.aux.beacon_on);
+        EE.aux.beacon_on = !EE.aux.beacon_on;
+        onoff_indicator(EE.aux.beacon_on);
     }
 }
 
 void slot_memory(void)
 {
-    ee.uif.use_memory = !ee.uif.use_memory;
-    onoff_indicator(ee.uif.use_memory);
+    EE.uif.use_memory = !EE.uif.use_memory;
+    onoff_indicator(EE.uif.use_memory);
 }
 
 void slot_empty(void) {}
@@ -479,10 +459,11 @@ void unblock_drv(void)
 
 void reset2def(void)
 {
-    init_ee();                  // loads defaults into RAM, no Flash write
-    ui_save = ee.uif.ui_index;
+    init_ee();                  // zeroes RAM, sets version
+    ee_defaults();              // fills application defaults
+    ui_save = EE.uif.ui_index;
     ui_table_idx = ENG_MENU_IND;
-    beacon_save = ee.aux.beacon_on;
+    beacon_save = EE.aux.beacon_on;
     onoff_indicator(true);
 }
 
@@ -515,7 +496,7 @@ void calibration(void)
 void save_def_ui1(void)
 {
     off_auto_repeat();
-    if (ee.uif.off_bckl)
+    if (EE.uif.off_bckl)
     {
         out_set_stc(0);
         Delay_Ms(30);
@@ -524,7 +505,7 @@ void save_def_ui1(void)
     else
         onoff_indicator(true);
 
-    ee.default__ui1 = step_tc;
+    EE.default__ui1 = step_tc;
     // need_save = true;  // EEPROM write commented
     EE_PRINTF("[UI] save_def_ui1 step=%u (save commented)\r\n", (unsigned)step_tc);
 }
@@ -532,7 +513,7 @@ void save_def_ui1(void)
 void save_def_ui2(void)
 {
     off_auto_repeat();
-    if (ee.uif.off_bckl)
+    if (EE.uif.off_bckl)
     {
         out_set_stc(0);
         Delay_Ms(30);
@@ -541,7 +522,7 @@ void save_def_ui2(void)
     else
         onoff_indicator(true);
 
-    ee.default__ui2 = mode_current;
+    EE.default__ui2 = mode_current;
     // need_save = true;  // EEPROM write commented
     EE_PRINTF("[UI] save_def_ui2 mode=%u (save commented)\r\n", (unsigned)mode_current);
 }
@@ -613,8 +594,8 @@ void pt_clickX(void)
 void menu_exit(void)
 {
 #ifdef USE_MENU
-    ee.uif.ui_index = ui_save;
-    ee.aux.beacon_on = beacon_save;
+    EE.uif.ui_index = ui_save;
+    EE.aux.beacon_on = beacon_save;
     ui_table_idx = ui_save;
     // write_ee();  // EEPROM write commented
     EE_PRINTF("[UI] menu exit -> ui=%u beacon=%u\r\n", (unsigned)ui_save, (unsigned)beacon_save);
@@ -632,16 +613,16 @@ void enter_chtk_mode(void)
 {
 #ifdef USE_MENU
     driver_mode = MODE_CTK_H;
-    EE_PRINTF("[UI] enter chtk mode t_calibr=%u\r\n", (unsigned)ee.usr.t_calibr);
-    // aux_count(ee.usr.t_calibr);
+    EE_PRINTF("[UI] enter chtk mode t_calibr=%u\r\n", (unsigned)EE.usr.t_calibr);
+    // aux_count(EE.usr.t_calibr);
 #endif
 }
 
 void chtk_clickX(void)
 {
 #ifdef USE_MENU
-    ee.usr.t_calibr = clicks_count;
-    EE_PRINTF("[UI] chtk_clickX t_calibr=%u\r\n", (unsigned)ee.usr.t_calibr);
+    EE.usr.t_calibr = clicks_count;
+    EE_PRINTF("[UI] chtk_clickX t_calibr=%u\r\n", (unsigned)EE.usr.t_calibr);
     // aux_count(clicks_count);
     driver_mode = MODE_OFF;
 #endif
@@ -654,16 +635,16 @@ void chtk_clickX(void)
 void slot_eauxmode(void)
 {
 #ifdef USE_MENU
-    ee.usr.eaux_onoff = !ee.usr.eaux_onoff;
-    onoff_indicator(ee.usr.eaux_onoff);
+    EE.usr.eaux_onoff = !EE.usr.eaux_onoff;
+    onoff_indicator(EE.usr.eaux_onoff);
 #endif
 }
 
 void slot_ipsmode(void)
 {
 #ifdef USE_MENU
-    ee.usr.id_plus_sid = !ee.usr.id_plus_sid;
-    onoff_indicator(ee.usr.id_plus_sid);
+    EE.usr.id_plus_sid = !EE.usr.id_plus_sid;
+    onoff_indicator(EE.usr.id_plus_sid);
 #endif
 }
 
@@ -671,16 +652,16 @@ void enter_bm_mode(void)
 {
 #ifdef USE_MENU
     driver_mode = MODE_BM;
-    EE_PRINTF("[UI] enter bm mode=%u\r\n", (unsigned)(ee.aux.beacon_mode + 1));
-    // aux_count(ee.aux.beacon_mode + 1);
+    EE_PRINTF("[UI] enter bm mode=%u\r\n", (unsigned)(EE.aux.beacon_mode + 1));
+    // aux_count(EE.aux.beacon_mode + 1);
 #endif
 }
 
 void bm_clickX(void)
 {
 #ifdef USE_MENU
-    ee.aux.beacon_mode = clicks_count - 1;
-    EE_PRINTF("[UI] bm_clickX mode=%u\r\n", (unsigned)ee.aux.beacon_mode);
+    EE.aux.beacon_mode = clicks_count - 1;
+    EE_PRINTF("[UI] bm_clickX mode=%u\r\n", (unsigned)EE.aux.beacon_mode);
     // aux_count(clicks_count);
     driver_mode = MODE_OFF;
 #endif
@@ -690,16 +671,16 @@ void enter_bt_mode(void)
 {
 #ifdef USE_MENU
     driver_mode = MODE_BT;
-    EE_PRINTF("[UI] enter bt type=%u\r\n", (unsigned)((ee.aux.beacon_type >> 1) + 1));
-    // aux_count((ee.aux.beacon_type >> 1) + 1);
+    EE_PRINTF("[UI] enter bt type=%u\r\n", (unsigned)((EE.aux.beacon_type >> 1) + 1));
+    // aux_count((EE.aux.beacon_type >> 1) + 1);
 #endif
 }
 
 void bt_clickX(void)
 {
 #ifdef USE_MENU
-    ee.aux.beacon_type = (1 << (clicks_count - 1));
-    EE_PRINTF("[UI] bt_clickX type=%u\r\n", (unsigned)ee.aux.beacon_type);
+    EE.aux.beacon_type = (1 << (clicks_count - 1));
+    EE_PRINTF("[UI] bt_clickX type=%u\r\n", (unsigned)EE.aux.beacon_type);
     // aux_count(clicks_count);
     driver_mode = MODE_OFF;
 #endif
@@ -709,16 +690,16 @@ void enter_bl_mode(void)
 {
 #ifdef USE_MENU
     driver_mode = MODE_BL;
-    EE_PRINTF("[UI] enter bl color=%u\r\n", (unsigned)(ee.aux.bcklight_color + 1));
-    // aux_count(ee.aux.bcklight_color + 1);
+    EE_PRINTF("[UI] enter bl color=%u\r\n", (unsigned)(EE.aux.bcklight_color + 1));
+    // aux_count(EE.aux.bcklight_color + 1);
 #endif
 }
 
 void bl_clickX(void)
 {
 #ifdef USE_MENU
-    ee.aux.bcklight_color = clicks_count - 1;
-    EE_PRINTF("[UI] bl_clickX color=%u\r\n", (unsigned)ee.aux.bcklight_color);
+    EE.aux.bcklight_color = clicks_count - 1;
+    EE_PRINTF("[UI] bl_clickX color=%u\r\n", (unsigned)EE.aux.bcklight_color);
     // aux_count(clicks_count);
     driver_mode = MODE_OFF;
 #endif
@@ -844,7 +825,7 @@ void on_min_ui2(void)
 
 void on_xmode_ui2(void)
 {
-    mode_current = get_up_mode(ee.uif.use_memory ? mode_default : ee.default__ui2);
+    mode_current = get_up_mode(EE.uif.use_memory ? mode_default : EE.default__ui2);
     on_mode(mode_current);
 }
 
@@ -940,7 +921,7 @@ void ui_init(void)
     need_save = 0;
     direction = DIR_UP;
     mode_current = CMODE_OFF;
-    ui_table_idx = ee.uif.ui_index;
+    ui_table_idx = EE.uif.ui_index;
     ramp_speed = 2;
     pid_time = 3;
 }

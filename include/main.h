@@ -1,4 +1,4 @@
 #ifndef MAIN_H
 #define MAIN_H
-#include "config.h"
+#include "proteus_config.h"
 #endif // MAIN_H

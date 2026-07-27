@@ -175,7 +175,7 @@ void out_set_stc(uint16_t step);
 void ON_POWER(void);
 void OFF_POWER(void);
 
-void ee_defaults(struct ee_data *e);
+void ee_defaults(void);
 
 /*******************************************************************************
  *  Brightness helpers

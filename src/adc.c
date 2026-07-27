@@ -23,7 +23,7 @@
 
 #include "adc.h"
 #include "ch32v00x.h"
-#include "config.h"
+#include "proteus_config.h"
 #include "debug.h"
 
 

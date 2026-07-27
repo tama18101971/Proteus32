@@ -19,7 +19,7 @@
  */
 
 #include "awu.h"
-#include "config.h"
+#include "proteus_config.h"
 #include "debug.h"
 
 uint8_t is_sleep_mode = false;

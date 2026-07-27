@@ -13,7 +13,7 @@
 /************************************************************************/
 typedef enum {
 	EXIT_MAGIC_MODE = 0U,
-	SLOT_EMPTY,
+	SLOT_OP_EMPTY,
 	SLOT_BATT_IND,
 	SLOT_STROBE,
 	SLOT_BLOCK_BEACON,

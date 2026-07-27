@@ -223,8 +223,8 @@ bool ob_Init(void) {
         _cache.slots[2] = SLOT_STROBE;
         _cache.slots[3] = SLOT_TACTICAL;
         _cache.slots[4] = SLOT_BLOCK;
-        _cache.slots[5] = SLOT_EMPTY;
-        _cache.slots[6] = SLOT_EMPTY;
+        _cache.slots[5] = SLOT_OP_EMPTY;
+        _cache.slots[6] = SLOT_OP_EMPTY;
         _cache.slots[7] = SLOT_MEMORY;
         _cache.slots[8] = SLOT_BACKLIGHT;
         _cache.slots[9] = SLOT_IPSMODE;

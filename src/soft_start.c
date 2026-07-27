@@ -20,7 +20,7 @@
 #include <stdbool.h>
 #include "soft_start.h"
 #include "ui.h"
-#include "config.h"
+#include "proteus_config.h"
 
 /* Глобальное состояние soft start (одна переменная — один процесс) */
 ss_st ss;

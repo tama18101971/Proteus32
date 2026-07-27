@@ -1,486 +1,64 @@
-# AGENTS.md — Руководство для AI-ассистентов
+# AGENTS.md
 
-## Обзор проекта
+## Project
 
-**Proteus003** — прошивка фонарика на базе **CH32V003F4U6** (RISC-V RV32EC, 48 МГц, 16KB Flash, 2KB RAM).
+**Proteus003** — firmware for a CH32V003F4U6 (RISC-V RV32EC, 48 MHz, 16 KB Flash, 2 KB RAM) flashlight.
 
-### Ключевые особенности
-- **Термозащита LED**: NTC-датчик через ADC → ThermalLimiter → ограничение PWM
-- **Режим сна**: MCU засыпает в STANDBY между циклами, пробуждается по AWU или кнопке
-- **Прямая запись в регистры**: все периферийные регистры настраиваются напрямую (без SDK-хелперов)
-- **Экономия энергии**: ADC, TIM2 и I2C полностью отключаются при входе в сон
-- **UART 460800 бод**: высокая скорость отладки, не блокирует рампинг
+- Build only via PlatformIO: `pio run`, `pio run -t clean; pio run`, `pio run -t upload`
+- monitor: `pio device monitor` (115200 8N1)
+- LTO enabled (`board_build.use_lto = yes`)
+- Two external libs via `lib_deps`: I2C-CH32V003, WL_FLASH
 
-### Framework
-Проект использует **WCH noneos-sdk** (WCH Standard Peripheral Library, без RTOS). Некоторые HAL-функции (`GPIO_Init`, `ADC_RegularChannelConfig` и т.д.) применяются в `main.c` для инициализации периферии, но ядро алгоритма (`thermal_limiter.c`) работает без HAL.
+## ⚠️ CH32V003 ≠ STM32
 
----
+Never use STM32 knowledge. Registers can have the same names but different behavior. Check CH32V003 datasheet, not STM32. Specific differences well-known: AWU exists, only USART1, I2C CKCFGR formula is different, GPIO CFGLR masks Mode via `& 0x0F`, etc.
 
-## ⚠️ ЗАПРЕТ: НЕ ИСПОЛЬЗОВАТЬ ИНФОРМАЦИЮ ПО STM32
+## Key architecture
 
-**CH32V003 — это НЕ STM32!** Их регистры, периферия и поведение РАЗЛИЧАЮТСЯ.
+- **Data storage**: WL_FLASH library (wear-leveling EEPROM over flash). Application data defined as `app_data.h` — `union ee_view` overlays the library's raw `ee_data`. Access app fields via `EE.fieldname` (macro-based).
+- **Option Bytes** (`ob.c`/`ob.h`): separately handled via OB cache (`ob_GetMl`/`ob_SetMl`, `ob_GetSlot`/`ob_SetSlot`). NOT in the WL_FLASH struct.
+- **Thermal limiter** (`thermal_limiter.c`): PI controller with `max(P, I)` arbitration, integer-only, zero-multiplication (shift-based only). Constraints documented in `thermal_limiter.h` — honor them.
+- **Sleep**: STANDBY mode with AWU. Deinit ADC, TIM2, I2C before sleep. AWU_IRQHandler calls `SystemInit()` only when `is_sleep_mode == true`.
+- **UART debug**: `EE_PRINTF()` via `mini_printf`, enabled by `#define WL_FLASH_DEBUG` in `proteus_config.h`
 
-### Конкретные различия:
-| Параметр | STM32F1 | CH32V003 |
-|----------|---------|----------|
-| Ядро | ARM Cortex-M | RISC-V (QingKe V2A) |
-| Базовый адрес I2C | 0x40005400 | 0x40005400 (совпадает, но регистры другие!) |
-| GPIO CFGLR | 4 бита/пин (CNF+MODE) | 4 бита/пин (аналогично, но SDK маскирует Mode через & 0x0F) |
-| I2C CKCFGR | DUTY=бит 14 | DUTY=бит 14, но формула CCR другая |
-| AWU таймер | Нет | Есть (LSI 128кГц, EXTI Line9) |
-| USART | Много USART | Только USART1 |
-| Flash | Большая | 16KB (последние 256 байт — резерв для данных) |
-| RAM | Большая | 2KB |
+## Critical config
 
-### КРИТИЧЕСКИ ВАЖНО:
-1. **Не копировать код из STM32 примеров** — регистры могут называться одинаково, но вести себя иначе
-2. **Не использовать STM32 HAL/StdPeriph** — проект на прямых регистрах CH32V003
-3. **Не предполагать STM32 поведение** — например, CFGLR на CH32V003 маскирует Mode через `& 0x0F` перед записью
-4. **Проверять datasheet CH32V003**, а не STM32 при работе с периферией
+- `include/proteus_config.h` — project-specific defines (WL_FLASH_DEBUG, EE_PRINTF, USE_* flags)
+- `include/app_data.h` — EE overlay + EE macro
+- The library has its own `config.h` (for EEPROM_PAGE_COUNT, EE_STRUCT_SIZE etc.), no longer shadowed after renaming project's from config.h → proteus_config.h
+- `build_flags` in `platformio.ini` are minimal (`-Iinclude`, linker defs) — WL_FLASH params come from its own config.h defaults
 
----
-
-## Сборка и запуск
-
-```powershell
-pio run                 # Сборка
-pio run -t clean        # Очистка артефактов
-pio run -t upload       # Загрузка на плату (требуется WCH-Link)
-pio device monitor      # UART монитор (115200 8N1)
-```
-
-**Важно**: проект собирается ТОЛЬКО через PlatformIO. Не использовать cmake, make или другие системы сборки.
-
-### Проверка на предупреждения
-После любых изменений в `thermal_limiter.c`/`.h` или `main.c`:
-1. Временно добавить `-Wall -Wextra` в `build_flags` в `platformio.ini`
-2. `pio run -t clean; pio run` — убедиться, что нет предупреждений в `src/main.c` или `src/thermal_limiter.c`
-3. **Вернуть** `platformio.ini` в исходное состояние (не коммитить `-Wall -Wextra`)
-
-Предупреждения из файлов фреймворка (`.pio/`, `framework-wch-noneos-sdk`) — игнорировать, это не наш код.
-
----
-
-## Структура проекта
+## Commands
 
 ```
-include/
-├── thermal_limiter.h   — Публичный API: ThermalLimiterConfig_t, ThermalLimiterState_t,
-│                         ThermalLimiter_Init/Update. Обширные комментарии — читать первым.
-├── limiters.h          — Обёртка: sys_init(), scan_limiters(), reset_limiters()
-├── main.h              — Глобальные объявления
-├── config.h            — Настройки отладки (WL_FLASH_DEBUG, PRINT_ADC, EE_PRINTF)
-│
-├── awu.h               — Auto Wake-Up таймер
-├── timers.h            — TIM2 (1мс тик, таймерные интервалы)
-├── button_gpio.h       — Кнопка (EXTI Line3 на PC3)
-├── aux_leds.h          — AUX LED автомат (моргание светодиодами)
-├── ui.h                — Пользовательский интерфейс (рампинг яркости)
-├── soft_start.h        — Плавный soft start
-├── led_gpio.h          — Управление GPIO для LED (PC4, PC6, PC7)
-├── dac.h               — DAC7571 + I2C (управление яркостью)
-├── i2c.h               — I2C драйвер (прямые регистры)
-├── adc.h               — АЦП (NTC + Vrefint)
-├── wl_flash.h          — Сохранение данных во Flash
-├── array.h             — Утилиты для массивов
-├── ch32v003_gpio.h     — Утилиты GPIO
-└── mini_printf.h       — Мини-реализация printf
-
-src/
-├── main.c              — Точка входа, главный цикл, интеграция с HAL
-├── thermal_limiter.c   — Ядро алгоритма термозащиты (zero-multiplication)
-├── limiters.c          — Обёртка: инициализация, scan_limiters(), reset_limiters()
-│
-├── awu.c               — Auto Wake-Up таймер (прямые регистры)
-├── timers.c            — TIM2 (прямые регистры)
-├── button_gpio.c       — Кнопка (EXTI)
-├── aux_leds.c          — AUX LED автомат
-├── ui.c                — Пользовательский интерфейс
-├── soft_start.c        — Плавный soft start
-├── led_gpio.c          — Управление GPIO для LED
-├── dac.c               — DAC7571 (прямые регистры)
-├── i2c.c               — I2C драйвер (прямые регистры)
-├── adc.c               — АЦП (NTC + Vrefint)
-├── wl_flash.c          — EEPROM-эмуляция во Flash
-├── array.c             — Утилиты для массивов
-├── ob.c                — Option bytes
-└── mini_printf.c       — Мини-реализация printf
-
-Корень проекта:
-├── platformio.ini      — Конфигурация сборки
-├── TUNING.md           — Пошаговая процедура настройки параметров (рус.)
-├── tz_new.md           — Текущая спецификация архитектуры (авторитетная)
-├── tzq.md              — Устаревшая спецификация (историческая, НЕ использовать)
-└── AGENTS.md           — Этот файл
+pio run                          build
+pio run -t clean; pio run        clean rebuild
+pio run -t upload                flash via WCH-Link
+pio device monitor               115200 8N1
 ```
 
----
+## Style
 
-## Архитектура термозащиты (ThermalLimiter)
+- C99, `stdint.h` fixed-width types (`uint8_t`, `int16_t`, `uint32_t`) — never bare `int`/`short`/`long` for ADC/PWM/state
+- snake_case for fields/locals, PascalCase for public API (`ThermalLimiter_*`), `THERMAL_*` for macros
+- Register writes: `RCC->APB2PCENR |= RCC_AFIOEN` (direct, no SDK helpers except in `main.c`)
+- `#ifndef` guards on headers, timeouts on all `while` loops
+- Comments explain **why**, not what. Russian for `main.c`, English for `thermal_limiter.*`
+- When changing configurable behavior (ThermalLimiterConfig_t, zone boundaries, debug log format) — update `TUNING.md`
 
-### Назначение
-Ограничение мощности LED для защиты от перегрева. Контроллер читает NTC-термистор через ADC, вычисляет насколько нужно снизить запрошенную пользователем яркость PWM, и возвращает итоговое значение duty cycle. **Не управляет аппаратным PWM напрямую** — caller (`main.c`) интегрирует результат в свой вывод.
+## Thermal limiter constraints (do not violate without user approval)
 
-### Архитектура: "Intermittent Proportional + Dominant Integrator"
-Классический PI-контроллер суммирует `Limiter = P + I`. Вместо этого:
-- **Интегратор** — медленная, доминирующая тепловая базовая модель (удерживает LED на уставке)
-- **Пропорциональная** — быстрая, периодическая коррекция, активна только в Zone 3 (перегрев)
-- Арбитраж: `Limiter = max(P, I)` — какой термин требует большего ограничения, тот и побеждает
+1. No float/double — integer fixed-point only
+2. No multiply/divide in hot path (`ThermalLimiter_Update`) — only shifts (`<<`, `>>`)
+3. `ThermalLimiterState_t` fields are int16_t or smaller. int32_t only as temporary in expressions, never stored.
+4. `Limiter = max(P, I)`, never `P + I`
+5. Slew-rate filter (`max_drop_rate`/`max_recovery_rate`) is the final authority on visible brightness change speed
+6. Failsafe (`t_raw == 0 || t_raw >= 1023`): immediate bypass, PWM=0, print `E_THERMAL_RUNAWAY`. No debounce.
 
-### Три зоны ошибки (относительно `t_threshold = t_set - t_anticipate_offset`):
-| Зона | Условие входа | Условие выхода | P | I |
-|------|---------------|----------------|---|---|
-| 1 "Safe" | `t_cur < t_threshold` | — | 0 | Утечка (fast/slow decay), сбрасывает overheat-latch + Zone3 hysteresis |
-| 2 "Anticipation" | `t_threshold <= t_cur < t_set`, без Zone3 hysteresis | — | 0 | Заряд (кроме overheat-latch — см. ниже) |
-| 3 "Overheat" | `t_cur >= t_set` | `t_cur < t_set - THERMAL_ZONE3_HYSTERESIS` | Активен | Заряд от `error` (t_cur - t_set), overheat-latch + Zone3 hysteresis |
+## GPIO CFGLR pitfall
 
-**Zone 3 hysteresis** (`THERMAL_ZONE3_HYSTERESIS = 2`): Zone 3 входит немедленно при `t_cur >= t_set`, но выходит только при `t_cur < t_set - 2`. Пока `THERMAL_FLAG_IN_ZONE3` установлен, ветка Zone 2 полностью пропускается. Это предотвращает дребезг P и переключение закона зарядки интегратора при колебаниях EMA-фильтра вокруг уставки (699, 700, 699, 700...). Защёлка сбрасывается в Zone 1 (безусловно) и в Zone 3 (при `t_cur < t_set - 2`).
-
-### Overheat-latch (THERMAL_FLAG_OVERHEAT_LATCH)
-Без учёта направления изменения температуры (архитектура без D-члена) Zone 2 заряжала I всё время, пока `t_cur >= t_threshold` — включая случаи, когда температура уже пошла на убыль после реального перегрева, просто "по пути" через широкую зону anticipation обратно в Zone 1. Это вызывало неограниченный рост I во время остывания.
-
-Решение — битовый флаг-защёлка (аналогично `THERMAL_FLAG_FAST_LEAK`, без производной):
-- Zone 3 устанавливает защёлку (`state->flags |= THERMAL_FLAG_OVERHEAT_LATCH`) при первом входе в реальный перегрев.
-- Пока защёлка установлена, Zone 2 **не заряжает** I, а плавно **утекает** его (`integral -= integral >> 8`, `THERMAL_OVERHEAT_LATCH_LEAK_SHIFT`, с гарантией достижения нуля) — заряд anticipation имеет смысл только при первом подходе к уставке, а не при отступлении после уже случившегося перегрева. Утечка (а не простое удержание) нужна, чтобы яркость восстанавливалась плавно по мере остывания, а не оставалась замороженной до жёсткого пересечения `t_threshold`.
-- Утечка применяется **каждый тик** со сдвигом `>>8` — значительно мягче slow-leak Zone 1 (`>>5`). На реальном диапазоне I (0..511) это даёт фиксированную скорость ~1 единица/тик (~30/сек): плавно (без "лестницы" в логе), и один шумовой тик АЦП/EMA теряет лишь ~1 единицу I — не критично. Пробовали гейтить утечку тем же `ki_decimation_shift`, что и заряд, — получалась ступенчатая (не плавная) коррекция I каждые ~4.3 сек.
-- Утечка гейтится **отдельным** decimation-параметром `overheat_leak_decimation_shift` (независимым от `ki_decimation_shift` заряда) — со сдвигом `>>8` для реального диапазона I decay всегда упирается в пол "минимум 1", то есть скорость утечки застряла на ~30/сек и увеличением `THERMAL_OVERHEAT_LATCH_LEAK_SHIFT` дальше не замедлить. Без этого гейта короткий шумовой дип на 1 код (несколько секунд) успевал слить большой I полностью до 0, прежде чем температура даже успевала возобновить рост — регулятор "забывал" накопленное за один шумовой всплеск и начинал новый цикл с нуля.
-- Утечка применяется **каждый тик** со сдвигом `>>8`, но гейтится **собственным** счётчиком `leak_tick_counter`, отдельным от `ki_tick_counter` заряда — иначе фаза первого срабатывания утечки после перехода Zone3→Zone2(latch) зависела бы от того, сколько раз до этого сработал заряд (случайная задержка от 1 тика до полного периода), а не от времени, проведённого в утечке. Раздельные счётчики — исправление, найденное и предложенное пользователем.
-- Zone 1 сбрасывает защёлку при возврате в безопасную зону, вооружая Zone 2 для следующего цикла нагрева, и обнуляет `leak_tick_counter`, чтобы у следующего перегрева было предсказуемое (ограниченное `2^overheat_leak_decimation_shift` тиками) первое срабатывание утечки.
-
-### Конфигурация (ThermalLimiterConfig_t)
+SDK masks Mode via `& 0x0F`:
 ```c
-kp_left_shift;        // Пропорциональный коэффициент (биты сдвига, Zone 3)
-ki_left_shift;        // Интегральный коэффициент (биты сдвига, Zones 2/3)
-ki_decimation_shift;  // "Дробный Ki": заряд раз в 2^N тиков (0..7)
-t_anticipate_offset;  // Зона anticipation (коды АЦП до t_set)
-filter_shift;         // EMA фильтр температуры (биты сдвига)
-max_drop_rate;        // Скорость гашения (быстро)
-max_recovery_rate;    // Скорость восстановления (медленно, 2-3x меньше max_drop_rate)
-overheat_leak_decimation_shift; // Утечка Zone2-latch раз в 2^N тиков (независимо от заряда)
-max_limiter;          // Потолок лимитера (0..255) — ограничивает максимальное затемнение
-```
-
-### Состояние (ThermalLimiterState_t) — 10 байт
-```c
-filtered_temp;      // EMA-фильтрованная температура (int16_t)
-integral;           // Доминирующий интегратор (int16_t)
-prev_limiter;       // Предыдущее значение limiter для slew rate (int16_t)
-flags;              // Битовое поле: INITIALIZED, FAST_LEAK, ERROR, OVERHEAT_LATCH (uint8_t)
-ki_tick_counter;    // Счётчик decimation gate ЗАРЯДА (uint8_t)
-leak_tick_counter;  // Счётчик decimation gate УТЕЧКИ Zone2-latch (uint8_t) + 1 байт паддинга
-```
-
-**Важно:** `ki_tick_counter` и `leak_tick_counter` — раздельные счётчики. Один общий счётчик для двух гейтов с разными сдвигами (`ki_decimation_shift` заряда и `overheat_leak_decimation_shift` утечки) корректен только для средней скорости в долгосрочной перспективе — фаза ПЕРВОГО срабатывания после перехода Zone3→Zone2(latch) зависела бы от остаточного значения счётчика, оставленного другим гейтом (от 1 тика до полного периода `2^shift`), а не от времени. `leak_tick_counter` сбрасывается в 0 при снятии защёлки (Zone 1), поэтому у каждого нового заезда в перегрев первое срабатывание утечки предсказуемо ограничено `2^overheat_leak_decimation_shift` тиками.
-
-### Алгоритм (zero-multiplication)
-1. **Failsafe**: `t_raw == 0 || t_raw >= 1023` → мгновенный bypass, PWM=0
-2. **EMA фильтр**: `filtered_temp += (t_raw - filtered_temp) >> filter_shift`
-3. **Зоны**: вычисление P и I в зависимости от t_cur vs t_threshold vs t_set
-4. **Anti-Windup**: интегратор clamp [0, user_pwm]
-5. **Arbitration**: `raw_limiter = max(P, I)`
-6. **Slew rate**: асимметричный фильтр (быстро гасить, медленно восстанавливать)
-
-### API
-```c
-void ThermalLimiter_Init(ThermalLimiterState_t *state);
-uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
-                                ThermalLimiterState_t *state,
-                                uint16_t t_raw, uint16_t t_set, uint16_t user_pwm);
-```
-
-### Текущая конфигурация (limiters.c)
-```c
-#define T_SET 700u              // Уставка температуры (код АЦП)
-.kp_left_shift = 5;            // P: error << 5 (сильная реакция, Zone 3)
-.ki_left_shift = 0;            // I: error << 0 (плавный заряд)
-.ki_decimation_shift = 7;      // Заряд раз в 128 тиков (~4.3 сек)
-.t_anticipate_offset = 30;     // Зона anticipation: [670, 700)
-.filter_shift = 1;             // EMA: tau = 2 выборки = 0.067 сек
-.max_drop_rate = 3;            // Скорость гашения (90/сек)
-.max_recovery_rate = 1;        // Скорость восстановления (30/сек)
-.overheat_leak_decimation_shift = 6; // Утечка Zone2-latch раз в 64 тика (~2.1 сек)
-.max_limiter = 255;            // Потолок лимитера: полный диапазон (не ограничено)
-```
-
-### Отладочный вывод (main.c, tick_2hz)
-```
-T=сырой F=фильтр I=интегратор L=limiter P=PWM
-```
-
----
-
-## Архитектурные ограничения (НЕ нарушать без явного согласия пользователя)
-
-Эти правила — основа всего дизайна, см. `include/thermal_limiter.h` и `tz_new.md`:
-
-1. **Ни `float`, ни `double`** — только целочисленные/fixed-point вычисления.
-2. **Нет умножения/деления в горячем цикле** (`ThermalLimiter_Update` и всё, что он вызывает). Все коэффициенты — битовые сдвиги (`kp_left_shift`, `ki_left_shift`) через `<<`; все фильтры/утечки через `>>`. Если кажется, что нужен `*` или `/` — нужен сдвиг или decimation-gate (см. `ki_decimation_shift` / `charge_integral()` в `thermal_limiter.c`).
-3. **State (`ThermalLimiterState_t`) — поля 16 бит или уже уже.** `int32_t` допускается только как *временное* расширение внутри выражения (например, для безопасного `<<` перед сужением обратно в `int16_t`) — **никогда не записывать обратно в структуру**. RV32EC имеет 32-битный регистровый файл, расширение免费在 циклах — 16-битное правило про **объём памяти**, не про стоимость арифметики.
-4. **`Limiter = max(P, I)`, НИКОГДА `P + I`.** Это архитектура "Intermittent Proportional + Dominant Integrator" — не "упрощать" обратно в классический суммирующий PI.
-5. **Slew-rate фильтр (`max_drop_rate`/`max_recovery_rate`) — финальный авторитет** по скорости изменения видимой яркости. Любой новый термин (например, производная) должен проходить через этот фильтр — никогда не обходить его и не писать `state->prev_limiter` (или возвращаемое значение) напрямую.
-6. **Failsafe (`t_raw == 0 || t_raw >= 1023`)** — мгновенный bypass того же тика, принудительно PWM=0 и вывод `"E_THERMAL_RUNAWAY\n"`. Не добавлять debounce/логику устойчивости без явного запроса пользователя.
-
-Если нужно нарушить любое из вышеперечисленного — указать явно и получить подтверждение пользователя.
-
----
-
-## Бюджет ресурсов (проверять после каждого изменения)
-
-
-`ThermalLimiterState_t` — 10 байт (было 8, +2 после добавления отдельного `leak_tick_counter`, см. §"Overheat-latch"). Незначительно на фоне 2048 байт RAM. При добавлении нового поля — сначала проверять, можно ли переиспользовать существующий padding/spare bits (см. паттерн `flags`/`THERMAL_FLAG_*`), но не жертвовать корректностью ради экономии байта-двух, если реиспользование бит недостаточно (как в случае `leak_tick_counter` — свободных бит в `flags` не хватало для нужного диапазона сдвигов).
-
----
-
-## Архитектура энергосбережения
-
-### Цикл работы MCU
-```
-main loop:
-  if (need_sleep):
-    adc_stop()        → отключаем АЦП
-    tim2_stop()       → отключаем TIM2
-    AWU_Sleep_Now()   → STANDBY → __WFI()
-    [пробуждение]     → wakeup_source = WS_AWU/WS_BUTTON
-
-  if (wakeup_source == WS_BUTTON):
-    adc_init()        → восстанавливаем АЦП
-    tim2_start()      → восстанавливаем TIM2
-
-  if (wakeup_source == WS_AWU):
-    handle_aux()      → обработка AUX-команд
-
-  tick_160hz(): scan_ui1(), ss_scan()   → пока не спим
-  tick_30hz():  adc_read(), scan_limiters() → пока не спим (термозащита)
-  tick_2hz():   (отладочный вывод)       → пока не спим
-  tick_5s():    handle_ee()              → пока не спим
-```
-
-### Правила энергосбережения
-1. **adc_stop()** — отключает тактирование ADC1, переводит PD2/PD3 в Hi-Z
-2. **tim2_stop()** — отключает TIM2 и его тактирование
-3. **i2c_deinit()** — отключает I2C1 и GPIO в Hi-Z
-4. **AWU_Sleep_Now()** — вход в STANDBY, `__WFI()` до пробуждения
-5. **AWU_ON()/AWU_OFF()** — макросы для включения/выключения AWU таймера
-
----
-
-## AWU (Auto Wake-Up)
-
-### Регистры (прямая запись)
-- `PWR->AWUPSC` — предделитель (биты 3:0)
-- `PWR->AWUWR` — значение окна (биты 5:0)
-- `PWR->AWUCSR` — управление AWU (бит 1: AWUEN)
-- `PWR->CTLR` — PDDS (бит 1 = STANDBY mode)
-
-### Пробуждение
-- **AWU таймер** → EXTI Line9 → `AWU_IRQHandler` → `wakeup_source = WS_AWU`
-- **Кнопка** → EXTI Line3 → `EXTI7_0_IRQHandler` → `wakeup_source = WS_BUTTON`
-
-### Важно: AWU_IRQHandler
-- `SystemInit()` вызывается **только** при `is_sleep_mode == true` (реальное пробуждение из STANDBY)
-- Если AWU срабатывает пока MCU бодрствует — `SystemInit()` НЕ вызывается (иначе ломает UART)
-
-### Задержки AWU
-```c
-AWU_15MS, AWU_30MS, AWU_60MS, AWU_120MS, AWU_250MS,
-AWU_500MS, AWU_1S, AWU_2S, AWU_4S, AWU_8S, AWU_16S
-```
-
-### Формула времени
-```
-Time = (psc_value × win) / 128000 секунд
-```
-
----
-
-## TIM2 (Системный таймер)
-
-### Конфигурация
-- SYSCLK = 48 МГц, APB1 = 48 МГц
-- PSC = 47 → timer clock = 1 МГц (1 тик = 1 мкс)
-- ATRLR = 999 → прерывание каждые 1000 тиков = 1 мс
-
-### Использование
-```c
-tim2_start();           // Включить таймер
-tim2_stop();            // Отключить (экономия энергии)
-
-if (tick_160hz()) { }   // true каждые ~6 мс (UI, soft start)
-if (tick_30hz())  { }   // true каждые ~33 мс (ADC + термозащита)
-if (tick_2hz())   { }   // true каждые 500 мс (отладка)
-if (tick_5s())    { }   // true каждые 5 секунд (сохранение данных)
-void tick_5s_reset(void);  // Сброс таймера 5с (предотвращает сон при рампинге)
-
-extern volatile uint32_t tim2_ms;  // Глобальный счётчик мс
-```
-
----
-
-## I2C (прямые регистры)
-
-### Пины
-- PC1 — SDA (AF_OD, Open-Drain)
-- PC2 — SCL (AF_OD, Open-Drain)
-
-### Регистры (прямая запись)
-- `I2C1->CTLR1` — управление (PE, START, STOP, ACK, SWRST)
-- `I2C1->CTLR2` — частота APB1 (в МГц)
-- `I2C1->CKCFGR` — CCR + F/S mode
-- `I2C1->OADDR1` — собственный адрес
-- `I2C1->DATAR` — регистр данных
-- `I2C1->STAR1` — статус (SB, ADDR, TXE, AF)
-- `I2C1->STAR2` — статус (BUSY, MSL)
-
-### Формула CCR
-```
-Standard Mode:  CCR = PCLK1 / (2 × FI2C)
-Fast Mode:      CCR = PCLK1 / (3 × FI2C)
-```
-
-### Важно
-- **i2c_deinit()** — обязательна перед сном (GPIO в Hi-Z)
-- **i2c_stop()** ждёт освобождения шины (BUSY=0)
-- **GPIO CFGLR**: `0x0F` = AF_OD 30MHz (SDK маскирует Mode через `& 0x0F`!)
-
----
-
-## DAC7571 (I2C, 12-бит)
-
-### Адрес
-- 7-бит: `0x4C`
-- 8-бит (запись): `0x98`
-
-### Формат данных
-```
-[15:14] — режим (00=normal, 01=PD_1K, 10=PD_100K, 11=PD_HiZ)
-[13:12] — резерв (00)
-[11:0]  — 12-бит значение (0x000..0xFFF)
-```
-
-### Функции
-- `dac_pwrpin_init/on/off()` — управление питанием (PD0)
-- `dac_set_value(data)` — установка 12-бит значения
-- `dac_set_100K()` — Power-Down 100кОм (экономия тока)
-
----
-
-## AUX LED автомат
-
-### Формат команды (32 бита)
-```
-[2:0]   device    — канал: 1=RED, 2=GRN, 4=HBL
-[3]     cycle     — 0=зациклено, 1=однократно
-[7:4]   count     — количество повторов (0..15)
-[10:8]  psc0      — предделитель 1-го полупериода (0..7)
-[16:11] win0      — окно 1-го полупериода (0..63)
-[19:17] psc1      — предделитель 2-го полупериода
-[25:20] win1      — окно 2-го полупериода
-[28:26] brightness0 — яркость 1-го полупериода
-[31:29] brightness1 — яркость 2-го полупериода
-```
-
-### FSM (конечный автомат)
-```
-PER_INIT → PER_FIRST (ON) → PER_SECOND (OFF) → PER_END → PER_FIRST или PER_NEXT
-```
-
-### Системные команды массива
-- `AC_STOP (0)` — остановить обработку
-- `AC_REP_ATSTART (1)` — зациклить с начала
-- `AC_REP_ATSTEPS (2)` — зациклить с шага
-
-### Важно
-- `handle_aux()` возвращает `true` если есть активные команды (AWU перезапускается)
-- `handle_aux()` возвращает `false` если все каналы завершены (AWU НЕ перезапускается)
-- Элементы массива с `psc=0, win=0` стреляют мгновенно — **всегда задавать ненулевые значения!**
-
----
-
-## UART (отладка)
-
-### Конфигурация
-- Скорость: **460800 бод**
-- USART1: TX (PD5), RX (PD6)
-
-### Использование
-```c
-EE_PRINTF("[TAG] message\r\n");  // Вывод через UART если отладка включена
-```
-
-### Влияние на производительность
-- При 460800 бод: 1 символ ≈ 21.7мкс
-- 35 символов ≈ 0.76мс
-- **UART НЕ блокирует рампинг** при этой скорости
-
-### Конфигурация (config.h)
-```c
-#define WL_FLASH_DEBUG  // UART отладка (mini_printf)
-#define PRINT_ADC       // Вывод ADC значений
-```
-
----
-
-## Размеры
-- Flash: 16000 байт (последние 256 байт — резерв для данных)
-- RAM: 2048 байт
-
----
-
-## Стиль кода
-
-- **C99**, `stdint.h` фиксированной ширины везде (`int16_t`, `uint16_t`, `uint8_t`) — никаких `int`/`long`/`short` для ADC/PWM/state.
-- **Комментарии — загрузочная документация**, не украшение: каждый неочевидный сдвиг, clamp или граница зоны имеет комментарий с объяснением *почему*, а не просто *что*. С密度 match при добавлении новой логики.
-- **Именование**: `snake_case` для полей структур и локальных переменных, `PascalCase` для публичных функций (`ThermalLimiter_Init`, `ThermalLimiter_Update`), `THERMAL_*` префикс для макросов/констант.
-- **Язык**: русский для комментариев в `main.c` (аппаратура, ADC) и `TUNING.md`. Английский для `thermal_limiter.h`/`.c` (алгоритм/библиотека) и этого файла. Соответствовать языку редактируемого файла — не смешивать в одном блоке.
-- Прямая запись в регистры: `RCC->APB2PCENR |= RCC_AFIOEN`
-- Заголовочные файлы с `#ifndef` guard'ами
-- Таймауты во всех циклах ожидания (while) — MCU может зависнуть
-
----
-
-## При изменении настраиваемого поведения
-
-Если изменение влияет на то, что означает поле `ThermalLimiterConfig_t`, как ведёт себя граница зоны, или формат отладочного лога в `main.c` — обновить `TUNING.md` в том же изменении. Это справочник по настройке на поле и он устареет без обновления.
-
----
-
-## Известные, намеренно неисправленные компромиссы
-
-Зафиксированы в предыдущем обзоре, перечислены чтобы не были "переоткрыты" без спроса:
-
-- **Нет debounce на failsafe проверке ADC-rails** (спецификация требует "immediately"). Добавлять только если пользователь сообщит о реальных шумах ADC на рейлах и попросит.
-- **Нет производной (D) термина.** Намеренно отброшена — производная усиливает квантованный дитер EMA-фильтра и инжектит именно те больные, неограниченные мгновенные скачки, которые slew filter и decimation-gated интегратор созданы избегать. Не добавлять без явного запроса пользователя после напоминания о этом компромиссе.
-
----
-
-## Правила для AI-ассистентов
-
-### Чего НЕЛЬЗЯ (критически важно!)
-1. **Не использовать информацию по STM32** — CH32V003 ≠ STM32 (разные регистры, разное поведение)
-2. **Не копировать STM32 код** — даже если регистры называются одинаково
-3. **Не использовать SDK-хелперы** (`EXTI_Init()`, `NVIC_Init()`, `I2C_Init()`) — проект на прямых регистрах (кроме HAL в `main.c`)
-4. **Не добавлять динамическую память** (malloc/free) — нет heap
-5. **Не использовать printf** — только `EE_PRINTF()` через mini_printf
-6. **Не забывать об отключении периферии** при входе в сон
-7. **Не нарушать архитектурные ограничения** thermal_limiter без явного согласия пользователя
-
-### Что можно
-1. **Изменять регистры напрямую** — проект использует прямую запись в регистры
-2. **Использовать `EE_PRINTF()`** для отладочного вывода
-3. **Добавлять `#include "ch32v00x.h"`** для доступа к регистрам
-4. **Использовать `AWU_ON()/AWU_OFF()`** макросы
-5. **Использовать `ON_POWER()/OFF_POWER()`** для включения/отключения DAC
-
-### Приоритет энергосбережения
-1. Всегда проверять, отключена ли периферия перед сном
-2. Использовать `adc_stop()`, `tim2_stop()`, `i2c_deinit()` перед STANDBY
-3. Не оставлять AWU включенным без необходимости
-
-### GPIO CFGLR (частая ошибка!)
-SDK маскирует Mode через `& 0x0F` перед записью в CFGLR:
-```c
-// SDK делает: currentmode = Mode & 0x0F
-// AF_OD (0x1C) → 0x0C, затем |= Speed (0x03) → 0x0F
-// НЕ писать 0x1C напрямую в CFGLR — залезет в соседний пин!
-#define GPIO_CFG_AF_OD_30M  0x0F  // Правильно
+// AF_OD (0x1C) → 0x0C, then |= Speed (0x03) → 0x0F
+#define GPIO_CFG_AF_OD_30M  0x0F  // do NOT write 0x1C directly
 ```

@@ -1,8 +1,8 @@
-#ifndef CONFIG_H
-#define CONFIG_H
+#ifndef PROTEUS_CONFIG_H
+#define PROTEUS_CONFIG_H
 
 /*
- * config.h — Глобальные настройки проекта
+ * proteus_config.h — Глобальные настройки проекта
  *
  * Управление отладочным выводом:
  *   WL_FLASH_DEBUG — включает UART отладку (mini_printf)
@@ -30,4 +30,4 @@
     #define EE_PRINTF(...) ((void)0)
 #endif
 
-#endif // CONFIG_H
+#endif // PROTEUS_CONFIG_H

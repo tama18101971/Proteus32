@@ -34,7 +34,7 @@
 #include "aux_leds.h"
 #include "main.h"
 #include "led_gpio.h"
-#include "wl_flash.h"
+#include "app_data.h"
 #include "adc.h"
 
 uint8_t vwarning = VWARNING_NONE;			// Текущий уровень предупреждения о напряжении
@@ -192,7 +192,7 @@ void start_aux_array(const uint32_t *pArray, awu_tick_t delay) {
  * Если подсветка выключена — полное выключение.
  */
 void smart_off_leds(LED_Bits_t channel) {
-	if (ee.aux.bcklight_type != BCK_TYPE_ON) {
+	if (EE.aux.bcklight_type != BCK_TYPE_ON) {
 		if (channel == RED_LED) off_red();
 		else if (channel == GRN_LED) off_grn();
 		return;
@@ -201,10 +201,10 @@ void smart_off_leds(LED_Bits_t channel) {
 	switch (channel)
 	{
 	case RED_LED:
-		(ee.aux.bcklight_color == BCK_COLOR_RED) ? on_red_l() : off_red();
+		(EE.aux.bcklight_color == BCK_COLOR_RED) ? on_red_l() : off_red();
 		break;
 	case GRN_LED:
-		(ee.aux.bcklight_color == BCK_COLOR_GRN) ? on_grn_l() : off_grn();
+		(EE.aux.bcklight_color == BCK_COLOR_GRN) ? on_grn_l() : off_grn();
 		break;
 	case HBL_LED:
 		;	// заглушка для подсветки (пока не реализована)
@@ -310,7 +310,7 @@ void off_aux_cmd(LED_Bits_t channel, bool stop_lsi) {
  *   5   → 5 вспышек GRN_LED
  *   6   → 6 вспышек GRN_LED
  *
- * Если ee.usr.id_plus_sid == 1, к каналу добавляется HBL_LED.
+ * Если EE.usr.id_plus_sid == 1, к каналу добавляется HBL_LED.
  * Время: ON=75мс, OFF=225мс.
  * @return 32-битная команда для start_aux_cmd()
  */
@@ -332,7 +332,7 @@ uint32_t set_aux_count(uint8_t count) {
 		flashes = count;
 	}
 
-	if (ee.usr.id_plus_sid)
+	if (EE.usr.id_plus_sid)
 		device |= HBL_LED;
 
 	return MAKE_CMD(device, 0, flashes,
@@ -643,7 +643,7 @@ bool handle_aux(void) {
  * ON всегда 50мс, OFF определяется beacon_mode.
  */
 void start_aux_beacon(void) {
-	if (!ee.aux.beacon_on) return;
+	if (!EE.aux.beacon_on) return;
 	if(is_aux_active(RED_LED) || is_aux_active(GRN_LED) || is_aux_active(HBL_LED)) return;
 
 	/* Параметры OFF-полупериода по beacon_mode:
@@ -654,9 +654,9 @@ void start_aux_beacon(void) {
 	static const uint8_t bcon_psc1[] = {AWU_PSC_2048, AWU_PSC_10240, AWU_PSC_10240, AWU_PSC_61440};
 	static const uint8_t bcon_win1[] = {63,           25,            50,            17};
 
-	uint8_t mode = ee.aux.beacon_mode & 0x03;
+	uint8_t mode = EE.aux.beacon_mode & 0x03;
 
-	uint32_t cmd = MAKE_CMD(ee.aux.beacon_type, 1, 0,
+	uint32_t cmd = MAKE_CMD(EE.aux.beacon_type, 1, 0,
 		AWU_PSC_256, 25, bcon_psc1[mode], bcon_win1[mode],
 		1, 0);
 

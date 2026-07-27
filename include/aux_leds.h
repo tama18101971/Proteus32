@@ -22,7 +22,7 @@
 #include <stdbool.h>
 #include "awu.h"
 #include "button_gpio.h"
-#include "config.h"
+#include "proteus_config.h"
 
 /* Каналы LED (битовые маски, можно комбинировать: RED|GRN = 3) */
 typedef enum {
