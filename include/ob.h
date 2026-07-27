@@ -23,7 +23,8 @@
  * Итого: 14 логических полей, 28 байт адресного пространства.
  */
 
-#pragma once
+#ifndef OB_H
+#define OB_H
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -126,3 +127,5 @@ void ob_SetSlot(uint8_t index, uint8_t value);
  * @return false — ошибка записи или верификации
  */
 bool ob_Flush(void);
+
+#endif // OB_H

@@ -82,7 +82,7 @@ static const uint16_t modes[MODES_QTY] = {0, 20, 74, 136, 220, 360, 511};
 
 void ON_POWER(void)
 {
-    EE_PRINTF("[UI] ON POWER.\r\n");
+    EE_PRINTF("[UI] ON PWR.\r\n");
     reset_limiters();
     dac_pwrpin_on();
     i2c_init(400000);
@@ -91,14 +91,14 @@ void ON_POWER(void)
 
 void OFF_POWER(void)
 {
-    EE_PRINTF("[UI] OFF POWER.\r\n");
+    EE_PRINTF("[UI] OFF PWR.\r\n");
     i2c_deinit();
     dac_pwrpin_off();
 }
 
 void ee_defaults(void)
 {
-    EE.version = EE_VERSION;
+    // EE.version = EE_VERSION; инициализация в init_ee()
 
     EE.uif.ui_index = 1;
     EE.uif.use_memory = 0;
@@ -114,8 +114,15 @@ void ee_defaults(void)
     EE.usr.id_plus_sid = false;
     EE.usr.t_calibr = 6;
 
-    EE.default__ui1 = DEFAULT_STEP;
-    EE.default__ui2 = DEFAULT_MODE;
+    EE.default_ui1 = DEFAULT_STEP;
+    EE.default_ui2 = DEFAULT_MODE;
+
+    EE.uif.off_bckl       = true;          // ee_defaults() не трогает это поле (остаётся false)
+    EE.aux.bcklight_color = BCK_COLOR_GRN; // default: BCK_COLOR_RED
+    EE.aux.beacon_mode    = BCON_4S;       // default: BCON_1S
+    EE.aux.beacon_on      = false;         // default: true
+    EE.aux.beacon_type    = 1;             // default: GRN_LED(2); тестовый стенд хочет RED_LED(1)
+
 }
 
 uint16_t get_step_tc(uint16_t step)
@@ -153,7 +160,7 @@ void out_set_stc(uint16_t step)
 
 uint8_t on_driver(void)
 {
-    EE_PRINTF("[UI] ON driver.\r\n");
+    EE_PRINTF("[UI] ON DRV.\r\n");
 
     if (EE.uif.ui_index)
         step_tactic = 0;
@@ -179,7 +186,7 @@ uint8_t on_driver(void)
 
 void off_driver(uint8_t reset_step, SoftStartSpeed_t ss_speed)
 {
-    EE_PRINTF("[UI] OFF driver.\r\n");
+    EE_PRINTF("[UI] OFF DRV.\r\n");
 
     driver_mode = MODE_OFF;
     direction = DIR_UP;
@@ -281,7 +288,7 @@ void on_xmode_ui1(void)
 {
     ps.use_prev = false;
     on_driver();
-    set_current(EE.uif.use_memory ? (step_user ? step_user : step_default) : EE.default__ui1, SS_FAST);
+    set_current(EE.uif.use_memory ? (step_user ? step_user : step_default) : EE.default_ui1, SS_FAST);
 }
 
 void on_turbo_ui1(void)
@@ -311,7 +318,7 @@ void on_turbo_ui1(void)
 
 void off_driver_false(void)
 {
-    EE_PRINTF("[UI] OFF driver (false)\r\n");
+    EE_PRINTF("[UI] OFF DRV false\r\n");
     driver_mode = MODE_OFF;
     mode_default = mode_current;
     mode_current = CMODE_OFF;
@@ -505,7 +512,7 @@ void save_def_ui1(void)
     else
         onoff_indicator(true);
 
-    EE.default__ui1 = step_tc;
+    EE.default_ui1 = step_tc;
     // need_save = true;  // EEPROM write commented
     EE_PRINTF("[UI] save_def_ui1 step=%u (save commented)\r\n", (unsigned)step_tc);
 }
@@ -522,7 +529,7 @@ void save_def_ui2(void)
     else
         onoff_indicator(true);
 
-    EE.default__ui2 = mode_current;
+    EE.default_ui2 = mode_current;
     // need_save = true;  // EEPROM write commented
     EE_PRINTF("[UI] save_def_ui2 mode=%u (save commented)\r\n", (unsigned)mode_current);
 }
@@ -825,7 +832,7 @@ void on_min_ui2(void)
 
 void on_xmode_ui2(void)
 {
-    mode_current = get_up_mode(EE.uif.use_memory ? mode_default : EE.default__ui2);
+    mode_current = get_up_mode(EE.uif.use_memory ? mode_default : EE.default_ui2);
     on_mode(mode_current);
 }
 

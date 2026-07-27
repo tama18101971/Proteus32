@@ -213,11 +213,10 @@ bool ob_Init(void) {
 
     /* Проверка маркера валидности */
     if (_cache.magic != MAGIC) {
-        /* Первый запуск или повреждение — обнуление кэша */
-        _cache.magic = 0;
+        /* Первый запуск или повреждение — применяем значения по умолчанию */
         _cache.tc = 0;
         _cache.vc = 0;
-        _cache.ml = 1;
+        _cache.ml = 5;
         _cache.slots[0] = SLOT_BATT_IND;
         _cache.slots[1] = SLOT_BEACON;
         _cache.slots[2] = SLOT_STROBE;

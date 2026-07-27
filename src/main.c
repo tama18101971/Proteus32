@@ -44,7 +44,7 @@ int main(void)
     SystemCoreClockUpdate();
     Delay_Init();
 
-    Delay_Ms(3000); /* Задержка перед инициализацией (стабилизация питания) */
+    Delay_Ms(3000); /* Задержка перед инициализацией */
 
 #ifdef WL_FLASH_DEBUG
     USART_Printf_Init(460800);
@@ -61,18 +61,6 @@ int main(void)
     led_init();    /* Инициализация GPIO для LED */
     button_gpio_init(); /* Инициализация EXTI для кнопки */
 
-/*     while(1){
-        on_grn_h();
-        on_red_h();
-        Delay_Ms(2000);
-        off_grn();
-        off_red();
-        Delay_Ms(2000);
-        on_grn_l();
-        on_red_l();
-        Delay_Ms(5000);
-    }
- */
     adc_init(); /* Инициализация АЦП (NTC + Vrefint) */
 
     /* DAC + I2C */
@@ -81,20 +69,11 @@ int main(void)
     i2c_init(400000);
     dac7571_set_voltage(0);
 
- //   if (read_ee() == FAILED) /* Загрузка настроек из EEPROM (или инициализация по умолчанию) */
- //   {
- //       init_ee();
- //   }
-
-    ee_defaults(); /* RAM-инициализация по умолчанию (без обращения к Flash). */
-
-    EE.uif.off_bckl       = true;          // ee_defaults() не трогает это поле (остаётся false)
-    EE.aux.bcklight_color = BCK_COLOR_GRN; // default: BCK_COLOR_RED
-    EE.aux.beacon_mode    = BCON_4S;       // default: BCON_1S
-    EE.aux.beacon_on      = false;         // default: true
-    EE.aux.beacon_type    = 1;             // default: GRN_LED(2); тестовый стенд хочет RED_LED(1)
-    ob_SetMl(5);                           // default: 1
-
+    if (!read_ee()) /* Загрузка настроек из EEPROM (или инициализация по умолчанию) */
+    {
+        init_ee();
+        ee_defaults(); /* RAM-инициализация по умолчанию (без обращения к Flash). */
+   }
 
     /* Инициализация FSM кнопки и UI */
     static const btn_config_t btn_cfg = {

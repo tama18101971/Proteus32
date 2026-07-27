@@ -30,12 +30,12 @@ union ee_view {
     struct __attribute__((packed)) {
         uint32_t seq;
         uint8_t  version;
-        uint16_t default__ui1;
+        uint16_t default_ui1;
         struct ui_flags  uif;
         struct aux_flags aux;
         struct usr_flags usr;
-        uint8_t default__ui2;
-        uint8_t default__ui3;
+        uint8_t default_ui2;
+        uint8_t default_ui3;
         ee_crc_t crc;
     };
 };
