@@ -545,8 +545,8 @@ void enter_rs_mode(void)
 {
 #ifdef USE_MENU
     driver_mode = MODE_RAMP_SPEED;
-    EE_PRINTF("[UI] enter rs mode ramp_speed=%u\r\n", (unsigned)(ramp_speed + 1));
-    // aux_count(ramp_speed + 1);
+    //EE_PRINTF("[UI] enter rs mode ramp_speed=%u\r\n", (unsigned)(ramp_speed + 1));
+    aux_count(ramp_speed + 1);
 #endif
 }
 
@@ -554,8 +554,8 @@ void rs_clickX(void)
 {
 #ifdef USE_MENU
     ramp_speed = clicks_count - 1;
-    EE_PRINTF("[UI] rs_clickX ramp_speed=%u\r\n", (unsigned)ramp_speed);
-    // aux_count(clicks_count);
+    //EE_PRINTF("[UI] rs_clickX ramp_speed=%u\r\n", (unsigned)ramp_speed);
+    aux_count(clicks_count);
     driver_mode = MODE_OFF;
 #endif
 }
@@ -564,8 +564,8 @@ void enter_ml_mode(void)
 {
 #ifdef USE_MENU
     driver_mode = MODE_MOON_LEVEL;
-    EE_PRINTF("[UI] enter ml mode min_level=%u\r\n", (unsigned)ob_GetMl());
-    // aux_count(ob_GetMl());
+    //EE_PRINTF("[UI] enter ml mode min_level=%u\r\n", (unsigned)ob_GetMl());
+    aux_count(ob_GetMl());
 #endif
 }
 
@@ -573,8 +573,8 @@ void ml_clickX(void)
 {
 #ifdef USE_MENU
     ob_SetMl(clicks_count);
-    EE_PRINTF("[UI] ml_clickX min_level=%u\r\n", (unsigned)ob_GetMl());
-    // aux_count(clicks_count);
+    //EE_PRINTF("[UI] ml_clickX min_level=%u\r\n", (unsigned)ob_GetMl());
+    aux_count(clicks_count);
     driver_mode = MODE_OFF;
 #endif
 }
@@ -583,8 +583,8 @@ void enter_pt_mode(void)
 {
 #ifdef USE_MENU
     driver_mode = MODE_PIP_TIME;
-    EE_PRINTF("[UI] enter pt mode pid_time=%u\r\n", (unsigned)pid_time);
-    // aux_count(pid_time);
+    //EE_PRINTF("[UI] enter pt mode pid_time=%u\r\n", (unsigned)pid_time);
+    aux_count(pid_time);
 #endif
 }
 
@@ -592,8 +592,8 @@ void pt_clickX(void)
 {
 #ifdef USE_MENU
     pid_time = clicks_count;
-    EE_PRINTF("[UI] pt_clickX pid_time=%u\r\n", (unsigned)pid_time);
-    // aux_count(clicks_count);
+    //EE_PRINTF("[UI] pt_clickX pid_time=%u\r\n", (unsigned)pid_time);
+    aux_count(clicks_count);
     driver_mode = MODE_OFF;
 #endif
 }
@@ -620,8 +620,8 @@ void enter_chtk_mode(void)
 {
 #ifdef USE_MENU
     driver_mode = MODE_CTK_H;
-    EE_PRINTF("[UI] enter chtk mode t_calibr=%u\r\n", (unsigned)EE.usr.t_calibr);
-    // aux_count(EE.usr.t_calibr);
+    //EE_PRINTF("[UI] enter chtk mode t_calibr=%u\r\n", (unsigned)EE.usr.t_calibr);
+    aux_count(EE.usr.t_calibr);
 #endif
 }
 
@@ -629,8 +629,8 @@ void chtk_clickX(void)
 {
 #ifdef USE_MENU
     EE.usr.t_calibr = clicks_count;
-    EE_PRINTF("[UI] chtk_clickX t_calibr=%u\r\n", (unsigned)EE.usr.t_calibr);
-    // aux_count(clicks_count);
+    //EE_PRINTF("[UI] chtk_clickX t_calibr=%u\r\n", (unsigned)EE.usr.t_calibr);
+    aux_count(clicks_count);
     driver_mode = MODE_OFF;
 #endif
 }
@@ -659,8 +659,8 @@ void enter_bm_mode(void)
 {
 #ifdef USE_MENU
     driver_mode = MODE_BM;
-    EE_PRINTF("[UI] enter bm mode=%u\r\n", (unsigned)(EE.aux.beacon_mode + 1));
-    // aux_count(EE.aux.beacon_mode + 1);
+    //EE_PRINTF("[UI] enter bm mode=%u\r\n", (unsigned)(EE.aux.beacon_mode + 1));
+    aux_count(EE.aux.beacon_mode + 1);
 #endif
 }
 
@@ -668,8 +668,8 @@ void bm_clickX(void)
 {
 #ifdef USE_MENU
     EE.aux.beacon_mode = clicks_count - 1;
-    EE_PRINTF("[UI] bm_clickX mode=%u\r\n", (unsigned)EE.aux.beacon_mode);
-    // aux_count(clicks_count);
+    //EE_PRINTF("[UI] bm_clickX mode=%u\r\n", (unsigned)EE.aux.beacon_mode);
+    aux_count(clicks_count);
     driver_mode = MODE_OFF;
 #endif
 }
@@ -678,8 +678,8 @@ void enter_bt_mode(void)
 {
 #ifdef USE_MENU
     driver_mode = MODE_BT;
-    EE_PRINTF("[UI] enter bt type=%u\r\n", (unsigned)((EE.aux.beacon_type >> 1) + 1));
-    // aux_count((EE.aux.beacon_type >> 1) + 1);
+    //EE_PRINTF("[UI] enter bt type=%u\r\n", (unsigned)((EE.aux.beacon_type >> 1) + 1));
+    aux_count((EE.aux.beacon_type >> 1) + 1);
 #endif
 }
 
@@ -687,8 +687,8 @@ void bt_clickX(void)
 {
 #ifdef USE_MENU
     EE.aux.beacon_type = (1 << (clicks_count - 1));
-    EE_PRINTF("[UI] bt_clickX type=%u\r\n", (unsigned)EE.aux.beacon_type);
-    // aux_count(clicks_count);
+    //EE_PRINTF("[UI] bt_clickX type=%u\r\n", (unsigned)EE.aux.beacon_type);
+    aux_count(clicks_count);
     driver_mode = MODE_OFF;
 #endif
 }
@@ -697,8 +697,8 @@ void enter_bl_mode(void)
 {
 #ifdef USE_MENU
     driver_mode = MODE_BL;
-    EE_PRINTF("[UI] enter bl color=%u\r\n", (unsigned)(EE.aux.bcklight_color + 1));
-    // aux_count(EE.aux.bcklight_color + 1);
+    //EE_PRINTF("[UI] enter bl color=%u\r\n", (unsigned)(EE.aux.bcklight_color + 1));
+    aux_count(EE.aux.bcklight_color + 1);
 #endif
 }
 
@@ -706,8 +706,8 @@ void bl_clickX(void)
 {
 #ifdef USE_MENU
     EE.aux.bcklight_color = clicks_count - 1;
-    EE_PRINTF("[UI] bl_clickX color=%u\r\n", (unsigned)EE.aux.bcklight_color);
-    // aux_count(clicks_count);
+    //EE_PRINTF("[UI] bl_clickX color=%u\r\n", (unsigned)EE.aux.bcklight_color);
+    aux_count(clicks_count);
     driver_mode = MODE_OFF;
 #endif
 }
@@ -716,8 +716,8 @@ void enter_uis_mode(void)
 {
 #ifdef USE_MENU
     driver_mode = MODE_UIS;
-    EE_PRINTF("[UI] enter uis mode ui=%u\r\n", (unsigned)ui_save);
-    // aux_count(ui_save);
+    //EE_PRINTF("[UI] enter uis mode ui=%u\r\n", (unsigned)ui_save);
+    aux_count(ui_save);
 #endif
 }
 
@@ -725,8 +725,8 @@ void uis_clickX(void)
 {
 #ifdef USE_MENU
     ui_save = clicks_count;
-    EE_PRINTF("[UI] uis_clickX ui=%u\r\n", (unsigned)ui_save);
-    // aux_count(clicks_count);
+    //EE_PRINTF("[UI] uis_clickX ui=%u\r\n", (unsigned)ui_save);
+    aux_count(clicks_count);
     driver_mode = MODE_OFF;
 #endif
 }
@@ -751,8 +751,8 @@ void exit_magic_mode(void)
 
 static void clickX(uint8_t slot)
 {
-    EE_PRINTF("[UI] clickX slot=%u value=%u\r\n", (unsigned)slot, (unsigned)clicks_count);
-    // aux_count(clicks_count);
+    //EE_PRINTF("[UI] clickX slot=%u value=%u\r\n", (unsigned)slot, (unsigned)clicks_count);
+    aux_count(clicks_count);
     ob_SetSlot(slot, clicks_count);
     driver_mode = MODE_MAGIC;
 }
@@ -762,7 +762,7 @@ static void clickX(uint8_t slot)
         driver_mode = MODE_SLOT##n;                         \
         EE_PRINTF("[UI] select slot " #n " = %u\r\n",       \
                   (unsigned)ob_GetSlot(slot_idx));          \
-        /* aux_count(ob_GetSlot(slot_idx)); */                \
+        aux_count(ob_GetSlot(slot_idx));                    \
     }                                                       \
     void slot##n##_clickX(void) { clickX(slot_idx); }
 

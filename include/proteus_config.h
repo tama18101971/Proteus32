@@ -21,7 +21,7 @@
 #define USE_STROBE
 #define USE_BLOCK
 #define USE_MENU
-//#define USE_MAGIC_SLOTS
+#define USE_MAGIC_SLOTS
 
 #if defined(WL_FLASH_DEBUG) || defined(PRINT_ADC)
     #include "mini_printf.h"

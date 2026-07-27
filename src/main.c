@@ -39,12 +39,11 @@ int16_t error; /* Текущая ошибка (filtered - setpoint) */
 
 int main(void)
 {
-
     NVIC_PriorityGroupConfig(NVIC_PriorityGroup_1);
     SystemCoreClockUpdate();
     Delay_Init();
 
-    Delay_Ms(3000); /* Задержка перед инициализацией */
+    Delay_Ms(3000);
 
 #ifdef WL_FLASH_DEBUG
     USART_Printf_Init(460800);
@@ -54,26 +53,26 @@ int main(void)
 
     sys_init();
 
-    AWU_init();              /* Включение PWR + LSI генератора */
-    AWU_int_init();          /* Настройка EXTI Line9 + NVIC */
-    AWU_set_delay(AWU_15MS); /* Начальная задержка AWU */
+    AWU_init();
+    AWU_int_init();
+    AWU_set_delay(AWU_15MS);
 
-    led_init();    /* Инициализация GPIO для LED */
-    button_gpio_init(); /* Инициализация EXTI для кнопки */
+    led_init();
+    button_gpio_init();
 
-    adc_init(); /* Инициализация АЦП (NTC + Vrefint) */
+    adc_init();
 
     /* DAC + I2C */
-    dac_pwrpin_init(); // настраиваем ногу для управления питанием.
-    dac_pwrpin_on();   // включаем питание DAC
+    dac_pwrpin_init();
+    dac_pwrpin_on();
     i2c_init(400000);
     dac7571_set_voltage(0);
 
-    if (!read_ee()) /* Загрузка настроек из EEPROM (или инициализация по умолчанию) */
+    if (!read_ee())
     {
         init_ee();
-        ee_defaults(); /* RAM-инициализация по умолчанию (без обращения к Flash). */
-   }
+        ee_defaults();
+    }
 
     /* Инициализация FSM кнопки и UI */
     static const btn_config_t btn_cfg = {
@@ -86,33 +85,21 @@ int main(void)
     button_init(&btn_cfg);
     ui_init();
 
-    // start_aux_cmd(INFO_GRN, true, IDM_BEACON, AWU_120MS);
-    // start_aux_array(buf_sos_red, AWU_120MS); /* Запуск тестового массива мигания */
-
     start_aux_beacon();
 
     need_sleep = true;
 
-    /* Интервалы таймеров (аналог millis в Arduino) */
+    reset_limiters();
 
-    reset_limiters(); // Сброс ограничителей
-
-    /* Приветственное сообщение */
-    //EE_PRINTF("\r\nthermal_limiter started\r\n");
     EE_PRINTF("setpoint=%u kp_shift=%u ki_shift=%u ki_decim=%u offset=%u\r\n",
-           T_SET, config.kp_left_shift, config.ki_left_shift,
-           config.ki_decimation_shift, config.t_anticipate_offset);
-
-
+              T_SET, config.kp_left_shift, config.ki_left_shift,
+              config.ki_decimation_shift, config.t_anticipate_offset);
 
     while (1)
     {
-        // wakeup_source_t ws = WS_NONE;
-
         /* 1. Сон: останавливаем ADC и TIM2, засыпаем в STANDBY */
         if (need_sleep)
         {
-            // EE_PRINTF("[MAIN] Entering sleep mode...\r\n");
             adc_stop();
             tim2_stop();
             start_aux_beacon();
@@ -122,7 +109,6 @@ int main(void)
         /* 2. Пробуждение по кнопке: восстанавливаем периферию */
         if ((wakeup_source == WS_BUTTON) && is_sleep_mode)
         {
-            // EE_PRINTF("[MAIN] Event source: BUTTON.\r\n");
             is_sleep_mode = false;
             need_sleep = false;
             wakeup_source = WS_NONE;
@@ -136,45 +122,33 @@ int main(void)
         /* 3. Пробуждение по AWU: обрабатываем AUX-команды */
         if (wakeup_source == WS_AWU)
         {
-            // EE_PRINTF("[MAIN] Event source: AWU.\r\n");
             wakeup_source = WS_NONE;
             handle_aux();
         }
 
-        /* 4. Таймерные задачи (выполняются пока need_sleep == false) */
-        if (tick_160hz()) /* ~6мс: UI (button FSM + dispatcher) + softstart */
+        /* 4. Таймерные задачи */
+        if (tick_160hz())
         {
-            // EE_PRINTF("[MAIN] Tick 160Hz.\r\n");
             button_tick();
             ui_process();
             ss_scan();
         }
 
-        if (tick_30hz()) /* ~33мс: */
+        if (tick_30hz())
         {
-            // EE_PRINTF("[MAIN] Tick 50Hz.\r\n");
             adc_read();
             scan_limiters();
         }
 
-        if (tick_2hz()) /* 500мс: */
+        if (tick_2hz())
         {
-            // EE_PRINTF("[MAIN] Tick 2Hz.\r\n");
-
-            /* Формат: T=сырой F=t_cur(фильтр) I=интегратор L=limiter P=PWM */
             EE_PRINTF("T=%u F=%d I=%d L=%d P=%u\r\n",
-                   raw_temperature_adc, state.filtered_temp,
-                   state.integral, state.prev_limiter, step_user);
-
-            /* Serial Plotter: Label:value, каждый на отдельной строке */
-            //EE_PRINTF("F:%d\r\n", state.filtered_temp);
-            //EE_PRINTF("S:%u\r\n", T_SET);
-            //EE_PRINTF("L:%d\r\n", state.prev_limiter);
+                      raw_temperature_adc, state.filtered_temp,
+                      state.integral, state.prev_limiter, step_user);
         }
 
-        if (tick_5s()) /* 5с: сохранение EEPROM */
+        if (tick_5s())
         {
-            // EE_PRINTF("[MAIN] Tick 5 Sec.\r\n");
             handle_ee();
             need_sleep = true;
         }

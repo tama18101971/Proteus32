@@ -318,12 +318,9 @@ uint32_t set_aux_count(uint8_t count) {
 	LED_Bits_t device;
 	uint8_t flashes;
 
-	if (count <= 1) {
+	if (count <= 2) {
 		device = RED_LED;
-		flashes = 1;
-	} else if (count == 2) {
-		device = RED_LED;
-		flashes = 2;
+		flashes = count ? count : 1;
 	} else if (count <= 4) {
 		device = RED_LED | GRN_LED;
 		flashes = count;
@@ -335,9 +332,7 @@ uint32_t set_aux_count(uint8_t count) {
 	if (EE.usr.id_plus_sid)
 		device |= HBL_LED;
 
-	return MAKE_CMD(device, 0, flashes,
-		AWU_PSC_256, 38, AWU_PSC_1024, 28,
-		1, 0);
+	return MAKE_CMD(device, 0, flashes, AWU_PSC_256, 38, AWU_PSC_1024, 28, 1, 0);
 }
 #endif
 
@@ -756,14 +751,25 @@ void aux_off(void) {
  * @param count — количество (0 = одна красная, иначе count зелёных)
  */
 void aux_count(uint8_t count) {
-	(void)count;
 	EE_PRINTF("[AUX] count=%u\r\n", (unsigned)count);
-	// uint32_t cmd;
-	// if (count)
-	// 	cmd = 0b00000000000000010100000100000010 | (count << 4);	// зеленые, если не ноль
-	// else
-	// 	cmd = 0b00000000000000010010001000010001;					// одна красная, если 0
-	// start_aux_cmd(cmd, true, IDM_OTHER, AWU_120MS);
+
+	uint32_t cmd;
+	uint8_t flashes;
+
+	if (count) {
+		flashes = count > 15 ? 15 : count;
+		cmd = MAKE_CMD(GRN_LED, 0, flashes,
+		               AWU_PSC_256, 38,
+		               AWU_PSC_1024, 28,
+		               1, 0);
+	} else {
+		cmd = MAKE_CMD(RED_LED, 0, 1,
+		               AWU_PSC_256, 38,
+		               AWU_PSC_1024, 28,
+		               1, 0);
+	}
+
+	start_aux_cmd(cmd, true, IDM_OTHER, AWU_120MS);
 }
 
 /**********************************************************************************************/

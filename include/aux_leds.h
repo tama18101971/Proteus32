@@ -191,6 +191,7 @@ void start_aux_cmd(uint32_t command, bool enable, IDM_Type_t idm_mode, awu_tick_
 void start_aux_array(const uint32_t *pArray, awu_tick_t delay);  /* Запуск массива команд (автоопределение канала) */
 void start_aux_beacon(void);  /* Запуск маяка из настроек EEPROM */
 uint32_t set_aux_count(uint8_t count);  /* Формирование команды вспышек по количеству */
+void aux_count(uint8_t count);          /* Индикация числа: 0 → красная вспышка, иначе count зелёных */
 
 /* Управление яркостью */
 void smart_off_leds(LED_Bits_t channel); /* Умное выключение с учётом подсветки */
