@@ -98,10 +98,10 @@ const uint32_t *current_buf = NULL;
 
 #ifdef USE_STROBE
 const uint32_t strobe[4] = {
-    MAKE_CMD(HBL_LED, 1, 0, AWU_PSC_128, 3, AWU_PSC_128, 3, 1, 0),
-    MAKE_CMD(HBL_LED, 1, 0, AWU_PSC_256, 5, AWU_PSC_256, 5, 1, 0),
-    MAKE_CMD(HBL_LED, 1, 0, AWU_PSC_512, 8, AWU_PSC_512, 8, 1, 0),
-    MAKE_CMD(HBL_LED, 1, 0, AWU_PSC_128, 3, AWU_PSC_1024, 30, 1, 0),
+    MAKE_CMD_MS(HBL_LED, 1, 0, 3, 3, 1, 0),
+    MAKE_CMD_MS(HBL_LED, 1, 0, 10, 10, 1, 0),
+    MAKE_CMD_MS(HBL_LED, 1, 0, 32, 32, 1, 0),
+    MAKE_CMD_MS(HBL_LED, 1, 0, 3, 240, 1, 0),
 };
 #endif
 

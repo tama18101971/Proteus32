@@ -232,4 +232,58 @@ union AUX_Cmd_u *handle_aux_array(const uint32_t pBuffer[], AUX_Ctr_t *ubits);
 	 ((uint32_t)((brightness0) & 0x7) << 26) | \
 	 ((uint32_t)((brightness1) & 0x7) << 29))
 
+/**
+ * @brief Автоматический подбор предделителя и окна AWU по миллисекундам
+ *
+ * Формула: time_ms = (psc_value * win) / 128, ограничение win ≤ 63.
+ * Выбирается минимальный предделитель, при котором win укладывается в 6 бит.
+ * Целочисленное деление — подбирайте ms кратными делителю для точного совпадения.
+ *
+ * Границы:
+ *   ms ≤ 63    → PSC_128,   win = ms
+ *   ms ≤ 126   → PSC_256,   win = ms / 2
+ *   ms ≤ 252   → PSC_512,   win = ms / 4
+ *   ms ≤ 504   → PSC_1024,  win = ms / 8
+ *   ms ≤ 1008  → PSC_2048,  win = ms / 16
+ *   ms ≤ 2016  → PSC_4096,  win = ms / 32
+ *   ms ≤ 5040  → PSC_10240, win = ms / 80
+ *   иначе      → PSC_61440, win = ms / 480
+ */
+#define AWU_MS_PSC(ms) \
+    ((ms) <= 63   ? AWU_PSC_128   : \
+     (ms) <= 126  ? AWU_PSC_256   : \
+     (ms) <= 252  ? AWU_PSC_512   : \
+     (ms) <= 504  ? AWU_PSC_1024  : \
+     (ms) <= 1008 ? AWU_PSC_2048  : \
+     (ms) <= 2016 ? AWU_PSC_4096  : \
+     (ms) <= 5040 ? AWU_PSC_10240 : \
+                    AWU_PSC_61440)
+
+#define AWU_MS_WIN(ms) \
+    ((ms) <= 63   ? (ms)       : \
+     (ms) <= 126  ? ((ms)/2)   : \
+     (ms) <= 252  ? ((ms)/4)   : \
+     (ms) <= 504  ? ((ms)/8)   : \
+     (ms) <= 1008 ? ((ms)/16)  : \
+     (ms) <= 2016 ? ((ms)/32)  : \
+     (ms) <= 5040 ? ((ms)/80)  : \
+                    ((ms)/480))
+
+/**
+ * @brief MAKE_CMD с миллисекундами вместо psc/win
+ *
+ * @param device       канал (RED_LED=1, GRN_LED=2, HBL_LED=4, комбинации через |)
+ * @param cycle        0=однократно, 1=зациклено
+ * @param count        количество повторов (0..15)
+ * @param ms0          длительность 1-го полупериода в миллисекундах
+ * @param ms1          длительность 2-го полупериода в миллисекундах
+ * @param brightness0  яркость 1-го полупериода (0=выкл, 1=ярко)
+ * @param brightness1  яркость 2-го полупериода (0=выкл, 1=ярко)
+ */
+#define MAKE_CMD_MS(device, cycle, count, ms0, ms1, brightness0, brightness1) \
+    MAKE_CMD(device, cycle, count, \
+             AWU_MS_PSC(ms0), AWU_MS_WIN(ms0), \
+             AWU_MS_PSC(ms1), AWU_MS_WIN(ms1), \
+             brightness0, brightness1)
+
 #endif /* AUX_LEDS_H_ */
