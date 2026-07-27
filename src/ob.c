@@ -26,6 +26,7 @@
 #include <stdbool.h>
 #include "ob.h"
 #include "ch32v00x_flash.h"
+#include "array.h"
 
 /* Ключи разблокировки flash-контроллера (из datasheet CH32V003) */
 #define FLASH_KEY1      0x45670123u
@@ -216,9 +217,17 @@ bool ob_Init(void) {
         _cache.magic = 0;
         _cache.tc = 0;
         _cache.vc = 0;
-        _cache.ml = 0;
-        for (uint8_t i = 0; i < SLOTS_COUNT; i++)
-            _cache.slots[i] = 0;
+        _cache.ml = 1;
+        _cache.slots[0] = SLOT_BATT_IND;
+        _cache.slots[1] = SLOT_BEACON;
+        _cache.slots[2] = SLOT_STROBE;
+        _cache.slots[3] = SLOT_TACTICAL;
+        _cache.slots[4] = SLOT_BLOCK;
+        _cache.slots[5] = SLOT_EMPTY;
+        _cache.slots[6] = SLOT_EMPTY;
+        _cache.slots[7] = SLOT_MEMORY;
+        _cache.slots[8] = SLOT_BACKLIGHT;
+        _cache.slots[9] = SLOT_IPSMODE;
         return false;
     }
     return true;

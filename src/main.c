@@ -28,6 +28,7 @@
 #include "adc.h"
 #include "timers.h"
 #include "limiters.h"
+#include "ob.h"
 #include "array.h"
 
 volatile wakeup_source_t wakeup_source = WS_NONE; /* Источник последнего пробуждения */
@@ -94,7 +95,7 @@ int main(void)
     ee.aux.beacon_mode    = BCON_4S;       // default: BCON_1S
     ee.aux.beacon_on      = false;         // default: true
     ee.aux.beacon_type    = 1;             // default: GRN_LED(2); тестовый стенд хочет RED_LED(1)
-    ee.eng.min_level      = 5;             // default: 1
+    ob_SetMl(5);                           // default: 1
 
 
     /* Инициализация FSM кнопки и UI */

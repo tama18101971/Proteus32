@@ -12,6 +12,7 @@
 #include "ui.h"
 #include "wl_flash.h"
 #include "array.h"
+#include "ob.h"
 
 #define MAIN_OP_COUNT 79
 
@@ -263,7 +264,7 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout)
         if (f_hold != (evt->type == BTN_EVT_HOLD)) continue;
         if (f_wait && !timeout) continue;
 
-        uint8_t op_idx = f_slot ? ee.slots[f_sidx] : f_op;
+        uint8_t op_idx = f_slot ? ob_GetSlot(f_sidx) : f_op;
 
         if (op_idx < MAIN_OP_COUNT && main_op[op_idx])
         {

@@ -23,6 +23,7 @@
 #include "timers.h"
 #include "limiters.h"
 #include "main.h"
+#include "ob.h"
 
 #ifndef MIN
 #define MIN(a, b)   (((a) < (b)) ? (a) : (b))
@@ -98,9 +99,9 @@ void OFF_POWER(void)
 void ee_defaults(struct ee_data *e)
 {
     /* Engineering */
-    e->eng.min_level = 1;
-    e->eng.vc = 0;
-    e->eng.tc = 0;
+    //e->eng.min_level = 1;
+    //e->eng.vc = 0;
+    //e->eng.tc = 0;
 
     /* Interface */
     e->uif.ui_index = 1;
@@ -125,16 +126,16 @@ void ee_defaults(struct ee_data *e)
     e->default__ui2 = DEFAULT_MODE;
 
     /* Slots */
-    e->slots[0] = SLOT_BATT_IND;
-    e->slots[1] = SLOT_BEACON;
-    e->slots[2] = SLOT_STROBE;
-    e->slots[3] = SLOT_TACTICAL;
-    e->slots[4] = SLOT_BLOCK;
-    e->slots[5] = SLOT_EMPTY;
-    e->slots[6] = SLOT_EMPTY;
-    e->slots[7] = SLOT_MEMORY;
-    e->slots[8] = SLOT_BACKLIGHT;
-    e->slots[9] = SLOT_IPSMODE;
+    //ob_SetSlot(0, SLOT_BATT_IND);
+    //ob_SetSlot(1, SLOT_BEACON);
+    //ob_SetSlot(2, SLOT_STROBE);
+    //ob_SetSlot(3, SLOT_TACTICAL);
+    //ob_SetSlot(4, SLOT_BLOCK);
+    //ob_SetSlot(5, SLOT_EMPTY);
+    //ob_SetSlot(6, SLOT_EMPTY);
+    //ob_SetSlot(7, SLOT_MEMORY);
+    //ob_SetSlot(8, SLOT_BACKLIGHT);
+    //ob_SetSlot(9, SLOT_IPSMODE);
 }
 
 uint16_t get_step_tc(uint16_t step)
@@ -146,7 +147,7 @@ uint16_t get_step_tc(uint16_t step)
 
 uint16_t get_min_level(uint16_t step)
 {
-    return step ? ((ee.eng.min_level << 1) + BASE_MOON_LEVEL) : 0;
+    return step ? ((ob_GetMl() << 1) + BASE_MOON_LEVEL) : 0;
 }
 
 uint16_t getBright_CRT_9to12Bit(uint16_t val)
@@ -495,8 +496,8 @@ void calibration(void)
     // uint8_t ok = true;
     // if (ABS(vc) > 15) { ok = false; vc = 0; }
     // if (ABS(tc) > 31) { ok = false; tc = 0; }
-    // ee.adc.vc = vc;
-    // ee.adc.tc = tc;
+    // ob_SetVc(vc);
+    // ob_SetTc(tc);
     // onoff_indicator(ok);
     EE_PRINTF("[UI] calibration (EEPROM writes commented)\r\n");
 #endif
@@ -575,16 +576,16 @@ void enter_ml_mode(void)
 {
 #ifdef USE_MENU
     driver_mode = MODE_MOON_LEVEL;
-    EE_PRINTF("[UI] enter ml mode min_level=%u\r\n", (unsigned)ee.eng.min_level);
-    // aux_count(ee.eng.min_level);
+    EE_PRINTF("[UI] enter ml mode min_level=%u\r\n", (unsigned)ob_GetMl());
+    // aux_count(ob_GetMl());
 #endif
 }
 
 void ml_clickX(void)
 {
 #ifdef USE_MENU
-    ee.eng.min_level = clicks_count;
-    EE_PRINTF("[UI] ml_clickX min_level=%u\r\n", (unsigned)ee.eng.min_level);
+    ob_SetMl(clicks_count);
+    EE_PRINTF("[UI] ml_clickX min_level=%u\r\n", (unsigned)ob_GetMl());
     // aux_count(clicks_count);
     driver_mode = MODE_OFF;
 #endif
@@ -764,7 +765,7 @@ static void clickX(uint8_t slot)
 {
     EE_PRINTF("[UI] clickX slot=%u value=%u\r\n", (unsigned)slot, (unsigned)clicks_count);
     // aux_count(clicks_count);
-    ee.slots[slot] = clicks_count;
+    ob_SetSlot(slot, clicks_count);
     driver_mode = MODE_MAGIC;
 }
 
@@ -772,8 +773,8 @@ static void clickX(uint8_t slot)
     void select_slot##n(void) {                             \
         driver_mode = MODE_SLOT##n;                         \
         EE_PRINTF("[UI] select slot " #n " = %u\r\n",       \
-                  (unsigned)ee.slots[slot_idx]);          \
-        /* aux_count(ee.slots[slot_idx]); */                \
+                  (unsigned)ob_GetSlot(slot_idx));          \
+        /* aux_count(ob_GetSlot(slot_idx)); */                \
     }                                                       \
     void slot##n##_clickX(void) { clickX(slot_idx); }
 
