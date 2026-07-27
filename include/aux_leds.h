@@ -164,6 +164,7 @@ extern const uint32_t *current_buf;   /* Указатель на текущий 
 extern const uint32_t buf_red[];      /* Мигание красным+подсветкой */
 extern const uint32_t buf_grn[];      /* Мигание зелёным */
 extern const uint32_t buf_sos_red[];  /* SOS-паттерн на красном */
+extern const uint32_t strobe[4];      /* Стробоскоп (4 режима) */
 
 /* ===== API функции ===== */
 

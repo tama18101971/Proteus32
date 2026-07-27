@@ -56,11 +56,11 @@ PSTEP_t ps;
 uint8_t need_save = false;
 
 uint8_t clicks_count = 0;
-uint8_t ui_table_idx = 1;       // runtime selector for dispatch tables
+uint8_t ui_table_idx = 1;        // runtime selector for dispatch tables
 uint8_t ramp_speed = 2;          // replaces EE.eng.rump_speed (session only)
 uint8_t pid_time = 3;            // replaces EE.eng.pid_time (session only)
 uint8_t volt_max_mode = CMODE_TURBO;
-uint8_t volt_stop_mode = CMODE_TURBO; // "без ограничений" по умолчанию (как в Proteus84: MODES_QTY-1);
+uint8_t volt_stop_mode = CMODE_TURBO;  // "без ограничений" по умолчанию (как в Proteus84: MODES_QTY-1);
                                        // динамическое снижение по напряжению батареи не портировано
 uint8_t down_count = 0;
 uint8_t ui_save = 0;
@@ -209,9 +209,8 @@ void off_driver(uint8_t reset_step, SoftStartSpeed_t ss_speed)
         step_tactic = MAX_STEP;
     }
 
-    // AUX stops are currently disabled (debug output only)
-    // stop_aux_voltage(false);
-    // stop_aux_beacon(false);
+    stop_aux_voltage(false);
+    stop_aux_beacon(false);
     EE_PRINTF("[UI] AUX stops skipped (debug mode)\r\n");
 
     // EEPROM write intentionally commented out per integration requirements
@@ -395,8 +394,8 @@ void slot_strobe(void)
     ps.pr_step = step_default;
     ps.start = start;
 
-    // uint32_t s = strobe[strobe_index];
-    // set_aux_cmd(s, 0, true, IDM_STROBE);
+    uint32_t s = strobe[strobe_index];
+    start_aux_cmd(s, true, IDM_STROBE, AWU_120MS);
     EE_PRINTF("[UI] slot_strobe idx=%u start=%u\r\n", strobe_index, start);
 #endif
 }
@@ -404,7 +403,7 @@ void slot_strobe(void)
 void up_strobe(void)
 {
 #ifdef USE_STROBE
-    // stop_aux_strobe();
+    stop_aux_strobe(false);
     if (++strobe_index == 4) strobe_index = 0;
     EE_PRINTF("[UI] up_strobe idx=%u\r\n", strobe_index);
 #endif
@@ -413,7 +412,7 @@ void up_strobe(void)
 void back_strobe(void)
 {
 #if defined(USE_STROBE) && !defined(USE_MAGIC_SLOTS)
-    // stop_aux_strobe();
+    stop_aux_strobe();
     if (ps.start) off_driver(false, SS_NO);
     else driver_mode = MODE_ON;
     if (ps.use_prev) step_user = ps.pr_step;
@@ -425,7 +424,7 @@ void back_strobe(void)
 void off_strobe(void)
 {
 #ifdef USE_STROBE
-    // stop_aux_strobe();
+    stop_aux_strobe(false);
     off_driver(false, SS_NO);
     if (ps.use_prev) step_default = ps.pr_step;
     ps.use_prev = false;
@@ -982,7 +981,7 @@ void ui_process(void)
             if (ui_idx == 1)
             {
                 max_step = get_max_step();
-                // stop_aux_beacon(false);  // AUX commented
+                stop_aux_beacon(false);
                 if (step_tc >= max_step) direction = DIR_DOWN;
             }
             break;
