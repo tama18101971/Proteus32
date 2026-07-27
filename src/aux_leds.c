@@ -30,7 +30,6 @@
  *     AC_REP_ATSTEPS — зациклить с заданного шага
  */
 
-
 #include "aux_leds.h"
 #include "main.h"
 #include "led_gpio.h"
@@ -42,7 +41,7 @@ uint8_t vwarning_old = VWARNING_NONE;		// Предыдущий уровень (�
 
 /* Массивы команд для пошаговой обработки (хранятся в Flash).
  * Формат: MAKE_CMD(device, cycle, count, psc0, win0, psc1, win1, brightness0, brightness1)
- * Время полупериода = (psc_значение × win) / 128 секунд.
+ * Время полупериода = (psc_значение × win) / 128 мс.
  */
 const uint32_t buf_red[5] = {
 	MAKE_CMD(RED_LED|HBL_LED, 0, 8, AWU_PSC_128, 45, AWU_PSC_4096, 60, 1, 0),   /* ON 45ms, OFF 1920ms × 8 */
@@ -68,115 +67,50 @@ const uint32_t buf_sos_red[] = {
 	0x1  /* AC_REP_ATSTART */
 };
 
-/* Указатели на текущую команду для каждого канала.
- * Используются в handle_aux() для вызова handle_aux_cmd().
- * Если NULL — канал неактивен.
+/* Указатель на текущую AUX-команду (одиночная или из массива).
+ * Если NULL — обработчик неактивен.
+ * Используется handle_aux() для вызова handle_aux_cmd().
  */
-union AUX_Cmd_u *p_red;
-union AUX_Cmd_u *p_grn;
-union AUX_Cmd_u *p_hbl;
+union AUX_Cmd_u *p_aux;
 
-/* Буферы команд для однократных вызовов (start_aux_cmd).
- * Копируют команду из параметра, чтобы она оставалась доступной
+/* Буфер для одиночной команды (start_aux_cmd).
+ * Копирует команду из параметра, чтобы она оставалась доступной
  * пока handle_aux() обрабатывает её пошагово.
  */
-union AUX_Cmd_u aux_cmd_red;
-union AUX_Cmd_u aux_cmd_grn;
-union AUX_Cmd_u aux_cmd_hbl;
+union AUX_Cmd_u aux_cmd;
 
-/* Структуры состояния (контроллеры) для каждого канала.
- * Содержат: текущий период, яркость, оставшуюся длительность,
+/* Единая структура состояния обработчика AUX.
+ * Содержит: текущий период, яркость, оставшуюся длительность,
  * счётчик повторов, индекс в массиве, режим индикации.
  */
-AUX_Ctr_t aux_ctl_red;
-AUX_Ctr_t aux_ctl_grn;
-AUX_Ctr_t aux_ctl_hbl;
+AUX_Ctr_t aux_ctl;
 
-/* Флаги включения пошаговой обработки массивов.
- * true  — handle_aux() вызывает handle_aux_array() для данного канала
- * false — массив не обрабатывается (либо выключен, либо используем одиночную команду)
+/* Флаг включения пошаговой обработки массива.
+ * true  — handle_aux() вызывает handle_aux_array()
+ * false — массив не обрабатывается (одиночная команда или idle)
  */
-bool EnableArrayProcessingRed = false;
-bool EnableArrayProcessingGrn = false;
-bool EnableArrayProcessingHbl = false;
+bool EnableArrayProcessing = false;
 
-/* Указатели на текущий обрабатываемый массив команд для каждого канала.
- * Нужны, чтобы handle_aux() знал какой массив передавать в handle_aux_array().
+/* Указатель на текущий обрабатываемый массив команд.
+ * Нужен, чтобы handle_aux() знал какой массив передавать в handle_aux_array().
  */
-const uint32_t *current_buf_red = NULL;
-const uint32_t *current_buf_grn = NULL;
-const uint32_t *current_buf_hbl = NULL;
-
-/* Таблицы для быстрого доступа к структурам по номеру канала.
- * Индексация: aux_ctl_table[RED_LED] = &aux_ctl_red и т.д.
- * Позволяет избежать switch-case при доступе по каналу.
- */
-static AUX_Ctr_t *const aux_ctl_table[] = {
-	[RED_LED] = &aux_ctl_red,		// канал 0b001 = 1
-	[GRN_LED] = &aux_ctl_grn,		// канал 0b010 = 2
-	[HBL_LED] = &aux_ctl_hbl,		// канал 0b100 = 4
-};
-
-static union AUX_Cmd_u *const aux_cmd_table[] = {
-	[RED_LED] = &aux_cmd_red,
-	[GRN_LED] = &aux_cmd_grn,
-	[HBL_LED] = &aux_cmd_hbl,
-};
-
-static union AUX_Cmd_u **const aux_ptr_table[] = {
-	[RED_LED] = &p_red,
-	[GRN_LED] = &p_grn,
-	[HBL_LED] = &p_hbl,
-};
+const uint32_t *current_buf = NULL;
 
 /**
  * @brief Запуск пошаговой обработки массива команд
  * @param pArray — указатель на массив uint32_t команд в Flash
  *
- * Канал определяется автоматически из бит 0..2 первого элемента массива.
  * Сбрасывает структуру состояния, устанавливает флаг EnableArrayProcessing
  * и запоминает указатель на массив для дальнейшей обработки в handle_aux().
  */
 void start_aux_array(const uint32_t *pArray, awu_tick_t delay) {
-	LED_Bits_t channel = (LED_Bits_t)(pArray[0] & 0x07);	// извлекаем канал из младших 3 бит
-
-	AUX_Ctr_t *ctl;		// указатель на структуру состояния канала
-	bool *flag;			// указатель на флаг EnableArrayProcessing
-	const uint32_t **current_buf;	// указатель на текущий буфер
-	union AUX_Cmd_u **ptr;			// указатель на p_red/p_grn/p_hbl
-
-	// Определяем все необходимые указатели по номеру канала
-	switch (channel) {
-	case RED_LED:
-		ctl = &aux_ctl_red;
-		flag = &EnableArrayProcessingRed;
-		current_buf = &current_buf_red;
-		ptr = &p_red;
-		break;
-	case GRN_LED:
-		ctl = &aux_ctl_grn;
-		flag = &EnableArrayProcessingGrn;
-		current_buf = &current_buf_grn;
-		ptr = &p_grn;
-		break;
-	case HBL_LED:
-		ctl = &aux_ctl_hbl;
-		flag = &EnableArrayProcessingHbl;
-		current_buf = &current_buf_hbl;
-		ptr = &p_hbl;
-		break;
-	default:
-		return;		// неизвестный канал — выходим
-	}
-
-	// Обнуляем структуру состояния (приводим к uint32_t и записываем 0)
-	uint32_t *p = (uint32_t*)ctl;
+	uint32_t *p = (uint32_t*)&aux_ctl;
 	*p = 0;
 
-	*flag = true;								// включаем пошаговую обработку
-	*ptr = (union AUX_Cmd_u*)pArray;			// указатель на текущую команду = начало массива
-	*current_buf = pArray;						// запоминаем массив для handle_aux()
-	ctl->enable = true;							// включаем обработчик команд
+	EnableArrayProcessing = true;
+	p_aux = (union AUX_Cmd_u*)pArray;
+	current_buf = pArray;
+	aux_ctl.enable = true;
 
 	AWU_set_delay(delay);
 	AWU_ON();
@@ -184,7 +118,7 @@ void start_aux_array(const uint32_t *pArray, awu_tick_t delay) {
 
 /**
  * @brief Умное выключение светодиода с учётом режима подсветки
- * @param channel — канал (RED_LED, GRN_LED, HBL_LED)
+ * @param channel — битовая маска каналов (RED_LED, GRN_LED, HBL_LED, можно комбинировать)
  *
  * Если подсветка включена (bcklight_type == BCK_TYPE_ON):
  *   - Если цвет подсветки совпадает с каналом — включает слабый режим (on_*_l)
@@ -193,108 +127,51 @@ void start_aux_array(const uint32_t *pArray, awu_tick_t delay) {
  */
 void smart_off_leds(LED_Bits_t channel) {
 	if (EE.aux.bcklight_type != BCK_TYPE_ON) {
-		if (channel == RED_LED) off_red();
-		else if (channel == GRN_LED) off_grn();
+		if (channel & RED_LED) off_red();
+		if (channel & GRN_LED) off_grn();
 		return;
 	}
 
-	switch (channel)
-	{
-	case RED_LED:
+	if (channel & RED_LED) {
 		(EE.aux.bcklight_color == BCK_COLOR_RED) ? on_red_l() : off_red();
-		break;
-	case GRN_LED:
+	}
+	if (channel & GRN_LED) {
 		(EE.aux.bcklight_color == BCK_COLOR_GRN) ? on_grn_l() : off_grn();
-		break;
-	case HBL_LED:
-		;	// заглушка для подсветки (пока не реализована)
-		break;
-	default:
-		return;
 	}
 }
 
 /**
- * @brief Получение указателя на структуру состояния канала
- * @param channel — номер канала (RED_LED, GRN_LED, HBL_LED)
- * @return указатель на AUX_Ctr_t или NULL если канал невалиден
- */
-static AUX_Ctr_t* get_aux_ctl(LED_Bits_t channel) {
-	if (channel < RED_LED || channel > HBL_LED) return NULL;
-	return aux_ctl_table[channel];
-}
-
-/**
- * @brief Проверка режима индикации канала
- * @param channel — канал
+ * @brief Проверка режима индикации
  * @param mode — проверяемый режим (IDM_BEACON, IDM_VWARNING, IDM_STROBE, IDM_OTHER)
- * @return true если канал активен и работает в указанном режиме
+ * @return true если обработчик активен и работает в указанном режиме
  */
-bool is_aux_mode(LED_Bits_t channel, IDM_Type_t mode) {
-	AUX_Ctr_t *ctl = get_aux_ctl(channel);
-	return (ctl && ctl->enable && (ctl->idmode == mode));
+bool is_aux_mode(IDM_Type_t mode) {
+	return (aux_ctl.enable && (aux_ctl.idmode == mode));
 }
 
 /**
- * @brief Проверка активности канала
- * @param channel — канал
- * @return true если канал активен (enable == true)
+ * @brief Проверка активности
+ * @return true если обработчик активен (enable == true)
  */
-bool is_aux_active(LED_Bits_t channel) {
-	AUX_Ctr_t *ctl = get_aux_ctl(channel);
-	return (ctl && ctl->enable);
-}
-
-// Обёртки для обратной совместимости
-bool is_aux_cmd(LED_Bits_t channel) { return is_aux_active(channel); }
-bool is_aux_beacon(LED_Bits_t channel) { return is_aux_mode(channel, IDM_BEACON); }
-bool is_aux_voltage(LED_Bits_t channel) { return is_aux_mode(channel, IDM_VWARNING); }
-bool is_aux_strobe(LED_Bits_t channel) { return is_aux_mode(channel, IDM_STROBE); }
-bool is_aux_other(LED_Bits_t channel) { return is_aux_mode(channel, IDM_OTHER); }
-
-/**
- * @brief Получение указателя на буфер команд канала
- * @param channel — канал
- * @return указатель на AUX_Cmd_u или NULL
- */
-static union AUX_Cmd_u* get_aux_cmd(LED_Bits_t channel) {
-	if (channel < RED_LED || channel > HBL_LED) return NULL;
-	return aux_cmd_table[channel];
+bool is_aux_active(void) {
+	return aux_ctl.enable;
 }
 
 /**
- * @brief Получение указателя на указатель активной команды (p_red/p_grn/p_hbl)
- * @param channel — канал
- * @return указатель на union AUX_Cmd_u* или NULL
- */
-static union AUX_Cmd_u** get_aux_ptr(LED_Bits_t channel) {
-	if (channel < RED_LED || channel > HBL_LED) return NULL;
-	return aux_ptr_table[channel];
-}
-
-/**
- * @brief Остановка команды на канале
- * @param channel — канал
- * @param stop_lsi — если true, остановить LSI-генератор (AWU) когда все каналы неактивны
+ * @brief Полная остановка AUX-обработчика
+ * @param stop_lsi — если true, остановить LSI-генератор (AWU)
  *
- * Сбрасывает enable, period, idmode; выключает светодиод.
- * Если stop_lsi=true и ни один канал не активен — останавливает AWU.
+ * Сбрасывает enable, period, idmode; выключает все светодиоды.
  */
-void off_aux_cmd(LED_Bits_t channel, bool stop_lsi) {
-	AUX_Ctr_t *ctl = get_aux_ctl(channel);
-	if (!ctl) return;
+void off_aux_cmd(bool stop_lsi) {
+	aux_ctl.enable = false;
+	aux_ctl.period = PER_INIT;
+	aux_ctl.idmode = IDM_OTHER;
 
-	ctl->enable = false;		// отключаем обработку
-	ctl->period = PER_INIT;		// сбрасываем период
-	ctl->idmode = IDM_OTHER;	// сбрасываем режим индикации
-
-	smart_off_leds(channel);	// выключаем светодиод
+	smart_off_leds(RED_LED | GRN_LED | HBL_LED);
 
 	if (stop_lsi) {
-		// Проверяем, есть ли активные каналы. Если нет — останавливаем AWU.
-		if (!is_aux_active(RED_LED) && !is_aux_active(GRN_LED) && !is_aux_active(HBL_LED)) {
-			AWU_stop(true);
-		}
+		AWU_stop(true);
 	}
 }
 
@@ -337,79 +214,50 @@ uint32_t set_aux_count(uint8_t count) {
 #endif
 
 /**
- * @brief Информационная вспышка красным
- * Используется при выключении (aux_off)
- */
-void aux_cmd_info_red(void) {
-	start_aux_cmd(INFO_RED, true, IDM_OTHER, AWU_120MS);
-}
-
-/**
- * @brief Информационная вспышка зелёным
- * Используется при включении (aux_on)
- */
-void aux_cmd_info_grn(void) {
-	start_aux_cmd(INFO_GRN, true, IDM_OTHER, AWU_120MS);
-}
-
-/**
  * @brief Запуск одиночной AUX-команды
- * @param command   — 32-битная команда (тайминг задан в per0/per1)
+ * @param command   — 32-битная команда
  * @param enable    — true = начать обработку немедленно
  * @param idm_mode  — режим индикации (IDM_BEACON, IDM_VWARNING, IDM_STROBE, IDM_OTHER)
  *
  * Таймер AWU настраивается в handle_aux_cmd при обработке PER_FIRST.
  */
 void start_aux_cmd(uint32_t command, bool enable, IDM_Type_t idm_mode, awu_tick_t delay) {
-    LED_Bits_t channel = command & 0x07;
-
 	#ifdef AUX_DEBUG
 	debug_cmd(command);
 	#endif
 
-    union AUX_Cmd_u *cmd = get_aux_cmd(channel);
-    AUX_Ctr_t *ctl = get_aux_ctl(channel);
-    union AUX_Cmd_u **ptr = get_aux_ptr(channel);
+	EnableArrayProcessing = false;
 
-    if (!cmd || !ctl || !ptr) return;
+	aux_cmd.aux_cmd = command;
 
-    if (channel == RED_LED) EnableArrayProcessingRed = false;
-    else if (channel == GRN_LED) EnableArrayProcessingGrn = false;
-    else if (channel == HBL_LED) EnableArrayProcessingHbl = false;
+	aux_ctl.enable = enable;
+	aux_ctl.idmode = idm_mode;
+	aux_ctl.period = PER_INIT;
+	aux_ctl.current_brightness = 0;
+	aux_ctl.work_count = 0;
 
-    cmd->aux_cmd = command;
-
-    ctl->enable = enable;
-    ctl->idmode = idm_mode;
-    ctl->period = PER_INIT;
-    ctl->current_brightness = 0;
-    ctl->work_count = 0;
-
-    *ptr = cmd;
+	p_aux = &aux_cmd;
 
 	AWU_set_delay(delay);
 	AWU_ON();
 }
 
 /**
- * @brief Установка яркости светодиода
- * @param device — канал (RED_LED, GRN_LED, HBL_LED)
+ * @brief Установка яркости светодиодов
+ * @param device — битовая маска каналов (RED_LED, GRN_LED, HBL_LED, комбинации)
  * @param brightness — яркость (0=выкл, 1=ярко)
  */
 static void SetBrightness(LED_Bits_t device, uint8_t brightness) {
-	switch (device) {
-		case RED_LED:
-			if (brightness) on_red_h();
-			else smart_off_leds(RED_LED);
-			break;
-		case GRN_LED:
-			if (brightness) on_grn_h();
-			else smart_off_leds(GRN_LED);
-			break;
-		case HBL_LED:
-			break;
-		default:
-			break;
+	if (device & RED_LED) {
+		if (brightness) on_red_h();
+		else smart_off_leds(RED_LED);
+	}
+	if (device & GRN_LED) {
+		if (brightness) on_grn_h();
+		else smart_off_leds(GRN_LED);
+	}
+	if (device & HBL_LED) {
+		// placeholder
 	}
 }
 
@@ -430,7 +278,7 @@ static void SetBrightness(LED_Bits_t device, uint8_t brightness) {
 void handle_aux_cmd(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits) {
 	if (!ubits->enable) return;
 
-	LED_Bits_t device = (LED_Bits_t) aux->aux.device;
+	LED_Bits_t device = (LED_Bits_t)aux->aux.device;
 
 	//EE_PRINTF("[AUX] cmd dev=%d per=%d cnt=%d\r\n", device, ubits->period, ubits->work_count);
 
@@ -502,70 +350,59 @@ void handle_aux_cmd(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits) {
  */
 union AUX_Cmd_u *handle_aux_array(const uint32_t pArray[], AUX_Ctr_t *ctr) {
 
-	union AUX_Cmd_u *p = (union AUX_Cmd_u*) pArray;	// приводим массив к union
+	union AUX_Cmd_u *p = (union AUX_Cmd_u*)pArray;
 
-	p += ctr->arr_index;	// сдвигаемся на текущий индекс в массиве
+	p += ctr->arr_index;
 
-	if (p->cmd.is_cmd == 0) {					// если is_cmd == 0 — это системная команда
+	if (p->cmd.is_cmd == 0) {
 
-		switch ((Array_Cmd_t) p->cmd.command) {
-		case AC_STOP:							// остановить выполнение массива
-			p = NULL;							// NULL сигнализирует handle_aux() об остановке
+		switch ((Array_Cmd_t)p->cmd.command) {
+		case AC_STOP:
+			p = NULL;
 			break;
-		case AC_REP_ATSTART:					// зациклить с начала массива
-			ctr->arr_index = 0;					// сбрасываем индекс на начало
-			p = (union AUX_Cmd_u*) pArray;		// указатель тоже на начало
-			ctr->period = PER_INIT;				// сбрасываем период для новой команды
-			ctr->enable = true;					// включаем обработку
+		case AC_REP_ATSTART:
+			ctr->arr_index = 0;
+			p = (union AUX_Cmd_u*)pArray;
+			ctr->period = PER_INIT;
+			ctr->enable = true;
 			break;
-		case AC_REP_ATSTEPS:					// зациклить с заданного шага
-			ctr->arr_index = p->cmd.steps;		// устанавливаем индекс из поля steps
-			p = (union AUX_Cmd_u*) pArray;		// указатель на начало массива
-			p += ctr->arr_index;				// сдвигаем на нужный шаг
-			ctr->period = PER_INIT;				// сбрасываем период
-			ctr->enable = true;					// включаем обработку
+		case AC_REP_ATSTEPS:
+			ctr->arr_index = p->cmd.steps;
+			p = (union AUX_Cmd_u*)pArray;
+			p += ctr->arr_index;
+			ctr->period = PER_INIT;
+			ctr->enable = true;
 			break;
 		default:
 			break;
 		}
-	} else {									// это команда для светодиода (не системная)
-		if (ctr->period == PER_NEXT) {			// пора загружать новую команду
-			ctr->period = PER_INIT;				// сбрасываем период для инициализации
-			ctr->arr_index++;					// переходим к следующему элементу
-			p++;								// сдвигаем указатель
+	} else {
+		if (ctr->period == PER_NEXT) {
+			ctr->period = PER_INIT;
+			ctr->arr_index++;
+			p++;
 		}
-		// Пропускаем системные команды, пока не найдём LED-команду
-		//
-		// При переходе к следующему элементу (arr_index++) следующий элемент
-		// может оказаться системной командой (is_cmd == 0), а не LED-командой.
-		// Если вернуть указатель на системную команду — handle_aux_cmd()
-		// интерпретирует её как LED-команду и вызовет AWU_set_raw(0, 0),
-		// что приведёт к нулевой задержке сна и зависанию MCU.
-		//
-		// Поэтому обрабатываем системные команды здесь в цикле:
-		// сбрасываем индекс/указатель и продолжаем поиск LED-команды,
-		// пока не найдём её или не получим команду остановки.
 		while (p->cmd.is_cmd == 0) {
-			switch ((Array_Cmd_t) p->cmd.command) {
-			case AC_STOP:							// Остановить обработку массива
-				ctr->enable = false;				// Отключаем канал — обработка завершена
-				return NULL;						// NULL → handle_aux отключит EnableArrayProcessing*
-			case AC_REP_ATSTART:					// Зациклить с начала массива
-				ctr->arr_index = 0;				// Сбрасываем индекс на первый элемент
-				p = (union AUX_Cmd_u*) pArray;	// Указатель тоже на начало массива
-				break;							// Продолжаем цикл — проверим pArray[0]
-			case AC_REP_ATSTEPS:					// Зациклить с заданного шага
-				ctr->arr_index = p->cmd.steps;	// Устанавливаем индекс из поля steps команды
-				p = (union AUX_Cmd_u*) pArray + p->cmd.steps;	// Сдвигаем указатель на шаг
-				break;							// Продолжаем цикл — проверим pArray[steps]
-			default:								// Неизвестная системная команда
-				ctr->enable = false;				// Безопасная остановка канала
-				return NULL;						// Прекращаем обработку массива
+			switch ((Array_Cmd_t)p->cmd.command) {
+			case AC_STOP:
+				ctr->enable = false;
+				return NULL;
+			case AC_REP_ATSTART:
+				ctr->arr_index = 0;
+				p = (union AUX_Cmd_u*)pArray;
+				break;
+			case AC_REP_ATSTEPS:
+				ctr->arr_index = p->cmd.steps;
+				p = (union AUX_Cmd_u*)pArray + p->cmd.steps;
+				break;
+			default:
+				ctr->enable = false;
+				return NULL;
 			}
 		}
 		ctr->enable = true;
 	}
-	return p;									// возвращаем указатель на текущую команду
+	return p;
 }
 
 /**
@@ -580,50 +417,21 @@ union AUX_Cmd_u *handle_aux_array(const uint32_t pArray[], AUX_Ctr_t *ctr) {
  * После return main loop вызывает AWU_Sleep_Now() — MCU спит ровно столько,
  * сколько задано в текущем полупериоде.
  *
- * @return true если хотя бы один канал активен (aux_ctl.enable == true),
- *         false если все каналы пусты
+ * @return true если обработчик активен (aux_ctl.enable == true)
  */
 bool handle_aux(void) {
+	AWU_OFF();
 
-	//EE_PRINTF("[AUX] Handle AUX\r\n");
-
-	AWU_OFF(); /* Выключаем AWU */
-
-	// === Красный канал ===
-	if (EnableArrayProcessingRed) {
-		p_red = handle_aux_array(current_buf_red, &aux_ctl_red);	// обрабатываем массив
-		if (p_red == NULL) { EnableArrayProcessingRed = false; }	// AC_STOP — отключаем массив
-		else { handle_aux_cmd(p_red, &aux_ctl_red); }			// выполняем команду
-	} else if (p_red) {
-		handle_aux_cmd(p_red, &aux_ctl_red);	// одиночная команда
+	if (EnableArrayProcessing) {
+		p_aux = handle_aux_array(current_buf, &aux_ctl);
+		if (p_aux == NULL) EnableArrayProcessing = false;
+		else handle_aux_cmd(p_aux, &aux_ctl);
+	} else if (p_aux) {
+		handle_aux_cmd(p_aux, &aux_ctl);
 	}
 
-	// === Зелёный канал ===
-	if (EnableArrayProcessingGrn) {
-		p_grn = handle_aux_array(current_buf_grn, &aux_ctl_grn);
-		if (p_grn == NULL) { EnableArrayProcessingGrn = false; }
-		else { handle_aux_cmd(p_grn, &aux_ctl_grn); }
-	} else if (p_grn) {
-		handle_aux_cmd(p_grn, &aux_ctl_grn);
-	}
-
-	// === Подсветка (HBL) ===
-	if (EnableArrayProcessingHbl) {
-		p_hbl = handle_aux_array(current_buf_hbl, &aux_ctl_hbl);
-		if (p_hbl == NULL) { EnableArrayProcessingHbl = false; }
-		else { handle_aux_cmd(p_hbl, &aux_ctl_hbl); }
-	} else if (p_hbl) {
-		handle_aux_cmd(p_hbl, &aux_ctl_hbl);
-	}
-
-	/* AWU включаем если есть массивы для обработки ИЛИ одиночные команды.
-	 * EnableArrayProcessing* — массив ещё не завершён (нет AC_STOP)
-	 * aux_ctl.enable — одиночная команда ещё выполняется */
-	bool pending = EnableArrayProcessingRed || EnableArrayProcessingGrn || EnableArrayProcessingHbl
-				|| aux_ctl_red.enable || aux_ctl_grn.enable || aux_ctl_hbl.enable;
-
-	if(pending) AWU_ON(); /* Включаем AWU (таймер стартует) */
-	
+	bool pending = EnableArrayProcessing || aux_ctl.enable;
+	if (pending) AWU_ON();
 	return pending;
 }
 
@@ -639,7 +447,7 @@ bool handle_aux(void) {
  */
 void start_aux_beacon(void) {
 	if (!EE.aux.beacon_on) return;
-	if(is_aux_active(RED_LED) || is_aux_active(GRN_LED) || is_aux_active(HBL_LED)) return;
+	if (is_aux_active()) return;
 
 	/* Параметры OFF-полупериода по beacon_mode:
 	 * BCON_1S: psc=2048, win=63 → (2048×63)/128000 ≈ 1.0с
@@ -687,46 +495,41 @@ void start_exaux_voltage(WARNING_Fr_t ex_mode) {
 
 /**
  * @brief Остановка команды с проверкой режима
- * @param channel — канал
  * @param mode — режим индикации для проверки
  *
- * Если канал активен и работает в указанном режиме — останавливает его.
+ * Если обработчик активен и работает в указанном режиме — останавливает его.
  */
-void stop_aux_mode(LED_Bits_t channel, IDM_Type_t mode) {
-	if (is_aux_mode(channel, mode))
-		off_aux_cmd(channel, false);
+void stop_aux_mode(IDM_Type_t mode) {
+	if (is_aux_mode(mode))
+		off_aux_cmd(false);
 }
 
-// Обёртки для остановки по типу режима (автоопределение канала)
 void stop_aux_beacon(bool stop_lsi) {
-	if (is_aux_beacon(RED_LED)) off_aux_cmd(RED_LED, stop_lsi);
-	if (is_aux_beacon(GRN_LED)) off_aux_cmd(GRN_LED, stop_lsi);
-	if (is_aux_beacon(HBL_LED)) off_aux_cmd(HBL_LED, stop_lsi);
+	if (is_aux_mode(IDM_BEACON))
+		off_aux_cmd(stop_lsi);
 }
 void stop_aux_voltage(bool stop_lsi) {
-	if (is_aux_voltage(RED_LED)) off_aux_cmd(RED_LED, stop_lsi);
-	if (is_aux_voltage(GRN_LED)) off_aux_cmd(GRN_LED, stop_lsi);
-	if (is_aux_voltage(HBL_LED)) off_aux_cmd(HBL_LED, stop_lsi);
+	if (is_aux_mode(IDM_VWARNING))
+		off_aux_cmd(stop_lsi);
 }
 void stop_aux_strobe(bool stop_lsi) {
-	if (is_aux_strobe(RED_LED)) off_aux_cmd(RED_LED, stop_lsi);
-	if (is_aux_strobe(GRN_LED)) off_aux_cmd(GRN_LED, stop_lsi);
-	if (is_aux_strobe(HBL_LED)) off_aux_cmd(HBL_LED, stop_lsi);
+	if (is_aux_mode(IDM_STROBE))
+		off_aux_cmd(stop_lsi);
 }
 
 /**
  * @brief Индикация уровня заряда батареи
  *
- * Останавливает маяк на всех каналах, затем запускает set_aux_count()
+ * Останавливает маяк, затем запускает set_aux_count()
  * с количеством вспышек, соответствующих уровню заряда.
  */
 void slot_batt_ind(void) {
 #ifdef USE_BATTIND
-	// stop_aux_beacon(false);
-	(void)bat_get_flashes();
-	//EE_PRINTF("[AUX] slot_batt_ind flashes=%u\r\n", (unsigned)bat_get_flashes());
-	// uint32_t cmd = set_aux_count(bat_get_flashes());
-	// start_aux_cmd(cmd, true, IDM_OTHER, AWU_120MS);
+	stop_aux_beacon(false);
+	uint8_t flashes = bat_get_flashes();
+	//EE_PRINTF("[AUX] slot_batt_ind flashes=%u\r\n", (unsigned)flashes);
+	uint32_t cmd = set_aux_count(flashes);
+	start_aux_cmd(cmd, true, IDM_OTHER, AWU_120MS);
 #endif
 }
 
@@ -734,16 +537,16 @@ void slot_batt_ind(void) {
  * @brief Включение (одна зелёная вспышка)
  */
 void aux_on(void) {
-	EE_PRINTF("[AUX] info green\r\n");
-	// start_aux_cmd(INFO_GRN, true, IDM_OTHER, AWU_120MS);
+	//EE_PRINTF("[AUX] info green\r\n");
+	start_aux_cmd(INFO_GRN, true, IDM_OTHER, AWU_120MS);
 }
 
 /**
  * @brief Выключение (одна красная вспышка)
  */
 void aux_off(void) {
-	EE_PRINTF("[AUX] info red\r\n");
-	// start_aux_cmd(INFO_RED, true, IDM_OTHER, AWU_120MS);
+	//EE_PRINTF("[AUX] info red\r\n");
+	start_aux_cmd(INFO_RED, true, IDM_OTHER, AWU_120MS);
 }
 
 /**
@@ -751,7 +554,7 @@ void aux_off(void) {
  * @param count — количество (0 = одна красная, иначе count зелёных)
  */
 void aux_count(uint8_t count) {
-	EE_PRINTF("[AUX] count=%u\r\n", (unsigned)count);
+	//EE_PRINTF("[AUX] count=%u\r\n", (unsigned)count);
 
 	uint32_t cmd;
 	uint8_t flashes;
