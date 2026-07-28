@@ -14,6 +14,7 @@ pio device monitor               460800 8N1
 ```
 
 Only PlatformIO. No IDE, no Makefile, no CMake.
+UART init: our own `uart_init()` in `mini_printf.c` (bare-metal register writes), **not** SDK's `USART_Printf_Init`.
 
 ## ⚠️ CH32V003 ≠ STM32
 
@@ -54,7 +55,8 @@ Debounced state machine at 160 Hz. Emits events (`btn_evt_t`): PRESSED, RELEASED
 
 ### UI dispatch (`ui_table.c/h`)
 
-Table-driven: `dispatch_t` entries map `(driver_mode + btn_evt_t)` to action functions via `main_op[]` function pointer table. One dispatch table per UI type (ramping/UI1, discrete/UI2, engineering menu, user menu).
+Table-driven: `dispatch_t` entries map `(driver_mode + btn_evt_t)` to action functions via `main_op[]` function pointer table (79 entries). One dispatch table per UI type (ramping/UI1, discrete/UI2, engineering menu, user menu).
+`select_slot()`/`slotN_clickX()` are shared for all 10 magic slots — slot index is derived from `driver_mode - MODE_SLOT01` (or `clicks_count - 1`).
 
 ### Soft start (`soft_start.c`)
 
@@ -150,3 +152,5 @@ Do NOT write raw AF_OD values like `0x1C` — the `& 0x0F` mask in `GPIO_PinConf
 - **`adc.c` must include `ui.h`**: needed for `CMODE_*`, `driver_mode`, `mode_current`, `step_user`, `off_driver()`, `set_current()`, `get_stepi()` (used in `scan_voltage`).
 - **`calibration()` is under `#ifdef USE_MENU`**: only accessible via engineering menu. Writes to Option Bytes (not WL_FLASH).
 - **`mini_printf`** is ~1.5 KB when linked — disable `WL_FLASH_DEBUG` to reclaim it.
+- **`select_slot()`/`slotN_clickX()` in `ui.c`** are shared for all 10 slots; slot index is computed at runtime from `driver_mode - MODE_SLOT01` (or `clicks_count - 1`). Do NOT create per-slot functions.
+- **`uart_init()`** in `mini_printf.c` uses direct register writes (not SDK helpers). `out_char()` uses `USART1->DATAR`/`USART1->STATR` directly — keep SDK-free if modifying UART code.
