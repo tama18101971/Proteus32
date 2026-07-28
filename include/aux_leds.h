@@ -185,6 +185,8 @@ void start_aux_array(const uint32_t *pArray, awu_tick_t delay);
 void start_aux_beacon(void);          /* Запуск маяка из настроек EEPROM */
 uint32_t set_aux_count(uint8_t count);/* Формирование команды вспышек по количеству */
 void aux_count(uint8_t count);        /* Индикация числа: 0 → красная, иначе count зелёных */
+void aux_on(void);                    /* Одна зелёная вспышка (включение) */
+void aux_off(void);                   /* Одна красная вспышка (выключение) */
 
 /* Управление яркостью */
 void smart_off_leds(LED_Bits_t channel); /* Умное выключение с учётом подсветки */

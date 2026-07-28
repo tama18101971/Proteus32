@@ -81,7 +81,7 @@ Config struct (`config` in `limiters.c`) is `const` flash-resident. State (`stat
 
 ### AUX LEDs (`aux_leds.c/h`)
 
-State machine for blinking red/green/backlight LEDs via AWU timer. Commands are 32-bit packed words (`MAKE_CMD` macro) encoding device, timing, brightness, repeat count. Processed in `handle_aux()` during AWU wake cycles.
+State machine for blinking red/green/backlight LEDs via AWU timer. Commands are 32-bit packed words (`MAKE_CMD` or `MAKE_CMD_MS` macros) encoding device, timing, brightness, repeat count. `MAKE_CMD_MS` takes milliseconds instead of raw psc/win pairs — prefer it. Processed in `handle_aux()` during AWU wake cycles. Strobe patterns live in `aux_leds.c` (`strobe[4]`).
 
 ## Critical config
 

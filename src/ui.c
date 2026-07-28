@@ -211,7 +211,7 @@ void off_driver(uint8_t reset_step, SoftStartSpeed_t ss_speed)
 
     stop_aux_voltage(false);
     stop_aux_beacon(false);
-    EE_PRINTF("[UI] AUX stops skipped (debug mode)\r\n");
+    //EE_PRINTF("[UI] AUX stops skipped (debug mode)\r\n");
 
     // EEPROM write intentionally commented out per integration requirements
     // if (need_save) write_ee();
@@ -325,22 +325,16 @@ void off_driver_false(void)
 }
 
 /*******************************************************************************
- *  AUX indicator helper  (AUX calls commented -> EE_PRINTF)
+ *  AUX indicator helper 
  ******************************************************************************/
 
 static void onoff_indicator(uint8_t onoff)
 {
     off_auto_repeat();
     if (onoff)
-    {
-        EE_PRINTF("[UI] AUX on (green)\r\n");
-        // aux_on();
-    }
+        aux_on();
     else
-    {
-        EE_PRINTF("[UI] AUX off (red)\r\n");
-        // aux_off();
-    }
+        aux_off();
 }
 
 /*******************************************************************************
@@ -606,8 +600,8 @@ void menu_exit(void)
     // write_ee();  // EEPROM write commented
     EE_PRINTF("[UI] menu exit -> ui=%u beacon=%u\r\n", (unsigned)ui_save, (unsigned)beacon_save);
 
-    // uint8_t i = 4; uint8_t isGreen = true;
-    // do { flash_id(1, 125, isGreen); isGreen ^= 0x01; } while(--i);
+    //uint8_t i = 4; uint8_t isGreen = true;
+    //do { flash_id(1, 125, isGreen); isGreen ^= 0x01; } while(--i);
 #endif
 }
 
