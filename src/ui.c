@@ -325,10 +325,10 @@ void off_driver_false(void)
  *  AUX indicator helper 
  ******************************************************************************/
 
-static void clr_indicator(ind_clr_t onoff)  // бывшая onoff_indicator
+static void clr_indicator(ind_clr_t ind_clr)  // бывшая onoff_indicator
 {
     off_auto_repeat();
-    if (onoff == IND_GRN)
+    if (ind_clr == IND_GRN)
         aux_on();   // green
     else
         aux_off();  // red
