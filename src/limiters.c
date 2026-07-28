@@ -50,15 +50,14 @@ void scan_limiters(void)
         uint16_t up_level = MAX_STEP - limiter;
         set_current_ll(MIN(up_level, step_user), SS_NO); // обновляем только когда включено для того,  чтобы не зажечь диод когда этого не надо.
 
-        /*         if ((ee.uif.ui_index > 1) && (mode_current == CMODE_TURBO)) // если UI > 1 значит включены дискретные UI, если режим Турбо
-                {
-                    if (up_level < get_stepi(CMODE_MAX)) // Видим, что ТК увел яркость ниже максимального уровня и выключаем турбо.
-                    {
-                        mode_current = CMODE_MAX;
-                        ps.use_prev = false; // отключем возврат по двойному клику из Турбо. 12.10.2021
-                    }
-                }
-         */
+        if ((EE.uif.ui_index > 1) && (mode_current == CMODE_TURBO)) // дискретный UI и режим Турбо
+        {
+            if (up_level < get_stepi(CMODE_MAX)) // термоконтроль уронил яркость ниже CMODE_MAX — выходим из Турбо
+            {
+                mode_current = CMODE_MAX;
+                ps.use_prev = false; // отключаем возврат по двойному клику из Турбо
+            }
+        }
         old_correction = limiter;
     }
 }
