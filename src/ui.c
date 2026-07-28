@@ -974,7 +974,7 @@ void ui_process(void)
             tick_5s_reset();
             if (ui_idx == 1)
             {
-                max_step = get_max_step();
+                max_step = get_max_step() - (limiter + 1); // термокоррекция — как Proteus84: max_step = get_max_step() - (pic.correction + 1)
                 stop_aux_beacon(false);
                 if (step_tc >= max_step) direction = DIR_DOWN;
             }
