@@ -18,7 +18,7 @@ UART init: our own `uart_init()` in `mini_printf.c` (bare-metal register writes)
 
 ## ⚠️ CH32V003 ≠ STM32
 
-Never apply STM32 knowledge. Registers can have same names but different behavior. CH32V003 specifics: AWU exists, only USART1, I2C CKCFGR formula differs, GPIO CFGLR masks Mode via `& 0x0F` (see [GPIO pitfall](#gpio-cfglr-pitfall) below). Use `GPIO_PinConfig()` helper from `ch32v003_gpio.h` for safe register writes.
+Never apply STM32 knowledge. Registers can have same names but different behavior. CH32V003 specifics: AWU exists, only USART1, I2C CKCFGR formula differs, GPIO CFGLR masks Mode via `& 0x0F` (see [GPIO pitfall](#gpio-cfglr-pitfall) below). Use `GPIO_PinConfig()` helper from `mini_gpio.h` for safe register writes.
 
 ## Architecture
 
@@ -126,7 +126,7 @@ Feature toggles in `proteus_config.h`:
 - `#ifndef` guards, timeouts on all `while` loops
 - Comments explain **why**, not what. Russian for `main.c`, English for thermal limiter
 - Register writes: `RCC->APB2PCENR |= RCC_AFIOEN` (direct, not SDK helpers)
-- **BARE METAL > SDK**: All GPIO, UART, timer and peripheral code must use direct register writes (`port->CFGLR`, `USART1->DATAR`, etc.). Never replace bare-metal code with SDK helper calls. The `ch32v003_gpio.h` helpers are acceptable for new GPIO code, but existing bare-metal inline functions must not be rewritten to use them.
+- **BARE METAL > SDK**: All GPIO, UART, timer and peripheral code must use direct register writes (`port->CFGLR`, `USART1->DATAR`, etc.). Never replace bare-metal code with SDK helper calls. The `mini_gpio.h` helpers are acceptable for new GPIO code, but existing bare-metal inline functions must not be rewritten to use them.
 
 ## Thermal limiter constraints
 
@@ -145,7 +145,7 @@ Feature toggles in `proteus_config.h`:
 #define CFG_IN_PULL   0x08  // input pull-up, Mode=00, CNF=10
 #define CFG_OUT_PP_2M 0x02  // output push-pull 2MHz, Mode=10, CNF=00
 ```
-Do NOT write raw AF_OD values like `0x1C` — the `& 0x0F` mask in `GPIO_PinConfig` will truncate them. Use the helpers from `ch32v003_gpio.h`.
+Do NOT write raw AF_OD values like `0x1C` — the `& 0x0F` mask in `GPIO_PinConfig` will truncate them. Use the helpers from `mini_gpio.h`.
 
 ## Gotchas
 

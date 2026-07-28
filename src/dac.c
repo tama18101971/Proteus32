@@ -26,7 +26,7 @@
 
 #include "dac.h"
 #include "i2c.h"
-#include "ch32v003_gpio.h"
+#include "mini_gpio.h"
 
 /**
  * @brief Инициализация GPIO для пина питания DAC (PD0)

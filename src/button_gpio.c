@@ -1,5 +1,5 @@
 #include "button_gpio.h"
-#include "ch32v003_gpio.h"
+#include "mini_gpio.h"
 #include "proteus_config.h"
 #include "awu.h"
 

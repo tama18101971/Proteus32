@@ -1,8 +1,8 @@
-#ifndef CH32V003_GPIO_H
-#define CH32V003_GPIO_H
+#ifndef MINI_GPIO_H
+#define MINI_GPIO_H
 
 /*
- * ch32v003_gpio.h — Утилиты для настройки GPIO на CH32V003
+ * mini_gpio.h — Утилиты для настройки GPIO на CH32V003
  *
  * Константы конфигурации пинов:
  *   CFG_OUT_PP_10M/2M/50M — выход Push-Pull с разной скоростью
@@ -40,4 +40,4 @@ static inline void GPIO_PinConfig(GPIO_TypeDef* port, uint16_t pin_mask, uint8_t
     port->CFGLR = (port->CFGLR & mask) | ((uint32_t)cfg << shift);
 }
 
-#endif // CH32V003_GPIO_H
+#endif // MINI_GPIO_H
