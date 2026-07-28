@@ -97,9 +97,7 @@ void OFF_POWER(void)
 
 void ee_defaults(void)
 {
-    // EE.version = EE_VERSION; инициализация в init_ee()
-
-    EE.uif.ui_index = 1;
+     EE.uif.ui_index = 1;
     EE.uif.use_memory = 0;
 
     EE.aux.bcklight_color = BCK_COLOR_RED;
@@ -116,11 +114,11 @@ void ee_defaults(void)
     EE.default_ui1 = DEFAULT_STEP;
     EE.default_ui2 = DEFAULT_MODE;
 
-    EE.uif.off_bckl       = true;          // ee_defaults() не трогает это поле (остаётся false)
-    EE.aux.bcklight_color = BCK_COLOR_GRN; // default: BCK_COLOR_RED
-    EE.aux.beacon_mode    = BCON_4S;       // default: BCON_1S
-    EE.aux.beacon_on      = false;         // default: true
-    EE.aux.beacon_type    = 1;             // default: GRN_LED(2); тестовый стенд хочет RED_LED(1)
+    EE.uif.off_bckl       = true;         
+    EE.aux.bcklight_color = BCK_COLOR_GRN;
+    EE.aux.beacon_mode    = BCON_4S;
+    EE.aux.beacon_on      = false;  
+    EE.aux.beacon_type    = RED_LED;
 
 }
 
@@ -327,13 +325,13 @@ void off_driver_false(void)
  *  AUX indicator helper 
  ******************************************************************************/
 
-static void onoff_indicator(uint8_t onoff)
+static void clr_indicator(ind_clr_t onoff)  // бывшая onoff_indicator
 {
     off_auto_repeat();
-    if (onoff)
-        aux_on();
+    if (onoff == IND_GRN)
+        aux_on();   // green
     else
-        aux_off();
+        aux_off();  // red
 }
 
 /*******************************************************************************
@@ -343,13 +341,13 @@ static void onoff_indicator(uint8_t onoff)
 void slot_tactical(void)
 {
     ui_table_idx = 0;
-    onoff_indicator(true);
+    clr_indicator(IND_GRN);
 }
 
 void slot_backlight(void)
 {
     EE.aux.bcklight_type = !EE.aux.bcklight_type;
-    onoff_indicator(EE.aux.bcklight_type);
+    clr_indicator((ind_clr_t)EE.aux.bcklight_type);
 }
 
 void slot_beacon(void)
@@ -357,19 +355,19 @@ void slot_beacon(void)
     if (ui_table_idx == 6)
     {
         beacon_save = !beacon_save;
-        onoff_indicator(beacon_save);
+        clr_indicator((ind_clr_t)beacon_save);
     }
     else
     {
         EE.aux.beacon_on = !EE.aux.beacon_on;
-        onoff_indicator(EE.aux.beacon_on);
+        clr_indicator((ind_clr_t)EE.aux.beacon_on);
     }
 }
 
 void slot_memory(void)
 {
     EE.uif.use_memory = !EE.uif.use_memory;
-    onoff_indicator(EE.uif.use_memory);
+    clr_indicator((ind_clr_t)EE.uif.use_memory);
 }
 
 void slot_empty(void) {}
@@ -428,8 +426,8 @@ void slot_block(void)
 {
 #ifdef USE_BLOCK
     driver_mode = MODE_BLOCK;
-    EE_PRINTF("[UI] AUX info red (block)\r\n");
-    // aux_cmd_info_red();
+    //EE_PRINTF("[UI] AUX info red (block)\r\n");
+    aux_off();
 #endif
 }
 
@@ -437,8 +435,8 @@ void slot_block_beacon(void)
 {
 #ifdef USE_BLOCK
     driver_mode = MODE_BLOCK0;
-    EE_PRINTF("[UI] AUX info red (block+beacon)\r\n");
-    // aux_cmd_info_red();
+    //EE_PRINTF("[UI] AUX info red (block+beacon)\r\n");
+    aux_off();
 #endif
 }
 
@@ -446,8 +444,8 @@ void unblock_drv(void)
 {
 #ifdef USE_BLOCK
     driver_mode = MODE_OFF;
-    EE_PRINTF("[UI] AUX info green (unblock)\r\n");
-    // aux_cmd_info_grn();
+    //EE_PRINTF("[UI] AUX info green (unblock)\r\n");
+    aux_on();
 #endif
 }
 
@@ -463,7 +461,7 @@ void reset2def(void)
     ui_save = EE.uif.ui_index;
     ui_table_idx = ENG_MENU_IND;
     beacon_save = EE.aux.beacon_on;
-    onoff_indicator(true);
+    clr_indicator(IND_GRN);
 }
 
 void calibration(void)
@@ -482,7 +480,7 @@ void calibration(void)
 
     ob_SetVc(vc);
     ob_SetTc(tc);
-    onoff_indicator(ok);
+    clr_indicator((ind_clr_t)ok);
 #endif
 }
 
@@ -505,7 +503,7 @@ void save_def_ui1(void)
         out_set_stc(step_user);
     }
     else
-        onoff_indicator(true);
+        clr_indicator(IND_GRN);
 
     EE.default_ui1 = step_tc;
     // need_save = true;  // EEPROM write commented
@@ -522,7 +520,7 @@ void save_def_ui2(void)
         out_set_stc(step_user);
     }
     else
-        onoff_indicator(true);
+        clr_indicator(IND_GRN);
 
     EE.default_ui2 = mode_current;
     // need_save = true;  // EEPROM write commented
@@ -638,7 +636,7 @@ void slot_eauxmode(void)
 {
 #ifdef USE_MENU
     EE.usr.eaux_onoff = !EE.usr.eaux_onoff;
-    onoff_indicator(EE.usr.eaux_onoff);
+    clr_indicator((ind_clr_t)EE.usr.eaux_onoff);
 #endif
 }
 
@@ -646,7 +644,7 @@ void slot_ipsmode(void)
 {
 #ifdef USE_MENU
     EE.usr.id_plus_sid = !EE.usr.id_plus_sid;
-    onoff_indicator(EE.usr.id_plus_sid);
+    clr_indicator((ind_clr_t)EE.usr.id_plus_sid);
 #endif
 }
 
@@ -726,7 +724,6 @@ void uis_clickX(void)
 #endif
 }
 
-
 /*******************************************************************************
  *  Magic slots
  ******************************************************************************/
@@ -735,13 +732,13 @@ void uis_clickX(void)
 void enter_magic_mode(void)
 {
     driver_mode = MODE_MAGIC;
-    onoff_indicator(true);
+    clr_indicator(IND_GRN);
 }
 
 void exit_magic_mode(void)
 {
     driver_mode = MODE_OFF;
-    onoff_indicator(true);
+    clr_indicator(IND_GRN);
 }
 
 static void slot_set(uint8_t slot)

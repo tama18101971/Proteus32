@@ -149,6 +149,11 @@ typedef enum {
     DIR_UP
 } RUMP_Dir_t;
 
+typedef enum {
+    IND_RED = 0,
+    IND_GRN
+} ind_clr_t;
+
 #define MAX_STEP    511
 #define POW_THRD    120
 
