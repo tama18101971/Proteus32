@@ -19,7 +19,7 @@
  *   off_grn()    — выключить зелёный
  */
 
-#include "ch32v003_gpio.h"
+#include "ch32v00x.h"
 
 #define REDH_PORT	GPIOC
 #define REDH_PIN	GPIO_Pin_7

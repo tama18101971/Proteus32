@@ -126,6 +126,7 @@ Feature toggles in `proteus_config.h`:
 - `#ifndef` guards, timeouts on all `while` loops
 - Comments explain **why**, not what. Russian for `main.c`, English for thermal limiter
 - Register writes: `RCC->APB2PCENR |= RCC_AFIOEN` (direct, not SDK helpers)
+- **BARE METAL > SDK**: All GPIO, UART, timer and peripheral code must use direct register writes (`port->CFGLR`, `USART1->DATAR`, etc.). Never replace bare-metal code with SDK helper calls. The `ch32v003_gpio.h` helpers are acceptable for new GPIO code, but existing bare-metal inline functions must not be rewritten to use them.
 
 ## Thermal limiter constraints
 
