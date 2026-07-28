@@ -92,7 +92,7 @@ int main(void)
     reset_limiters();
 
     EE_PRINTF("setpoint=%u kp_shift=%u ki_shift=%u ki_decim=%u offset=%u\r\n",
-              T_SET, config.kp_left_shift, config.ki_left_shift,
+              BASE_TEMPERATURE + EE.usr.t_calibr, config.kp_left_shift, config.ki_left_shift,
               config.ki_decimation_shift, config.t_anticipate_offset);
 
     while (1)

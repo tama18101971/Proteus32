@@ -10,7 +10,7 @@
 pio run                          build
 pio run -t clean; pio run        clean rebuild
 pio run -t upload                flash via WCH-Link
-pio device monitor               115200 8N1
+pio device monitor               460800 8N1
 ```
 
 Only PlatformIO. No IDE, no Makefile, no CMake.
@@ -31,12 +31,12 @@ ARR = 999 → 1 ms period
 
 Main loop polls tick helpers (not ISR-driven beyond `tim2_ms` increment):
 
-| Rate  | Interval | What runs                             |
-|-------|----------|---------------------------------------|
-| 160Hz | 6 ms     | `button_tick() + ui_process() + ss_scan()` |
-| 30Hz  | 33 ms    | `adc_read() + scan_limiters()`        |
-| 2Hz   | 500 ms   | debug UART log                        |
-| 5s    | 5 s      | `handle_ee()` then `need_sleep = true`|
+| Rate  | Interval | What runs                                        |
+|-------|----------|--------------------------------------------------|
+| 160Hz | 6 ms     | `button_tick() + ui_process() + ss_scan()`       |
+| 30Hz  | 33 ms    | `adc_read() + scan_limiters() + scan_voltage()`  |
+| 2Hz   | 500 ms   | debug UART log                                   |
+| 5s    | 5 s      | `handle_ee()` then `need_sleep = true`           |
 
 `tim2_stop()` resets all tick counters — must re-initialize after sleep.
 
@@ -70,27 +70,48 @@ GPIO direct-drive (not PWM): PC4=green, PC7=red (push-pull), PC6=red low-side (p
 
 ### Thermal limiter (`thermal_limiter.c/h`)
 
-PI controller with `max(P, I)` arbitration. All integer shift-based (no multiply/divide). 3 zones relative to `t_threshold = T_SET - t_anticipate_offset`. See `TUNING.md` for full tuning guide. **6 constraints listed below — do not violate without approval.**
+PI controller with `max(P, I)` arbitration. All integer shift-based (no multiply/divide). 3 zones relative to `t_threshold = BASE_TEMPERATURE + t_calibr - t_anticipate_offset`. See `TUNING.md` for full tuning guide. **6 constraints listed below — do not violate without approval.**
 
 Config struct (`config` in `limiters.c`) is `const` flash-resident. State (`state`) is RAM.
 
+### Battery protection (`scan_voltage()` in `adc.c`)
+
+Protects against deep discharge of 1S Li-ion. Uses `mode_swt[6]` thresholds `{2700, 2750, 2800, 2900, 3000, 3100}` mV.
+- **UI1 (ramping)**: hard cutoff at 2700 mV, step-down at each threshold with 25% brightness reduction per step.
+- **UI2 (discrete)**: automatic mode reduction, hard cutoff if already at mode 0.
+- `volt_max_mode`/`volt_stop_mode` globals in `adc.c` track current/historical voltage ceiling for discrete modes.
+
+### Temperature calibration
+
+Two-layer calibration:
+- **`tc`** (`ob_GetTc()`/`ob_SetTc()`): hardware ADC correction (int8_t) stored in Option Bytes. Applied in `get_exact_temp_adc()` = `raw_temperature_adc - tc`, consumed by `calc_temperature()` and `ThermalLimiter_Update()`.
+- **`t_calibr`** (`EE.usr.t_calibr`): user-adjustable setpoint offset (4-bit, 0–15) from engineering menu (`chtk`). Dynamically computed: `t_set = BASE_TEMPERATURE + t_calibr`.
+- `BASE_TEMPERATURE` = termo_table[70] (50°C, ADC=722) minus default t_calibr (6) = 716.
+- `calibration()` in `ui.c` (engineering menu) measures current Vbat/temperature, computes vc/tc offsets, saves to Option Bytes.
+
 ### Data storage
 
-- **WL_FLASH**: wear-leveling EEPROM over flash. Fields accessed via `EE.fieldname` macro (`app_data.h` overlay on `ee_data`).
+- **WL_FLASH**: wear-leveling EEPROM over flash. Fields accessed via `EE.fieldname` macro (`app_data.h` overlay on `ee_data`). Uses `WL_FLASH_LIGHT` variant (see platformio.ini).
 - **Option Bytes** (`ob.c/h`): separate from WL_FLASH. Cached in RAM, flushed explicitly via `ob_Flush()`. Contains 10 slots (`ob_GetSlot/SetSlot`) + counters (`ml`, `tc`, `vc`).
 
 ### AUX LEDs (`aux_leds.c/h`)
 
 State machine for blinking red/green/backlight LEDs via AWU timer. Commands are 32-bit packed words (`MAKE_CMD` or `MAKE_CMD_MS` macros) encoding device, timing, brightness, repeat count. `MAKE_CMD_MS` takes milliseconds instead of raw psc/win pairs — prefer it. Processed in `handle_aux()` during AWU wake cycles. Strobe patterns live in `aux_leds.c` (`strobe[4]`).
 
+### Engineering / user menus
+
+Gated by `#ifdef USE_MENU`. Engineering menu includes `calibration()` (tc/vc) and `chtk` (t_calibr). User menu (`enter_user_menu`) includes `save_def_ui1/2` (always compiled, not under USE_MENU).
+
 ## Critical config
 
 | File | Purpose |
 |------|---------|
-| `include/proteus_config.h` | `#define WL_FLASH_DEBUG`, `EE_PRINTF`, `USE_*` feature flags |
-| `include/app_data.h` | EE overlay + `EE` macro |
-| (library) `config.h` | WL_FLASH params (EEPROM_PAGE_COUNT, EE_STRUCT_SIZE) — not shadowed by project |
-| `src/limiters.c` | `T_SET`, `config` — thermal limiter tuning |
+| `include/proteus_config.h` | Feature flags (`USE_*`), `EE_PRINTF`, UART debug toggles |
+| `include/app_data.h` | EE overlay struct + `EE` macro (used everywhere) |
+| `include/adc.h` | `REF_TEMP_ADC`, `REF_VOLTAGE_MV`, `ADC_MIN/MAX_VAL`, `VC/TC_CLIP_*` |
+| `include/limiters.h` | `BASE_TEMPERATURE`, `TERMO_50C_ADC`, `TCALIBR_DEFAULT` |
+| (library) `config.h` | WL_FLASH params — not shadowed by project |
+| `src/limiters.c` | `config` struct — thermal limiter PID tuning |
 | `include/thermal_limiter.h` | Compile-time constants (`THERMAL_*`), `ThermalLimiterConfig_t` |
 
 Feature toggles in `proteus_config.h`:
@@ -122,3 +143,10 @@ Feature toggles in `proteus_config.h`:
 #define CFG_OUT_PP_2M 0x02  // output push-pull 2MHz, Mode=10, CNF=00
 ```
 Do NOT write raw AF_OD values like `0x1C` — the `& 0x0F` mask in `GPIO_PinConfig` will truncate them. Use the helpers from `ch32v003_gpio.h`.
+
+## Gotchas
+
+- **`EE_PRINTF` is a no-op when `WL_FLASH_DEBUG` is off**: arguments are never evaluated (macro `#define EE_PRINTF(...) ((void)0)`). Code inside its argument list (e.g. `T_SET`, `EE.usr.*`) won't cause compile errors when debug is off, but will break if debug is re-enabled.
+- **`adc.c` must include `ui.h`**: needed for `CMODE_*`, `driver_mode`, `mode_current`, `step_user`, `off_driver()`, `set_current()`, `get_stepi()` (used in `scan_voltage`).
+- **`calibration()` is under `#ifdef USE_MENU`**: only accessible via engineering menu. Writes to Option Bytes (not WL_FLASH).
+- **`mini_printf`** is ~1.5 KB when linked — disable `WL_FLASH_DEBUG` to reclaim it.
