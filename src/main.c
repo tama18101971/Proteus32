@@ -138,6 +138,7 @@ int main(void)
         {
             adc_read();
             scan_limiters();
+            scan_voltage();
         }
 
         if (tick_2hz())

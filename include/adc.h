@@ -45,4 +45,11 @@ extern uint16_t raw_temperature_adc; /* Сырое значение темпер
 
 uint8_t bat_get_flashes(void);  /* Количество вспышек по заряду батареи (0..6) */
 
+/* ============ Защита по разряду батареи ============ */
+
+void scan_voltage(void);              /* Основной цикл защиты, вызывать 30 Гц после adc_read() */
+
+extern uint8_t volt_max_mode;         /* Динамический потолок режима UI2 (обновляется в scan_voltage) */
+extern uint8_t volt_stop_mode;        /* Ратчет-память — исторический минимум volt_max_mode */
+
 #endif /* ADC_H_ */

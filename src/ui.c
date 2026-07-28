@@ -18,6 +18,7 @@
 #include "ui_table.h"
 #include "array.h"
 #include "aux_leds.h"
+#include "adc.h"
 #include "app_data.h"
 #include "dac.h"
 #include "timers.h"
@@ -59,9 +60,6 @@ uint8_t clicks_count = 0;
 uint8_t ui_table_idx = 1;        // runtime selector for dispatch tables
 uint8_t ramp_speed = 2;          // replaces EE.eng.rump_speed (session only)
 uint8_t pid_time = 3;            // replaces EE.eng.pid_time (session only)
-uint8_t volt_max_mode = CMODE_TURBO;
-uint8_t volt_stop_mode = CMODE_TURBO;  // "без ограничений" по умолчанию (как в Proteus84: MODES_QTY-1);
-                                       // динамическое снижение по напряжению батареи не портировано
 uint8_t down_count = 0;
 uint8_t ui_save = 0;
 uint8_t beacon_save = 0;

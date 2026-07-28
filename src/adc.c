@@ -25,11 +25,17 @@
 #include "ch32v00x.h"
 #include "proteus_config.h"
 #include "debug.h"
+#include "ui.h"
+#include "app_data.h"
+#include "ob.h"
 
 
 uint16_t vbat_mv = 0;  /* Напряжение питания в мВ (обновляется в adc_read) */
 int16_t temperature_c = 0;
 uint16_t raw_temperature_adc = 0; // сырое значение температуры с АЦП (обновляется в adc_read)
+
+uint8_t volt_max_mode = CMODE_TURBO;
+uint8_t volt_stop_mode = CMODE_TURBO;
 
 /* Таймаут циклов опроса флагов/битов АЦП (защита от зависания при сбое) */
 #define ADC_WAIT_TIMEOUT 100000
@@ -249,6 +255,9 @@ void adc_read(void)
     // Вычисляем напряжение питания (мВ): Vrefint=1.2V, 10-бит ADC
     vbat_mv = (1200 * 1024) / vrefint_adc;
 
+    // Применяем калибровку vc из Option Bytes (int8_t, ±127 мВ)
+    vbat_mv += (int16_t)ob_GetVc();
+
     // Расчет температуры по таблице
     temperature_c = calc_temperature(raw_temperature_adc);
 
@@ -289,6 +298,119 @@ void adc_stop(void)
     GPIOD->CFGLR &= ~(0xF << 12);  /* PD3: 0b0000 = Analog Input (Hi-Z) */
 }
 
+/* ============ Защита по разряду батареи ============ */
+
+/* Пороги напряжения для 1S Li-ion (мВ):
+ *   [0] = критический разряд → принудительный сон
+ *   [1] = только CMODE_MOON
+ *   [2] = CMODE_MIN
+ *   [3] = CMODE_MID0
+ *   [4] = CMODE_MID
+ *   [5] = восстановление / без ограничений (CMODE_TURBO)
+ */
+static const uint16_t mode_swt[6] = {
+    2700, 2750, 2800, 2900, 3000, 3100
+};
+
+/* Вычисляет максимально допустимый режим UI2 по текущему напряжению */
+static uint8_t calc_volt_max_mode(uint16_t exact_v)
+{
+    for (uint8_t i = CMODE_MOON; i < CMODE_TURBO; i++)
+        if (exact_v < (mode_swt[i] + 1)) return i;
+    return CMODE_TURBO;
+}
+
+extern uint8_t need_sleep;  // из main.c
+
+static void down_forever(void)
+{
+    off_driver(false, SS_NO);
+    need_sleep = true;
+}
+
+/* Основной цикл защиты от глубокого разряда, вызывать 30 Гц.
+ * Аналог Proteus84 src/adc.c:scan_voltage(). */
+void scan_voltage(void)
+{
+    static uint8_t voff_count = 0;
+    static uint8_t voff_count_off = 0;
+    static uint8_t down_count = 5;
+    uint8_t ui_index = EE.uif.ui_index;
+
+    /* Обновляем мгновенный потолок режима для дискретного UI */
+    volt_max_mode = calc_volt_max_mode(vbat_mv);
+
+    if (driver_mode < MODE_ON) return;
+
+    /* ── Ramping UI (управление яркостью UI1) ── */
+    if (ui_index == 1)
+    {
+        /* Критический разряд: напряжение ниже mode_swt[0] */
+        if (vbat_mv < mode_swt[0])
+        {
+            if (++voff_count_off > 3)
+            {
+                voff_count_off = 0;
+                down_forever();
+                return;
+            }
+        }
+        else
+        {
+            voff_count_off = 0;
+        }
+
+        /* Ступенчатое снижение яркости при просадке */
+        if (vbat_mv < mode_swt[down_count])
+        {
+            if (++voff_count > 3)
+            {
+                voff_count = 0;
+                if (down_count)
+                {
+                    down_count--;
+                    step_user = step_user - (step_user >> 2);
+                    set_current(step_user, SS_SLOW);
+                }
+            }
+        }
+        else
+        {
+            voff_count = 0;
+        }
+
+        /* Восстановление: напряжение поднялось выше порога */
+        if (vbat_mv > mode_swt[5])
+            down_count = 5;
+    }
+
+    /* ── Discrete UI (дискретные режимы UI2) ── */
+    if ((ui_index > 1) && (ui_index < 4))
+    {
+        if (mode_current && (vbat_mv < mode_swt[mode_current - 1]))
+        {
+            if (++voff_count > 3)
+            {
+                voff_count = 0;
+                if (volt_stop_mode > (--mode_current))
+                    volt_stop_mode = mode_current;
+                if (mode_current)
+                    set_current(get_stepi(mode_current), SS_SLOW);
+                else
+                {
+                    down_forever();
+                    return;
+                }
+            }
+        }
+        else
+        {
+            voff_count = 0;
+        }
+    }
+}
+
+/* Индикатор заряда: 0..6 вспышек по напряжению */
 uint8_t bat_get_flashes(void) {
 	static const uint16_t thresholds[] = {3000, 3200, 3400, 3600, 3800, 4000};
 	for (uint8_t i = 0; i < sizeof(thresholds) / sizeof(thresholds[0]); i++) {
