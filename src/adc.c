@@ -118,6 +118,17 @@ int16_t calc_temperature(uint16_t adcValue)
     return temp;
 }
 
+/* Коррекция сырого ADC температуры по калибровке tc из Option Bytes.
+ * raw_temperature_adc не трогаем — остаётся сырым для возможности
+ * перекалибровки. Возвращаем скорректированное значение. */
+uint16_t get_exact_temp_adc(void)
+{
+    int16_t v = (int16_t)raw_temperature_adc - (int16_t)ob_GetTc();
+    if (v < ADC_MIN_VAL) v = ADC_MIN_VAL;
+    if (v > ADC_MAX_VAL) v = ADC_MAX_VAL;
+    return (uint16_t)v;
+}
+
 /*********************************************************************
  * @fn      ADC_Function_Init
  *
@@ -258,8 +269,8 @@ void adc_read(void)
     // Применяем калибровку vc из Option Bytes (int8_t, ±127 мВ)
     vbat_mv += (int16_t)ob_GetVc();
 
-    // Расчет температуры по таблице
-    temperature_c = calc_temperature(raw_temperature_adc);
+    // Расчет температуры по таблице (с коррекцией tc)
+    temperature_c = calc_temperature(get_exact_temp_adc());
 
 #ifdef PRINT_ADC
     // Выводим результат

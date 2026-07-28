@@ -8,8 +8,9 @@
 
 #include "thermal_limiter.h"
 
-#define T_SET 700u  /* Заданная температура (код АЦП) — ЗАМЕРИТЬ на реальном
-                       железе при желаемой предельной температуре, см. TUNING.md */
+#define TERMO_50C_ADC    722u  /* termo_table[70] = ADC-код при 50°C */
+#define TCALIBR_DEFAULT  6u    /* default EE.usr.t_calibr */
+#define BASE_TEMPERATURE  (TERMO_50C_ADC - TCALIBR_DEFAULT)
 
 void sys_init(void);
 void scan_limiters(void);

@@ -43,7 +43,9 @@ void scan_limiters(void)
     /* Шаг 2: Вызвать регулятор → получить limiter
         * limiter = 0..user_pwm
         * pwm_out = user_pwm - limiter (пользователь управляет ШИМ) */
-    limiter = ThermalLimiter_Update(&config, &state, raw_temperature_adc, T_SET, step_user);
+    uint16_t exact_adc = get_exact_temp_adc();
+    uint16_t t_set = BASE_TEMPERATURE + (uint16_t)EE.usr.t_calibr;
+    limiter = ThermalLimiter_Update(&config, &state, exact_adc, t_set, step_user);
 
     if (old_correction != limiter)
     {

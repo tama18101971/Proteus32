@@ -45,6 +45,21 @@ extern uint16_t raw_temperature_adc; /* Сырое значение темпер
 
 uint8_t bat_get_flashes(void);  /* Количество вспышек по заряду батареи (0..6) */
 
+/* ============ Калибровка термоконтроля ============ */
+
+#define REF_TEMP_ADC    542    /* Ожидаемый ADC при 25°C — termo_table[45] */
+#define REF_VOLTAGE_MV  4300   /* Ожидаемое Vbat при калибровке (мВ) */
+
+#define VC_CLIP_MAX     127    /* Максимальное значение vc (int8_t, ±127) */
+#define VC_CLIP_MIN     -127
+#define TC_CLIP_MAX     31     /* Максимальное значение tc */
+#define TC_CLIP_MIN     -31
+
+#define ADC_MIN_VAL     0      /* Диапазон 10-бит АЦП */
+#define ADC_MAX_VAL     1023
+
+uint16_t get_exact_temp_adc(void);  /* raw_temperature_adc - tc, clamped 0..1023 */
+
 /* ============ Защита по разряду батареи ============ */
 
 void scan_voltage(void);              /* Основной цикл защиты, вызывать 30 Гц после adc_read() */

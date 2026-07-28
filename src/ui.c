@@ -18,6 +18,7 @@
 #include "ui_table.h"
 #include "array.h"
 #include "aux_leds.h"
+#include "ob.h"
 #include "adc.h"
 #include "app_data.h"
 #include "dac.h"
@@ -468,17 +469,20 @@ void reset2def(void)
 void calibration(void)
 {
 #ifdef USE_MENU
-    // Proteus84 ADC calibration logic -- not directly portable.
-    // Keeping original code commented as requested.
-    // int8_t vc = (get_adc(ADCMUX_VCC) - REF_VOLTAGE);
-    // int8_t tc = (get_adc(ADCMUX_TEMP) - 0x12C);
-    // uint8_t ok = true;
-    // if (ABS(vc) > 15) { ok = false; vc = 0; }
-    // if (ABS(tc) > 31) { ok = false; tc = 0; }
-    // ob_SetVc(vc);
-    // ob_SetTc(tc);
-    // onoff_indicator(ok);
-    EE_PRINTF("[UI] calibration (EEPROM writes commented)\r\n");
+    /* Снимаем текущий vc, вычисляем uncorrected Vbat, сохраняем новый offset */
+    uint16_t vbat_raw = vbat_mv - (int16_t)ob_GetVc();
+    int8_t vc = (int8_t)((int32_t)REF_VOLTAGE_MV - (int32_t)vbat_raw);
+
+    /* tc = отклонение сырого ADC от эталона 25°C */
+    int8_t tc = (int8_t)((int16_t)raw_temperature_adc - REF_TEMP_ADC);
+
+    uint8_t ok = 1;
+    if (vc > VC_CLIP_MAX || vc < VC_CLIP_MIN) { ok = 0; vc = 0; }
+    if (tc > TC_CLIP_MAX || tc < TC_CLIP_MIN) { ok = 0; tc = 0; }
+
+    ob_SetVc(vc);
+    ob_SetTc(tc);
+    onoff_indicator(ok);
 #endif
 }
 
