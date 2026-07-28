@@ -337,16 +337,16 @@ void (*main_op[])(void) = {
     /*48*/ enter_magic_mode,
 
     /*49..68*/
-    select_slot01, slot01_clickX,
-    select_slot02, slot02_clickX,
-    select_slot03, slot03_clickX,
-    select_slot04, slot04_clickX,
-    select_slot05, slot05_clickX,
-    select_slot06, slot06_clickX,
-    select_slot07, slot07_clickX,
-    select_slot08, slot08_clickX,
-    select_slot09, slot09_clickX,
-    select_slot10, slot10_clickX,
+    select_slot, slotN_clickX,
+    select_slot, slotN_clickX,
+    select_slot, slotN_clickX,
+    select_slot, slotN_clickX,
+    select_slot, slotN_clickX,
+    select_slot, slotN_clickX,
+    select_slot, slotN_clickX,
+    select_slot, slotN_clickX,
+    select_slot, slotN_clickX,
+    select_slot, slotN_clickX,
 
     /*69..78*/
     mode_up_ui2,

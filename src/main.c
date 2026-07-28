@@ -30,6 +30,7 @@
 #include "limiters.h"
 #include "ob.h"
 #include "array.h"
+#include "mini_printf.h"
 
 volatile wakeup_source_t wakeup_source = WS_NONE; /* Источник последнего пробуждения */
 
@@ -46,7 +47,7 @@ int main(void)
     Delay_Ms(3000);
 
 #ifdef WL_FLASH_DEBUG
-    USART_Printf_Init(460800);
+    uart_init(460800);
 #endif
 
     EE_PRINTF("\r\n[MAIN] Boot...\r\n");

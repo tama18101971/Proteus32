@@ -1,10 +1,22 @@
 #include "mini_printf.h"
 #include "ch32v00x.h"
 
+void uart_init(uint32_t baudrate)
+{
+    RCC->APB2PCENR |= RCC_APB2Periph_GPIOD | RCC_APB2Periph_USART1;
+
+    GPIOD->CFGLR = (GPIOD->CFGLR & ~(0xF << 20)) | (0xE << 20); // PD5 AF-PP 50MHz
+
+    uint32_t div = (48000000u + (baudrate >> 1)) / baudrate;
+    USART1->BRR = (uint16_t)(((div / 16) << 4) | (div % 16));
+
+    USART1->CTLR1 = USART_CTLR1_UE | USART_CTLR1_TE;
+}
+
 static void out_char(char c)
 {
-    USART_SendData(USART1, (uint16_t)c);
-    while (USART_GetFlagStatus(USART1, USART_FLAG_TC) == RESET);
+    USART1->DATAR = (uint8_t)c;
+    while (!(USART1->STATR & USART_STATR_TC));
 }
 
 static void out_string(const char *s)

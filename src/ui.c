@@ -744,46 +744,30 @@ void exit_magic_mode(void)
     onoff_indicator(true);
 }
 
-static void clickX(uint8_t slot)
+static void slot_set(uint8_t slot)
 {
-    //EE_PRINTF("[UI] clickX slot=%u value=%u\r\n", (unsigned)slot, (unsigned)clicks_count);
     aux_count(clicks_count);
     ob_SetSlot(slot, clicks_count);
     driver_mode = MODE_MAGIC;
 }
 
-#define DEFINE_SLOT_SELECT(n, slot_idx)                     \
-    void select_slot##n(void) {                             \
-        driver_mode = MODE_SLOT##n;                         \
-        EE_PRINTF("[UI] select slot " #n " = %u\r\n",       \
-                  (unsigned)ob_GetSlot(slot_idx));          \
-        aux_count(ob_GetSlot(slot_idx));                    \
-    }                                                       \
-    void slot##n##_clickX(void) { clickX(slot_idx); }
+void select_slot(void)
+{
+    uint8_t slot = clicks_count - 1;
+    driver_mode = MODE_SLOT01 + slot;
+    aux_count(ob_GetSlot(slot));
+}
 
-DEFINE_SLOT_SELECT(01, 0)
-DEFINE_SLOT_SELECT(02, 1)
-DEFINE_SLOT_SELECT(03, 2)
-DEFINE_SLOT_SELECT(04, 3)
-DEFINE_SLOT_SELECT(05, 4)
-DEFINE_SLOT_SELECT(06, 5)
-DEFINE_SLOT_SELECT(07, 6)
-DEFINE_SLOT_SELECT(08, 7)
-DEFINE_SLOT_SELECT(09, 8)
-DEFINE_SLOT_SELECT(10, 9)
+void slotN_clickX(void)
+{
+    uint8_t slot = driver_mode - MODE_SLOT01;
+    slot_set(slot);
+}
 #else
 void enter_magic_mode(void) {}
 void exit_magic_mode(void) {}
-void select_slot01(void) {} void slot01_clickX(void) {}
-void select_slot02(void) {} void slot02_clickX(void) {}
-void select_slot03(void) {} void slot03_clickX(void) {}
-void select_slot04(void) {} void slot04_clickX(void) {}
-void select_slot05(void) {} void slot05_clickX(void) {}
-void select_slot06(void) {} void slot06_clickX(void) {}
-void select_slot07(void) {} void slot07_clickX(void) {}
-void select_slot08(void) {} void slot08_clickX(void) {}
-void select_slot09(void) {} void slot09_clickX(void) {}
-void select_slot10(void) {} void slot10_clickX(void) {}
+void select_slot(void) {}
+void slotN_clickX(void) {}
 #endif
 
 /*******************************************************************************

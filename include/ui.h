@@ -243,26 +243,8 @@ void bl_clickX(void);
 
 void enter_magic_mode(void);
 
-void select_slot01(void);
-void slot01_clickX(void);
-void select_slot02(void);
-void slot02_clickX(void);
-void select_slot03(void);
-void slot03_clickX(void);
-void select_slot04(void);
-void slot04_clickX(void);
-void select_slot05(void);
-void slot05_clickX(void);
-void select_slot06(void);
-void slot06_clickX(void);
-void select_slot07(void);
-void slot07_clickX(void);
-void select_slot08(void);
-void slot08_clickX(void);
-void select_slot09(void);
-void slot09_clickX(void);
-void select_slot10(void);
-void slot10_clickX(void);
+void select_slot(void);
+void slotN_clickX(void);
 
 void mode_up_ui2(void);
 void on_turbo_ui2(void);

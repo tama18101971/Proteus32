@@ -20,7 +20,7 @@
 
 #include "awu.h"
 #include "proteus_config.h"
-#include "debug.h"
+#include "mini_printf.h"
 
 uint8_t is_sleep_mode = false;
 
@@ -132,7 +132,7 @@ void AWU_Sleep_Tick(awu_tick_t tick)
 void AWU_Sleep_Now(void)
 {
 #ifdef WL_FLASH_DEBUG
-    while (!(USART1->STATR & USART_FLAG_TC)) /* Ждём окончания передачи USART1 (бит 6 STATR) */
+    while (!(USART1->STATR & USART_STATR_TC))
         ;
 #endif
 
@@ -161,7 +161,7 @@ void AWU_Sleep_Now(void)
     PWR->CTLR &= ~PWR_CTLR_PDDS;
 
 #ifdef WL_FLASH_DEBUG
-    USART_Printf_Init(460800); /* Восстанавливаем UART для отладки */
+    uart_init(460800);
 #endif
 
     return;  /* wakeup_source содержит WS_AWU, WS_BUTTON или WS_NONE */
@@ -183,10 +183,9 @@ void AWU_IRQHandler(void)
             SystemCoreClockUpdate(); /* Обновляем переменную SystemCoreClock */
         }
 
-        //EE_PRINTF("[AWU] WAKEUP Source: AWU TIMER\r\n");
+    //EE_PRINTF("[AWU] WAKEUP Source: AWU TIMER\r\n");
 #ifdef WL_FLASH_DEBUG
-        /* Ждём завершения передачи UART */
-        while (USART_GetFlagStatus(USART1, USART_FLAG_TC) == RESET)
+        while (!(USART1->STATR & USART_STATR_TC))
         {
         }
 #endif
