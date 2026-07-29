@@ -450,7 +450,7 @@ void unblock_drv(void)
 
 void reset2def(void)
 {
-    init_ee();                  // zeroes RAM, sets version
+    //init_ee();                  // zeroes RAM, sets version
     ee_defaults();              // fills application defaults
     ui_save = EE.uif.ui_index;
     ui_table_idx = ENG_MENU_IND;
@@ -569,7 +569,7 @@ void ml_clickX(void)
 void enter_pt_mode(void)
 {
 #ifdef USE_MENU
-    driver_mode = MODE_PIP_TIME;
+    driver_mode = MODE_PID_TIME;
     //EE_PRINTF("[UI] enter pt mode pid_time=%u\r\n", (unsigned)pid_time);
     aux_count(pid_time);
 #endif

@@ -72,7 +72,7 @@ typedef enum {
 
     MODE_RAMP_SPEED = 10U,
     MODE_MOON_LEVEL,
-    MODE_PIP_TIME,
+    MODE_PID_TIME,
 
     MODE_CTK_A,
     MODE_CTK_H,

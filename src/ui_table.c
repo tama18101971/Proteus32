@@ -139,8 +139,8 @@ static const dispatch_t eng_table[] = {
     { MODE_MOON_LEVEL, 0, 0, false, true,  ML_CLICKX,  false, 0 },
     { MODE_MOON_LEVEL, 0, 0, true,  false, MENU_EXIT,  false, 0 },
 
-    { MODE_PIP_TIME,   0, 0, false, true,  PT_CLICKX,  false, 0 },
-    { MODE_PIP_TIME,   0, 0, true,  false, MENU_EXIT,  false, 0 },
+    { MODE_PID_TIME,   0, 0, false, true,  PT_CLICKX,  false, 0 },
+    { MODE_PID_TIME,   0, 0, true,  false, MENU_EXIT,  false, 0 },
 
     /* -- Block/unblock -- */
     { MODE_BLOCK,  6, 0, false, false, UNBLOCK_DRV,   false, 0 },
