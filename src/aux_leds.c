@@ -35,6 +35,8 @@
 #include "led_gpio.h"
 #include "app_data.h"
 #include "adc.h"
+#include "ui.h"
+#include <string.h>
 
 uint8_t vwarning = VWARNING_NONE;			// Текущий уровень предупреждения о напряжении
 uint8_t vwarning_old = VWARNING_NONE;		// Предыдущий уровень (для отслеживания изменений)
@@ -48,12 +50,12 @@ const uint32_t buf_red[5] = {
 	MAKE_CMD(RED_LED|HBL_LED, 0, 4, AWU_PSC_4096, 60, AWU_PSC_128, 45, 1, 0),   /* ON 1920ms, OFF 45ms × 4 */
 	MAKE_CMD(RED_LED|HBL_LED, 0, 4, AWU_PSC_128, 45, AWU_PSC_4096, 60, 1, 0),   /* ON 45ms, OFF 1920ms × 4 */
 	MAKE_CMD(RED_LED|HBL_LED, 0, 4, AWU_PSC_4096, 60, AWU_PSC_128, 45, 1, 0),   /* ON 1920ms, OFF 45ms × 4 */
-	0x6  /* AC_REP_ATSTART */
+	0x1  /* AC_REP_ATSTART: зациклить весь массив */
 };
 const uint32_t buf_grn[3] = {
 	MAKE_CMD(GRN_LED, 0, 1, AWU_PSC_128, 45, AWU_PSC_256, 30, 1, 0),             /* ON 45ms, OFF 60ms */
 	MAKE_CMD(GRN_LED, 0, 1, AWU_PSC_256, 30, AWU_PSC_256, 30, 1, 0),             /* ON 60ms, OFF 60ms */
-	0  /* AC_REP_ATSTART */
+	0x1  /* AC_REP_ATSTART: зациклить весь массив */
 };
 const uint32_t buf_sos_red[] = {
 	/* S: ··· (count=3) */
@@ -113,8 +115,7 @@ const uint32_t strobe[4] = {
  * и запоминает указатель на массив для дальнейшей обработки в handle_aux().
  */
 void start_aux_array(const uint32_t *pArray, awu_tick_t delay) {
-	uint32_t *p = (uint32_t*)&aux_ctl;
-	*p = 0;
+	memset(&aux_ctl, 0, sizeof(aux_ctl));
 
 	EnableArrayProcessing = true;
 	p_aux = (union AUX_Cmd_u*)pArray;
@@ -266,7 +267,7 @@ static void SetBrightness(LED_Bits_t device, uint8_t brightness) {
 		else smart_off_leds(GRN_LED);
 	}
 	if (device & HBL_LED) {
-		// placeholder
+		set_current(brightness, SS_NO);
 	}
 }
 
@@ -361,56 +362,48 @@ union AUX_Cmd_u *handle_aux_array(const uint32_t pArray[], AUX_Ctr_t *ctr) {
 
 	union AUX_Cmd_u *p = (union AUX_Cmd_u*)pArray;
 
+	/* Если предыдущая LED-команда завершена (PER_NEXT) — переходим к
+	 * следующему элементу массива. Иначе продолжаем обрабатывать текущий
+	 * (он может быть системной командой, до которой не дошли ранее). */
+	if (ctr->period == PER_NEXT) {
+		ctr->period = PER_INIT;
+		ctr->arr_index++;
+	}
+
 	p += ctr->arr_index;
 
-	if (p->cmd.is_cmd == 0) {
-
+	/* Обработка системных команд в цикле (симметрично для первой и
+	 * последующих позиций). guard ограничивает число итераций размером
+	 * поля arr_index (4 бита = 0..15) — защита от взаимной зацикленности
+	 * команд AC_REP_*. */
+	uint8_t guard = 16;
+	while (p->cmd.is_cmd == 0 && guard--) {
 		switch ((Array_Cmd_t)p->cmd.command) {
 		case AC_STOP:
-			p = NULL;
-			break;
+			ctr->enable = false;
+			return NULL;
 		case AC_REP_ATSTART:
 			ctr->arr_index = 0;
 			p = (union AUX_Cmd_u*)pArray;
-			ctr->period = PER_INIT;
-			ctr->enable = true;
 			break;
 		case AC_REP_ATSTEPS:
 			ctr->arr_index = p->cmd.steps;
-			p = (union AUX_Cmd_u*)pArray;
-			p += ctr->arr_index;
-			ctr->period = PER_INIT;
-			ctr->enable = true;
+			p = (union AUX_Cmd_u*)pArray + ctr->arr_index;
 			break;
 		default:
-			break;
+			ctr->enable = false;
+			return NULL;
 		}
-	} else {
-		if (ctr->period == PER_NEXT) {
-			ctr->period = PER_INIT;
-			ctr->arr_index++;
-			p++;
-		}
-		while (p->cmd.is_cmd == 0) {
-			switch ((Array_Cmd_t)p->cmd.command) {
-			case AC_STOP:
-				ctr->enable = false;
-				return NULL;
-			case AC_REP_ATSTART:
-				ctr->arr_index = 0;
-				p = (union AUX_Cmd_u*)pArray;
-				break;
-			case AC_REP_ATSTEPS:
-				ctr->arr_index = p->cmd.steps;
-				p = (union AUX_Cmd_u*)pArray + p->cmd.steps;
-				break;
-			default:
-				ctr->enable = false;
-				return NULL;
-			}
-		}
-		ctr->enable = true;
 	}
+
+	/* Защита: после 16 итераций всё ещё системная команда — зависание
+	 * (AC_REP_* ссылаются друг на друга). Прерываем во избежание краша. */
+	if (p->cmd.is_cmd == 0) {
+		ctr->enable = false;
+		return NULL;
+	}
+
+	ctr->enable = true;
 	return p;
 }
 
