@@ -1,24 +1,28 @@
-/*
- * adc.c — Реализация АЦП для измерения температуры NTC
+/**
+ * @file adc.c
+ * @brief ADC driver for NTC temperature and Vbat measurement
  *
- * Конфигурация ADC1:
- *   - Режим: Independent, software trigger
- *   - Регулярное: канал 3 (NTC на PD2), 57 тактов семплирования
- *   - Инжектированное: Vrefint (канал 8), 30 тактов
- *   - Автоматическая инъекция после регулярного преобразования
+ * ADC1 configuration:
+ *   - Mode: Independent, software trigger
+ *   - Regular: channel 3 (NTC on PD2), 57 sample clocks
+ *   - Injected: Vrefint (channel 8), 30 sample clocks
+ *   - Auto-injection after regular conversion
  *
- * Пин-конфигурация:
- *   PD2 — аналоговый вход (верхний узел делителя, сюда подключен NTC)
- *   PD3 — выход Push-Pull 50МГц, искусственная "земля" нижнего плеча
- *         делителя NTC. Делитель: Vdd -> NTC -> PD2 -> R -> PD3.
- *         PD3 = 0 ("земля") — делитель под током, на PD2 измеряем NTC.
- *         PD3 = 1 — цепь делителя разорвана сверху по логике, ток не
- *         течёт, экономия заряда батареи между измерениями.
+ * Pin config:
+ *   PD2 — analog input (NTC divider top node)
+ *   PD3 — output PP 50 MHz, artificial "GND" for divider bottom leg
+ *         Divider: Vdd -> NTC -> PD2 -> R -> PD3.
+ *         PD3 = 0 (GND) — divider active, NTC measured on PD2
+ *         PD3 = 1 — divider chain broken, no current draw
  *
- * Формула напряжения: Vbat = (1200 * 1024) / vrefint_adc (мВ)
- * Формула температуры: бинарный поиск + линейная интерполяция по таблице
+ * Voltage: Vbat = (1200 * 1024) / vrefint_adc (mV)
+ * Temperature: binary search + linear interpolation in termo_table
  *
- * Экономия энергии: adc_stop() отключает тактирование и переводит GPIO в Hi-Z
+ * Power saving: adc_stop() disables clock and sets GPIO to Hi-Z
+ *
+
+ * Ported from Proteus84 (AVR) — scan_voltage() is the equivalent of
+ * AVR adc.c:scan_voltage() with limiter[2][6] and step-down logic.
  */
 
 #include "adc.h"
@@ -59,11 +63,13 @@ uint16_t max_min = MAX_STEP;
  * Погрешность: max ошибка = 2^shift (±16 при shift=4). */
 static uint16_t ema_avg;
 
+/** @brief Initialise EMA filter with seed value. */
 void ema_init(uint16_t seed)
 {
     ema_avg = seed;
 }
 
+/** @brief Update EMA filter with new raw sample. */
 uint16_t ema_update(uint16_t raw)
 {
     ema_avg += (raw - ema_avg) >> EMA_SHIFT;
@@ -87,38 +93,33 @@ static const uint16_t termo_table[] = {
 
 #define TABLE_SIZE (sizeof(termo_table) / sizeof(termo_table[0]))
 
-/* Вычисляет температуру по ADC-коду с линейной интерполяцией */
+/** @brief Calculate temperature from ADC value using lookup + linear interpolation. */
 int16_t calc_temperature(uint16_t adcValue)
 {
     uint8_t l = 0;
     uint8_t r = TABLE_SIZE - 1;
 
-    /* Если код ниже минимального — возвращаем нижнюю границу диапазона */
     if (adcValue <= termo_table[0])
         return TEMPERATURE_TABLE_START;
 
-    /* Если код выше максимального — возвращаем верхнюю границу диапазона */
     if (adcValue >= termo_table[r])
         return TEMPERATURE_TABLE_START + (TABLE_SIZE - 1) * TEMPERATURE_TABLE_STEP;
 
-    /* Бинарный поиск для нахождения интервала [l, r] */
+    uint8_t m;
     while ((r - l) > 1)
     {
-        uint8_t m = (l + r) >> 1;
+        m = (l + r) >> 1;
         if (adcValue < termo_table[m])
             r = m;
         else
             l = m;
     }
 
-    /* Получаем границы интервала */
     uint16_t vl = termo_table[l];
     uint16_t vr = termo_table[r];
 
-    /* Базовая температура начала интервала */
     int16_t temp = TEMPERATURE_TABLE_START + l * TEMPERATURE_TABLE_STEP;
 
-    /* Линейная интерполяция внутри интервала */
     if (vr != vl)
     {
         uint32_t diff_adc = adcValue - vl;
@@ -128,9 +129,10 @@ int16_t calc_temperature(uint16_t adcValue)
     return temp;
 }
 
-/* Коррекция сырого ADC температуры по калибровке tc из Option Bytes.
- * raw_temperature_adc не трогаем — остаётся сырым для возможности
- * перекалибровки. Возвращаем скорректированное значение. */
+/**
+ * @brief Apply tc calibration offset to raw temperature ADC.
+ * @return Corrected ADC value (clamped to ADC_MIN_VAL..ADC_MAX_VAL).
+ */
 uint16_t get_exact_temp_adc(void)
 {
     int16_t v = (int16_t)raw_temperature_adc - (int16_t)ob_GetTc();
@@ -236,6 +238,13 @@ void adc_init(void)
     ema_init(323);
 }
 
+/**
+ * @brief Perform ADC read: NTC temperature + Vrefint -> Vbat.
+ *
+ * Powers the NTC divider (PD3=0), waits for settling, starts regular+injected
+ * conversion, reads results, then powers down the divider (PD3=1).
+ * Updates raw_temperature_adc, vbat_mv, temperature_c.
+ */
 void adc_read(void)
 {
     // Включаем делитель напряжения: PD3 = 0 ("земля" нижнего плеча, ток через NTC течёт)
@@ -349,6 +358,7 @@ static uint8_t calc_volt_max_mode(uint16_t exact_v)
 static const uint16_t volt_max_tbl[6] = {2500, 2820, 2930, 3080, 3190, 3300};
 static const uint16_t step_max_tbl[6] = {120, 240, 310, 400, 463, 511};
 
+/** @brief Get max allowed brightness step based on Vbat (monotonic decreasing). */
 uint16_t get_max_step(void)
 {
     uint8_t i = 6;
@@ -362,33 +372,38 @@ uint16_t get_max_step(void)
     return max_min;
 }
 
-extern uint8_t need_sleep;  // из main.c
+extern uint8_t need_sleep;
 
+/**
+ * @brief Force shutdown: turn off driver and request STANDBY.
+ */
 static void down_forever(void)
 {
     off_driver(false, SS_NO);
     need_sleep = true;
 }
 
-/* Основной цикл защиты от глубокого разряда, вызывать 30 Гц.
- * Аналог Proteus84 src/adc.c:scan_voltage(). */
+/**
+ * @brief Battery undervoltage protection (call at 30 Hz).
+ *
+ * For UI1 (ramping): step-down brightness at each threshold, hard cutoff at 2700 mV.
+ * For UI2 (discrete): reduce mode automatically, hard cutoff if already at mode 0.
+ * Monotonic: volt_stop_mode only decreases, recovers on reboot.
+ */
 void scan_voltage(void)
 {
     static uint8_t voff_count = 0;
     static uint8_t voff_count_off = 0;
     uint8_t ui_index = EE.uif.ui_index;
 
-    /* Обновляем мгновенный потолок режима для дискретного UI */
     volt_max_mode = calc_volt_max_mode(vbat_mv);
 
     if (driver_mode < MODE_ON) return;
 
-    /* ── Ramping UI (управление яркостью UI1) ── */
+    /* Ramping UI (brightness control UI1) */
     if (ui_index == 1)
     {
-        /* Критический разряд: напряжение ниже mode_swt[0].
-         * Step-down и восстановление вложены в else — взаимоисключающе
-         * с критическим отключением (аналог AVR adc.c:255-292). */
+        /* Critical undervoltage: below mode_swt[0] */
         if (vbat_mv < mode_swt[0])
         {
             if (++voff_count_off > 3)
@@ -402,7 +417,7 @@ void scan_voltage(void)
         {
             voff_count_off = 0;
 
-            /* Ступенчатое снижение яркости при просадке */
+            /* Step-down brightness on voltage sag */
             if (vbat_mv < mode_swt[down_count])
             {
                 if (++voff_count > 3)
@@ -420,14 +435,14 @@ void scan_voltage(void)
             {
                 voff_count = 0;
 
-                /* Восстановление: напряжение поднялось выше верхнего порога */
+                /* Recovery: voltage above top threshold */
                 if (vbat_mv > mode_swt[5])
                     down_count = 5;
             }
         }
     }
 
-    /* ── Discrete UI (дискретные режимы UI2) ── */
+    /* Discrete UI (mode-based UI2) */
     if ((ui_index > 1) && (ui_index < 4))
     {
         if (mode_current && (vbat_mv < mode_swt[mode_current - 1]))
@@ -439,7 +454,6 @@ void scan_voltage(void)
                     volt_stop_mode = mode_current;
                 if (mode_current)
                 {
-                    /* В режиме стробоскопа яркость не меняем (аналог AVR adc.c:308) */
                     if (driver_mode != MODE_STROB)
                         set_current(get_stepi(mode_current), SS_SLOW);
                 }
@@ -457,7 +471,7 @@ void scan_voltage(void)
     }
 }
 
-/* Индикатор заряда: 0..6 вспышек по напряжению */
+/** @brief Get battery indicator flash count (0-6) based on Vbat. */
 uint8_t bat_get_flashes(void) {
 	static const uint16_t thresholds[] = {3000, 3200, 3400, 3600, 3800, 4000};
 	for (uint8_t i = 0; i < sizeof(thresholds) / sizeof(thresholds[0]); i++) {

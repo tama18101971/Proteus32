@@ -1,23 +1,24 @@
 #ifndef ADC_H_
 #define ADC_H_
 
-/*
- * adc.h — АЦП для измерения температуры NTC и напряжения питания
+/**
+ * @file adc.h
+ * @brief ADC driver for NTC temperature and supply voltage measurement
  *
- * АЦП (ADC1) используется для:
- *   - Измерения температуры NTC-термистора (канал 3, PD2)
- *   - Измерения напряжения питания через Vrefint (канал 8)
+ * ADC1 is used for:
+ *   - NTC thermistor temperature measurement (channel 3, PD2)
+ *   - Supply voltage measurement via Vrefint (channel 8)
  *
- * Функции:
- *   adc_init()  — полная инициализация АЦП с калибровкой
- *   adc_read()  — одно измерение (NTC + Vrefint), вывод результатов
- *   adc_stop()  — полная остановка АЦП (тактирование off, GPIO Hi-Z)
+ * Functions:
+ *   adc_init()  — full ADC initialisation with calibration
+ *   adc_read()  — single measurement (NTC + Vrefint), outputs results
+ *   adc_stop()  — fully stop ADC (clock off, GPIO Hi-Z)
  *
- * EMA-фильтр (Exponential Moving Average):
- *   ema_init()  — начальная инициализация фильтра
- *   ema_update() — обновление фильтра новым значением
+ * EMA filter (Exponential Moving Average):
+ *   ema_init()  — initialise filter with seed value
+ *   ema_update() — update filter with new raw value
  *
- * Температурная таблица: -20..+80°C, шаг 1°C
+ * Temperature table: -20..+80°C, 1°C step
  */
 
 #include <stdint.h>
@@ -25,51 +26,115 @@
 #define TEMPERATURE_TABLE_START  (-200)
 #define TEMPERATURE_TABLE_STEP   (10)
 
+/**
+ * @brief Perform one ADC measurement cycle (NTC + Vrefint).
+ *
+ * Reads NTC temperature channel and Vrefint, updates global variables:
+ * vbat_mv, temperature_c, raw_temperature_adc.
+ */
 void adc_read(void);
+
+/**
+ * @brief Initialise ADC1 with calibration.
+ *
+ * Configures ADC for NTC (channel 3, PD2) and Vrefint (channel 8).
+ * Enables ADC clock, runs self-calibration.
+ */
 void adc_init(void);
+
+/**
+ * @brief Fully stop ADC and release resources.
+ *
+ * Disables ADC clock, sets GPIO pins to Hi-Z for power saving.
+ */
 void adc_stop(void);
 
+/**
+ * @brief Convert raw ADC value to temperature (x0.1°C).
+ * @param adcValue Raw 10-bit ADC reading from NTC channel.
+ * @return Temperature in deci-degrees Celsius (e.g. 250 = 25.0°C).
+ */
 int16_t calc_temperature(uint16_t adcValue);
 
-/* EMA-фильтр для Vrefint ADC (измерение напряжения Vdd).
- * shift=4: alpha=1/16, запаздывание ~16 отсчётов.
- * shift=3: alpha=1/8,  запаздывание ~8 отсчётов.
- * Больше shift — плавнее, но медленнее реакция. */
+/* EMA filter for Vrefint ADC (supply voltage Vdd measurement).
+ * shift=4: alpha=1/16, lag ~16 samples.
+ * shift=3: alpha=1/8,  lag ~8 samples.
+ * Higher shift = smoother but slower response. */
 #define EMA_SHIFT 4
+
+/**
+ * @brief Initialise EMA filter with a seed value.
+ * @param seed Initial filter value.
+ */
 void     ema_init(uint16_t seed);
+
+/**
+ * @brief Update EMA filter with new raw sample.
+ * @param raw Raw ADC value.
+ * @return Filtered value.
+ */
 uint16_t ema_update(uint16_t raw);
 
-extern uint16_t vbat_mv;  /* Напряжение питания в мВ */
+/** @brief Battery voltage in millivolts (updated by adc_read). */
+extern uint16_t vbat_mv;
+
+/** @brief Temperature in °C (updated by adc_read). */
 extern int16_t temperature_c;
-extern uint16_t raw_temperature_adc; /* Сырое значение температуры с АЦП */
 
-uint8_t bat_get_flashes(void);  /* Количество вспышек по заряду батареи (0..6) */
+/** @brief Raw temperature ADC value (updated by adc_read). */
+extern uint16_t raw_temperature_adc;
 
-/* ============ Калибровка термоконтроля ============ */
+/**
+ * @brief Get number of battery indication flashes.
+ * @return Number of flashes (0..6).
+ */
+uint8_t bat_get_flashes(void);
 
-#define REF_TEMP_ADC    542    /* Ожидаемый ADC при 25°C — termo_table[45] */
-#define REF_VOLTAGE_MV  4300   /* Ожидаемое Vbat при калибровке (мВ) */
+/* ============ Thermal calibration constants ============ */
 
-#define VC_CLIP_MAX     127    /* Максимальное значение vc (int8_t, ±127) */
+#define REF_TEMP_ADC    542    /**< Expected ADC at 25°C — termo_table[45] */
+#define REF_VOLTAGE_MV  4300   /**< Expected Vbat during calibration (mV) */
+
+#define VC_CLIP_MAX     127    /**< Max vc value (int8_t, ±127) */
 #define VC_CLIP_MIN     -127
-#define TC_CLIP_MAX     31     /* Максимальное значение tc */
+#define TC_CLIP_MAX     31     /**< Max tc value */
 #define TC_CLIP_MIN     -31
 
-#define ADC_MIN_VAL     0      /* Диапазон 10-бит АЦП */
-#define ADC_MAX_VAL     1023
+#define ADC_MIN_VAL     0      /**< 10-bit ADC range minimum */
+#define ADC_MAX_VAL     1023   /**< 10-bit ADC range maximum */
 
-uint16_t get_exact_temp_adc(void);  /* raw_temperature_adc - tc, clamped 0..1023 */
+/**
+ * @brief Get temperature ADC corrected by calibration offset.
+ * @return raw_temperature_adc - tc, clamped to 0..1023.
+ */
+uint16_t get_exact_temp_adc(void);
 
-/* ============ Защита по разряду батареи ============ */
+/* ============ Battery protection ============ */
 
-void scan_voltage(void);              /* Основной цикл защиты, вызывать 30 Гц после adc_read() */
+/**
+ * @brief Main battery protection loop (call at 30 Hz after adc_read()).
+ *
+ * Implements UI1 ramping and UI2 discrete mode voltage protection.
+ * Updates volt_max_mode, volt_stop_mode, down_count, max_min.
+ */
+void scan_voltage(void);
 
-extern uint8_t volt_max_mode;         /* Динамический потолок режима UI2 (обновляется в scan_voltage) */
-extern uint8_t volt_stop_mode;        /* Ратчет-память — исторический минимум volt_max_mode */
+/** @brief Dynamic UI2 mode ceiling (updated in scan_voltage). */
+extern uint8_t volt_max_mode;
 
-extern uint8_t down_count;           /* Счётчик ступеней UI1 (сбрасывается в on_driver) */
-extern uint16_t max_min;              /* Монотонно убывающий потолок шага UI1 по напряжению */
+/** @brief Ratchet memory — historical minimum of volt_max_mode. */
+extern uint8_t volt_stop_mode;
 
-uint16_t get_max_step(void);         /* Потолок яркости UI1 по напряжению (монотонный, аналог AVR) */
+/** @brief UI1 step-down counter (reset in on_driver). */
+extern uint8_t down_count;
+
+/** @brief Monotonically decreasing UI1 step ceiling by voltage. */
+extern uint16_t max_min;
+
+/**
+ * @brief Get UI1 brightness ceiling based on battery voltage.
+ * @return Max allowed step (0..511).
+ */
+uint16_t get_max_step(void);
 
 #endif /* ADC_H_ */

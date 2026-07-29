@@ -1,7 +1,6 @@
-/*
- * ui.c
- *
- * UI action functions + ui_process dispatcher.
+/**
+ * @file ui.c
+ * @brief UI action functions + ui_process dispatcher
  *
  * Ported from Proteus84 (AVR) to Proteus003 (CH32V003).
  * Low-level brightness/DAC functions are kept from the original Proteus003 ui.c.
@@ -78,6 +77,7 @@ static const uint16_t modes[MODES_QTY] = {0, 20, 74, 136, 220, 360, 511};
  *  Power / DAC helpers (Proteus003)
  ******************************************************************************/
 
+/** @brief Power-on sequence: reset limiters, enable DAC, init I2C. */
 void ON_POWER(void)
 {
     EE_PRINTF("[UI] ON PWR.\r\n");
@@ -87,6 +87,7 @@ void ON_POWER(void)
     for (volatile uint32_t i = 0; i < 24000; i++);  // ~5 ms DAC wake-up
 }
 
+/** @brief Power-off sequence: deinit I2C, disable DAC. */
 void OFF_POWER(void)
 {
     EE_PRINTF("[UI] OFF PWR.\r\n");
@@ -94,6 +95,7 @@ void OFF_POWER(void)
     dac_pwrpin_off();
 }
 
+/** @brief Set EEPROM defaults for all application parameters. */
 void ee_defaults(void)
 {
     EE.uif.ui_index = 1;
@@ -116,22 +118,33 @@ void ee_defaults(void)
     EE.uif.off_bckl       = true;         
 }
 
+/**
+ * @brief Clamp brightness target to thermal ceiling.
+ * @param step Requested brightness step.
+ * @return Min(step, MAX_STEP - limiter), minimum 1.
+ */
 uint16_t get_step_tc(uint16_t step)
 {
-    /* Аналог AVR button.c get_step_tc(): clamp цели soft-start к
-     * MAX_STEP - limiter (термоконтроль). limiter — из limiters.c.
-     * Без этого ramp-up кратковременно превышает тепловой потолок,
-     * пока scan_limiters (30 Гц) не догонит. */
     int16_t tc_step = (int16_t)(MAX_STEP - limiter);
     uint16_t result = step <= tc_step ? step : (tc_step > 0 ? (uint16_t)tc_step : 1);
     return result;
 }
 
+/**
+ * @brief Get minimum brightness floor.
+ * @param step If non-zero, returns moon level offset; otherwise 0.
+ * @return (ml << 1) + BASE_MOON_LEVEL or 0.
+ */
 uint16_t get_min_level(uint16_t step)
 {
     return step ? ((ob_GetMl() << 1) + BASE_MOON_LEVEL) : 0;
 }
 
+/**
+ * @brief Convert 9-bit brightness step to 12-bit DAC value with gamma correction.
+ * @param val 9-bit step (0-511).
+ * @return 12-bit DAC value (0-4095).
+ */
 uint16_t getBright_CRT_9to12Bit(uint16_t val)
 {
     if (val < 2) return val;
@@ -146,6 +159,7 @@ uint16_t getBright_CRT_9to12Bit(uint16_t val)
     return (uint16_t)result;
 }
 
+/** @brief Set DAC output to gamma-corrected + moon level value for given step. */
 void out_set_stc(uint16_t step)
 {
     uint16_t out = getBright_CRT_9to12Bit(step) + get_min_level(step);
@@ -153,6 +167,10 @@ void out_set_stc(uint16_t step)
     dac7571_set_voltage(out);
 }
 
+/**
+ * @brief Turn on driver (power, direction, vwarning).
+ * @return 1 if power was applied, 0 if already on or blocked.
+ */
 uint8_t on_driver(void)
 {
     EE_PRINTF("[UI] ON DRV.\r\n");
@@ -169,7 +187,7 @@ uint8_t on_driver(void)
     if (driver_mode < MODE_ON)
     {
         ON_POWER();
-        down_count = 5;               /* сброс ступеней снижения (аналог AVR button.c:209) */
+        down_count = 5;
         vwarning = VWARNING_NONE;
         vwarning_old = VWARNING_NONE;
         direction = DIR_UP;
@@ -180,6 +198,11 @@ uint8_t on_driver(void)
     return 0;
 }
 
+/**
+ * @brief Turn off driver with optional soft-start ramp-down.
+ * @param reset_step If true, clear step_tc.
+ * @param ss_speed   Soft-start speed for ramp-down.
+ */
 void off_driver(uint8_t reset_step, SoftStartSpeed_t ss_speed)
 {
     EE_PRINTF("[UI] OFF DRV.\r\n");
@@ -219,6 +242,11 @@ void off_driver(uint8_t reset_step, SoftStartSpeed_t ss_speed)
         step_tc = 0;
 }
 
+/**
+ * @brief Low-level brightness set (bypasses step_user).
+ * @param step_target Target step value.
+ * @param ss_speed    Soft-start speed (SS_NO for instant).
+ */
 void set_current_ll(uint16_t step_target, SoftStartSpeed_t ss_speed)
 {
     if (!step_target && step_tc)
@@ -233,6 +261,11 @@ void set_current_ll(uint16_t step_target, SoftStartSpeed_t ss_speed)
     }
 }
 
+/**
+ * @brief Set brightness with power management.
+ * @param step_target Target step value.
+ * @param ss_speed    Soft-start speed.
+ */
 void set_current(uint16_t step_target, SoftStartSpeed_t ss_speed)
 {
     step_user = step_target;
@@ -240,24 +273,28 @@ void set_current(uint16_t step_target, SoftStartSpeed_t ss_speed)
     if ((!step_target) && (!ss_speed)) OFF_POWER();
 }
 
+/** @brief Cancel auto-repeat (stop_bit) if button is held. */
 void off_auto_repeat(void)
 {
     if (Pressed)
         stop_bit = true;
 }
 
+/** @brief Increment brightness by one step (UI1 ramping). */
 void step_up_ui1(void)
 {
     if (step_user < max_step)
         set_current(++step_user, SS_NO);
 }
 
+/** @brief Decrement brightness by one step (UI1 ramping). */
 void step_down_ui1(void)
 {
     if (step_user > 1)
         set_current(--step_user, SS_NO);
 }
 
+/** @brief Ramp up/down one step from hold (UI1). */
 void on_rumpup_ui1(void)
 {
     on_driver();
@@ -268,12 +305,14 @@ void on_rumpup_ui1(void)
         step_down_ui1();
 }
 
+/** @brief Ramp down one step from hold (UI1). */
 void on_rumpdown_ui1(void)
 {
     ps.use_prev = false;
     step_down_ui1();
 }
 
+/** @brief Go to memorised/default brightness (UI1 click). */
 void on_xmode_ui1(void)
 {
     ps.use_prev = false;
@@ -281,6 +320,7 @@ void on_xmode_ui1(void)
     set_current(EE.uif.use_memory ? (step_user ? step_user : step_default) : EE.default_ui1, SS_FAST);
 }
 
+/** @brief Toggle turbo mode (max brightness) with prev-step recall (UI1). */
 void on_turbo_ui1(void)
 {
     uint8_t start = on_driver();
@@ -306,6 +346,7 @@ void on_turbo_ui1(void)
     }
 }
 
+/** @brief Force off (no ramp-down, used for mode switch). */
 void off_driver_false(void)
 {
     EE_PRINTF("[UI] OFF DRV false\r\n");
@@ -332,18 +373,21 @@ static void clr_indicator(ind_clr_t ind_clr)  // бывшая onoff_indicator
  *  Slot action functions
  ******************************************************************************/
 
+/** @brief Enter tactical momentary mode (slot). */
 void slot_tactical(void)
 {
     ui_table_idx = 0;
     clr_indicator(IND_GRN);
 }
 
+/** @brief Toggle backlight type (slot). */
 void slot_backlight(void)
 {
     EE.aux.bcklight_type = !EE.aux.bcklight_type;
     clr_indicator((ind_clr_t)EE.aux.bcklight_type);
 }
 
+/** @brief Toggle beacon on/off (slot). */
 void slot_beacon(void)
 {
     if (ui_table_idx == 6)
@@ -358,18 +402,21 @@ void slot_beacon(void)
     }
 }
 
+/** @brief Toggle memory recall (slot). */
 void slot_memory(void)
 {
     EE.uif.use_memory = !EE.uif.use_memory;
     clr_indicator((ind_clr_t)EE.uif.use_memory);
 }
 
+/** @brief Empty slot — no operation. */
 void slot_empty(void) {}
 
 /* USE_STROBE / USE_BLOCK: функции объявлены всегда (main_op[] ссылается на них
  * безусловно), гейтинг — только на уровне тела, как slot_batt_ind()/calibration().
  * Иначе выключение флага в config.h ломает линковку. */
 
+/** @brief Enter strobe mode (slot). */
 void slot_strobe(void)
 {
 #ifdef USE_STROBE
@@ -385,6 +432,7 @@ void slot_strobe(void)
 #endif
 }
 
+/** @brief Cycle to next strobe pattern. */
 void up_strobe(void)
 {
 #ifdef USE_STROBE
@@ -394,6 +442,7 @@ void up_strobe(void)
 #endif
 }
 
+/** @brief Exit strobe back to previous brightness (non-magic-slots). */
 void back_strobe(void)
 {
 #if defined(USE_STROBE) && !defined(USE_MAGIC_SLOTS)
@@ -406,6 +455,7 @@ void back_strobe(void)
 #endif
 }
 
+/** @brief Turn off strobe and driver. */
 void off_strobe(void)
 {
 #ifdef USE_STROBE
@@ -416,29 +466,29 @@ void off_strobe(void)
 #endif
 }
 
+/** @brief Enter block (locator beacon) mode. */
 void slot_block(void)
 {
 #ifdef USE_BLOCK
     driver_mode = MODE_BLOCK;
-    //EE_PRINTF("[UI] AUX info red (block)\r\n");
     aux_off();
 #endif
 }
 
+/** @brief Enter block + beacon combo mode. */
 void slot_block_beacon(void)
 {
 #ifdef USE_BLOCK
     driver_mode = MODE_BLOCK0;
-    //EE_PRINTF("[UI] AUX info red (block+beacon)\r\n");
     aux_off();
 #endif
 }
 
+/** @brief Exit block mode, return to normal. */
 void unblock_drv(void)
 {
 #ifdef USE_BLOCK
     driver_mode = MODE_OFF;
-    //EE_PRINTF("[UI] AUX info green (unblock)\r\n");
     aux_on();
 #endif
 }
@@ -448,24 +498,24 @@ void unblock_drv(void)
  *  Reset / calibration
  ******************************************************************************/
 
+/** @brief Reset all settings to EEPROM defaults (engineering menu). */
 void reset2def(void)
 {
-    //init_ee();                  // zeroes RAM, sets version
-    ee_defaults();              // fills application defaults
+    //init_ee();
+    ee_defaults();
     ui_save = EE.uif.ui_index;
     ui_table_idx = ENG_MENU_IND;
     beacon_save = EE.aux.beacon_on;
     clr_indicator(IND_GRN);
 }
 
+/** @brief Measure Vbat and temperature, compute vc/tc offsets and save to Option Bytes. */
 void calibration(void)
 {
 #ifdef USE_MENU
-    /* Снимаем текущий vc, вычисляем uncorrected Vbat, сохраняем новый offset */
     uint16_t vbat_raw = vbat_mv - (int16_t)ob_GetVc();
     int8_t vc = (int8_t)((int32_t)REF_VOLTAGE_MV - (int32_t)vbat_raw);
 
-    /* tc = отклонение сырого ADC от эталона 25°C */
     int8_t tc = (int8_t)((int16_t)raw_temperature_adc - REF_TEMP_ADC);
 
     uint8_t ok = 1;
@@ -487,6 +537,7 @@ void calibration(void)
  *  а не спрятаны под USE_MENU.
  ******************************************************************************/
 
+/** @brief Save current UI1 step as power-on default. */
 void save_def_ui1(void)
 {
     off_auto_repeat();
@@ -500,10 +551,10 @@ void save_def_ui1(void)
         clr_indicator(IND_GRN);
 
     EE.default_ui1 = step_tc;
-    // need_save = true;  // EEPROM write commented
     EE_PRINTF("[UI] save_def_ui1 step=%u (save commented)\r\n", (unsigned)step_tc);
 }
 
+/** @brief Save current UI2 mode as power-on default. */
 void save_def_ui2(void)
 {
     off_auto_repeat();
@@ -517,7 +568,6 @@ void save_def_ui2(void)
         clr_indicator(IND_GRN);
 
     EE.default_ui2 = mode_current;
-    // need_save = true;  // EEPROM write commented
     EE_PRINTF("[UI] save_def_ui2 mode=%u (save commented)\r\n", (unsigned)mode_current);
 }
 
@@ -528,95 +578,88 @@ void save_def_ui2(void)
  *  #ifdef USE_MENU гейтит только тело — как slot_batt_ind()/calibration().
  ******************************************************************************/
 
+/** @brief Enter ramp speed setting mode (engineering menu). */
 void enter_rs_mode(void)
 {
 #ifdef USE_MENU
     driver_mode = MODE_RAMP_SPEED;
-    //EE_PRINTF("[UI] enter rs mode ramp_speed=%u\r\n", (unsigned)(ramp_speed + 1));
     aux_count(ramp_speed + 1);
 #endif
 }
 
+/** @brief Set ramp speed from click count (engineering menu). */
 void rs_clickX(void)
 {
 #ifdef USE_MENU
     ramp_speed = clicks_count - 1;
-    //EE_PRINTF("[UI] rs_clickX ramp_speed=%u\r\n", (unsigned)ramp_speed);
     aux_count(clicks_count);
     driver_mode = MODE_OFF;
 #endif
 }
 
+/** @brief Enter moon level setting mode (engineering menu). */
 void enter_ml_mode(void)
 {
 #ifdef USE_MENU
     driver_mode = MODE_MOON_LEVEL;
-    //EE_PRINTF("[UI] enter ml mode min_level=%u\r\n", (unsigned)ob_GetMl());
     aux_count(ob_GetMl());
 #endif
 }
 
+/** @brief Set moon level from click count (engineering menu). */
 void ml_clickX(void)
 {
 #ifdef USE_MENU
     ob_SetMl(clicks_count);
-    //EE_PRINTF("[UI] ml_clickX min_level=%u\r\n", (unsigned)ob_GetMl());
     aux_count(clicks_count);
     driver_mode = MODE_OFF;
 #endif
 }
 
+/** @brief Enter PID time setting mode (engineering menu). */
 void enter_pt_mode(void)
 {
 #ifdef USE_MENU
     driver_mode = MODE_PID_TIME;
-    //EE_PRINTF("[UI] enter pt mode pid_time=%u\r\n", (unsigned)pid_time);
     aux_count(pid_time);
 #endif
 }
 
+/** @brief Set PID time from click count (engineering menu). */
 void pt_clickX(void)
 {
 #ifdef USE_MENU
     pid_time = clicks_count;
-    //EE_PRINTF("[UI] pt_clickX pid_time=%u\r\n", (unsigned)pid_time);
     aux_count(clicks_count);
     driver_mode = MODE_OFF;
 #endif
 }
 
+/** @brief Exit engineering menu and restore saved UI index/beacon state. */
 void menu_exit(void)
 {
 #ifdef USE_MENU
     EE.uif.ui_index = ui_save;
     EE.aux.beacon_on = beacon_save;
     ui_table_idx = ui_save;
-    // write_ee();  // EEPROM write commented
     EE_PRINTF("[UI] menu exit -> ui=%u beacon=%u\r\n", (unsigned)ui_save, (unsigned)beacon_save);
-
-    //uint8_t i = 4; uint8_t isGreen = true;
-    //do { flash_id(1, 125, isGreen); isGreen ^= 0x01; } while(--i);
 #endif
 }
 
-/*******************************************************************************
- *  Temperature calibration menu
- ******************************************************************************/
-
+/** @brief Enter temperature calibration (chtk) mode. */
 void enter_chtk_mode(void)
 {
 #ifdef USE_MENU
     driver_mode = MODE_CTK_H;
-    //EE_PRINTF("[UI] enter chtk mode t_calibr=%u\r\n", (unsigned)EE.usr.t_calibr);
     aux_count(EE.usr.t_calibr);
 #endif
 }
 
+/** @brief Set t_calibr from click count. */
 void chtk_clickX(void)
 {
 #ifdef USE_MENU
     EE.usr.t_calibr = clicks_count;
-    //EE_PRINTF("[UI] chtk_clickX t_calibr=%u\r\n", (unsigned)EE.usr.t_calibr);
     aux_count(clicks_count);
     driver_mode = MODE_OFF;
 #endif
@@ -626,6 +669,7 @@ void chtk_clickX(void)
  *  User settings: beacon / backlight / UI select / magic slots
  ******************************************************************************/
 
+/** @brief Toggle external aux mode. */
 void slot_eauxmode(void)
 {
 #ifdef USE_MENU
@@ -634,6 +678,7 @@ void slot_eauxmode(void)
 #endif
 }
 
+/** @brief Toggle IPS (internal power supply) mode. */
 void slot_ipsmode(void)
 {
 #ifdef USE_MENU
@@ -642,77 +687,77 @@ void slot_ipsmode(void)
 #endif
 }
 
+/** @brief Enter beacon mode selection (user menu). */
 void enter_bm_mode(void)
 {
 #ifdef USE_MENU
     driver_mode = MODE_BM;
-    //EE_PRINTF("[UI] enter bm mode=%u\r\n", (unsigned)(EE.aux.beacon_mode + 1));
     aux_count(EE.aux.beacon_mode + 1);
 #endif
 }
 
+/** @brief Set beacon mode from click count (user menu). */
 void bm_clickX(void)
 {
 #ifdef USE_MENU
     EE.aux.beacon_mode = clicks_count - 1;
-    //EE_PRINTF("[UI] bm_clickX mode=%u\r\n", (unsigned)EE.aux.beacon_mode);
     aux_count(clicks_count);
     driver_mode = MODE_OFF;
 #endif
 }
 
+/** @brief Enter beacon type selection (user menu). */
 void enter_bt_mode(void)
 {
 #ifdef USE_MENU
     driver_mode = MODE_BT;
-    //EE_PRINTF("[UI] enter bt type=%u\r\n", (unsigned)((EE.aux.beacon_type >> 1) + 1));
     aux_count((EE.aux.beacon_type >> 1) + 1);
 #endif
 }
 
+/** @brief Set beacon type from click count (user menu). */
 void bt_clickX(void)
 {
 #ifdef USE_MENU
     EE.aux.beacon_type = (1 << (clicks_count - 1));
-    //EE_PRINTF("[UI] bt_clickX type=%u\r\n", (unsigned)EE.aux.beacon_type);
     aux_count(clicks_count);
     driver_mode = MODE_OFF;
 #endif
 }
 
+/** @brief Enter backlight color selection (user menu). */
 void enter_bl_mode(void)
 {
 #ifdef USE_MENU
     driver_mode = MODE_BL;
-    //EE_PRINTF("[UI] enter bl color=%u\r\n", (unsigned)(EE.aux.bcklight_color + 1));
     aux_count(EE.aux.bcklight_color + 1);
 #endif
 }
 
+/** @brief Set backlight color from click count (user menu). */
 void bl_clickX(void)
 {
 #ifdef USE_MENU
     EE.aux.bcklight_color = clicks_count - 1;
-    //EE_PRINTF("[UI] bl_clickX color=%u\r\n", (unsigned)EE.aux.bcklight_color);
     aux_count(clicks_count);
     driver_mode = MODE_OFF;
 #endif
 }
 
+/** @brief Enter UI selection mode (user menu). */
 void enter_uis_mode(void)
 {
 #ifdef USE_MENU
     driver_mode = MODE_UIS;
-    //EE_PRINTF("[UI] enter uis mode ui=%u\r\n", (unsigned)ui_save);
     aux_count(ui_save);
 #endif
 }
 
+/** @brief Set UI index from click count (user menu). */
 void uis_clickX(void)
 {
 #ifdef USE_MENU
     ui_save = clicks_count;
-    //EE_PRINTF("[UI] uis_clickX ui=%u\r\n", (unsigned)ui_save);
     aux_count(clicks_count);
     driver_mode = MODE_OFF;
 #endif
@@ -722,19 +767,29 @@ void uis_clickX(void)
  *  Magic slots
  ******************************************************************************/
 
-#ifdef USE_MAGIC_SLOTS
+/** @brief Enter magic slot selection mode. */
 void enter_magic_mode(void)
 {
+#ifdef USE_MAGIC_SLOTS
     driver_mode = MODE_MAGIC;
     clr_indicator(IND_GRN);
+#else
+    (void)0;
+#endif
 }
 
+/** @brief Exit magic slot mode. */
 void exit_magic_mode(void)
 {
+#ifdef USE_MAGIC_SLOTS
     driver_mode = MODE_OFF;
     clr_indicator(IND_GRN);
+#else
+    (void)0;
+#endif
 }
 
+/** @brief Save click count to slot (internal). */
 static void slot_set(uint8_t slot)
 {
     aux_count(clicks_count);
@@ -742,45 +797,53 @@ static void slot_set(uint8_t slot)
     driver_mode = MODE_MAGIC;
 }
 
+/** @brief Select a magic slot by current click count. */
 void select_slot(void)
 {
+#ifdef USE_MAGIC_SLOTS
     uint8_t slot = clicks_count - 1;
     driver_mode = MODE_SLOT01 + slot;
     aux_count(ob_GetSlot(slot));
+#else
+    (void)0;
+#endif
 }
 
+/** @brief Store click count into currently selected slot. */
 void slotN_clickX(void)
 {
+#ifdef USE_MAGIC_SLOTS
     uint8_t slot = driver_mode - MODE_SLOT01;
     slot_set(slot);
-}
 #else
-void enter_magic_mode(void) {}
-void exit_magic_mode(void) {}
-void select_slot(void) {}
-void slotN_clickX(void) {}
+    (void)0;
 #endif
+}
 
 /*******************************************************************************
  *  UI2 helpers and actions
  ******************************************************************************/
 
+/** @brief Convert UI2 mode index to brightness step. */
 uint16_t get_stepi(uint8_t index)
 {
     return modes[index];
 }
 
+/** @brief Clamp mode to voltage-limited ceiling. */
 uint8_t get_up_mode(uint8_t mode)
 {
     uint8_t up_mode = MIN(volt_stop_mode, volt_max_mode);
     return MIN(up_mode, mode);
 }
 
+/** @brief Set brightness for a UI2 mode with slow soft-start. */
 void set_curri(uint8_t cmode)
 {
     set_current(get_stepi(cmode), SS_SLOW);
 }
 
+/** @brief Enter given mode (internal helper). */
 static void on_mode(uint8_t m)
 {
     ps.use_prev = false;
@@ -788,24 +851,28 @@ static void on_mode(uint8_t m)
     set_curri(m);
 }
 
+/** @brief Go to moon mode (UI2). */
 void on_moon_ui2(void)
 {
     mode_current = CMODE_MOON;
     on_mode(mode_current);
 }
 
+/** @brief Go to minimum mode (UI2, voltage-clamped). */
 void on_min_ui2(void)
 {
     mode_current = get_up_mode(CMODE_MIN);
     on_mode(mode_current);
 }
 
+/** @brief Go to memorised/default mode (UI2). */
 void on_xmode_ui2(void)
 {
     mode_current = get_up_mode(EE.uif.use_memory ? mode_default : EE.default_ui2);
     on_mode(mode_current);
 }
 
+/** @brief Cycle up to next mode (UI2). */
 void mode_up_ui2(void)
 {
     ps.use_prev = false;
@@ -820,6 +887,7 @@ void mode_up_ui2(void)
     set_curri(mode_current);
 }
 
+/** @brief Cycle down to previous mode (UI2). */
 void mode_down_ui2(void)
 {
     if (mode_current > CMODE_MIN)
@@ -829,6 +897,7 @@ void mode_down_ui2(void)
     }
 }
 
+/** @brief Step down (wrap-around) in UI2. */
 void step_down_ui2(void)
 {
     if (mode_current != CMODE_MOON)
@@ -842,6 +911,7 @@ void step_down_ui2(void)
     }
 }
 
+/** @brief Toggle turbo (max mode) with prev-mode recall (UI2). */
 void on_turbo_ui2(void)
 {
     if (mode_current == CMODE_MOON) return;
@@ -874,6 +944,7 @@ void on_turbo_ui2(void)
  *  Tactical mode
  ******************************************************************************/
 
+/** @brief Handle tactical momentary mode (press = on, release = off). */
 static void handle_tactical(void)
 {
     if (Pressed)
@@ -887,10 +958,7 @@ static void handle_tactical(void)
     }
 }
 
-/*******************************************************************************
- *  UI dispatcher
- ******************************************************************************/
-
+/** @brief Initialise UI state variables. */
 void ui_init(void)
 {
     memset(&ps, 0, sizeof(ps));
@@ -903,6 +971,12 @@ void ui_init(void)
     pid_time = 3;
 }
 
+/**
+ * @brief Main UI process — tick at 160 Hz.
+ *
+ * Handles tactical mode bypass, long-click/max-clicks per UI,
+ * direction timeout, and dispatches button events via ui_table_lookup.
+ */
 void ui_process(void)
 {
     uint8_t ui_idx = ui_table_idx;

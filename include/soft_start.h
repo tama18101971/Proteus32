@@ -1,14 +1,15 @@
-/*
- * soft_start.h — плавный soft start для регулировки яркости
+/**
+ * @file soft_start.h
+ * @brief Smooth brightness transitions (soft start)
  *
- * Модуль обеспечивает плавное нарастание/убывание яркости (step)
- * от текущего значения до целевого за заданное количество шагов.
- * Вызывается из timer interrupt или main loop через ss_scan().
+ * Provides gradual step-up/step-down of brightness from current value
+ * to a target over a configurable number of steps. Called from main loop
+ * via ss_scan() at 160 Hz.
  *
- * Алгоритм:
- * 1. ss_init() — вычисляет шаг, количество шагов и направление
- * 2. ss_scan() — каждый вызов перемещает позицию на один шаг к цели
- * 3. При достижении цели — ss.enable = false, позиция = target
+ * Algorithm:
+ * 1. ss_init() computes step size, direction and step count
+ * 2. ss_scan() moves position one step toward target on each call
+ * 3. On target reached: ss.enable = false, position = target
  */
 
 #ifndef INC_SOFT_START_H_
@@ -16,34 +17,45 @@
 
 #include "stdint.h"
 
-/* Макрос модуля (абсолютное значение). Не parenthesizes аргумент —
- * безопасно только для простых выражений (переменные, константы).
- * Для сложных выражений используйте скобки: ABS((a - b)) */
+/** @brief Absolute value macro (simple expressions only). */
 #define ABS(x)				((x>0)?(x):(-x))
 
-/* Скорость soft start (шагов за вызов ss_scan).
- * SS_NO   = 0 — без плавного нарастания (мгновенный переход)
- * SS_SLOW = 1 — медленное нарастание (1 шаг за вызов)
- * SS_FAST = 8 — быстрое нарастание (8 шагов за вызов) */
+/**
+ * @brief Soft start speed (steps per ss_scan call).
+ */
 typedef enum {
-	SS_NO = 0,
-	SS_SLOW,
-	SS_FAST = 7
+	SS_NO = 0,  /**< Instant transition (no smoothing) */
+	SS_SLOW,    /**< Slow ramp: 1 step per call */
+	SS_FAST = 7 /**< Fast ramp: 8 steps per call */
 } SoftStartSpeed_t;
 
-#define on_ss() do { ss_enable = true; } while (0);
+/** @brief Enable soft start processing. */
+#define on_ss() do { ss_enable = true; } while (0)
 
-/* Структура состояния soft start.
- * Заполняется в ss_init(), используется в ss_scan(). */
+/**
+ * @brief Soft start state structure.
+ *
+ * Initialised by ss_init(), consumed by ss_scan().
+ */
 typedef struct {
-	uint8_t enable;         /* Флаг активности: 1=.soft start работает, 0=завершён */
-	int8_t step_size;       /* Размер шага: +speed при ramp-up, -speed при ramp-down */
-	uint16_t target;        /* Целевое значение яркости (куда идём) */
-	uint16_t step_count;    /* Оставшееся количество шагов (уменьшается в ss_scan) */
-	uint16_t position;      /* Текущая позиция яркости (обновляется в ss_scan) */
+	uint8_t  enable;      /**< Activity flag: 1=active, 0=done */
+	int8_t   step_size;   /**< Step delta: +speed for ramp-up, -speed for ramp-down */
+	uint16_t target;      /**< Target brightness (destination) */
+	uint16_t step_count;  /**< Remaining steps (decremented in ss_scan) */
+	uint16_t position;    /**< Current brightness position */
 } ss_st;
 
-void ss_scan(void);                                              /* Вызывается каждый тик — двигает позицию к цели */
-void ss_init(uint16_t target, uint16_t previous, SoftStartSpeed_t speed); /* Инициализация soft start */
+/**
+ * @brief Initialise soft start transition.
+ * @param target   Target brightness value.
+ * @param previous Current brightness value.
+ * @param speed    Transition speed (SS_NO, SS_SLOW, SS_FAST).
+ */
+void ss_init(uint16_t target, uint16_t previous, SoftStartSpeed_t speed);
+
+/**
+ * @brief Called every 160 Hz tick — advance position toward target.
+ */
+void ss_scan(void);
 
 #endif /* INC_SOFT_START_H_ */

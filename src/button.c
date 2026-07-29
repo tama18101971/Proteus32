@@ -1,7 +1,7 @@
-/*
- * button.c
+/**
+ * @file button.c
+ * @brief Pure FSM for button press pattern recognition
  *
- * Pure FSM for button press pattern recognition.
  * Ported from Proteus84 (AVR, 120 Hz) to Proteus003 (CH32V003, 160 Hz).
  *
  * This module reads the button pin via the Pressed macro defined in ui.h

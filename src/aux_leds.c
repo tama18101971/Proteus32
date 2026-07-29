@@ -1,33 +1,34 @@
-/*
- * aux_leds.c — Модуль управления AUX-светодиодами (красный, зелёный, подсветка)
+/**
+ * @file aux_leds.c
+ * @brief AUX LED control module (red, green, backlight)
  *
- * Created: 22.02.2020 17:42:26
- * Modified:15.06.2026
- *  Author: Tamagotchi
+ * Supports two operating modes:
+ *   1. Single command (start_aux_cmd) — one blink sequence
+ *   2. Command array (start_aux_array) — sequence of commands from Flash
  *
- * Поддерживает два режима работы:
- *   1. Одиночная команда (start_aux_cmd) — одно мигание с заданными параметрами
- *   2. Массив команд (start_aux_array) — последовательность команд из массива в Flash
+ * handle_aux() is called every ~15 ms (AWU_15MS) for step-by-step processing.
  *
- * Вызов handle_aux() каждые ~15мс (AWU_15MS) обеспечивает пошаговую обработку.
+ * 32-bit command format (union AUX_Cmd_u):
+ *   [2:0]   device    — channel: 1=RED, 2=GRN, 4=HBL
+ *   [3]     cycle     — 0=single, 1=looped
+ *   [7:4]   count     — repeats (0..15)
+ *   [10:8]  p0.psc    — prescaler 1st half-period (0..7 -> 128..61440)
+ *   [16:11] p0.win    — window 1st half-period (0..63)
+ *   [19:17] p1.psc    — prescaler 2nd half-period
+ *   [25:20] p1.win    — window 2nd half-period (0..63)
+ *   [28:26] brightness0 — brightness 1st half-period
+ *   [31:29] brightness1 — brightness 2nd half-period
  *
- * Формат 32-битной команды (union AUX_Cmd_u):
- *   [2:0]   device    — канал: 1=RED, 2=GRN, 4=HBL
- *   [3]     cycle     — 0=однократно, 1=зациклено
- *   [7:4]   count     — количество повторов (0..15)
- *   [10:8]  p0.psc    — предделитель 1-го полупериода (0..7 → 128..61440)
- *   [16:11] p0.win    — окно 1-го полупериода (0..63)
- *   [19:17] p1.psc    — предделитель 2-го полупериода
- *   [25:20] p1.win    — окно 2-го полупериода (0..63)
- *   [28:26] brightness0 — яркость 1-го полупериода (0=выкл, 1=ярко)
- *   [31:29] brightness1 — яркость 2-го полупериода (0=выкл, 1=ярко)
+ * Array command elements:
+ *   Each element is either an LED command (is_cmd != 0)
+ *   or a system command (is_cmd == 0):
+ *     AC_STOP        — stop array processing
+ *     AC_REP_ATSTART — loop from start of array
+ *     AC_REP_ATSTEPS — loop from specified step
  *
- * Массив команд:
- *   Каждый элемент — либо команда для светодиода (is_cmd != 0),
- *   либо системная команда (is_cmd == 0):
- *     AC_STOP        — остановить обработку массива
- *     AC_REP_ATSTART — зациклить с начала массива
- *     AC_REP_ATSTEPS — зациклить с заданного шага
+ * Created: 22.02.2020
+ * Modified: 15.06.2026
+ * Author: Tamagotchi
  */
 
 #include "aux_leds.h"
@@ -511,14 +512,17 @@ void stop_aux_mode(IDM_Type_t mode) {
 		off_aux_cmd(false);
 }
 
+/** @brief Stop beacon mode if active. */
 void stop_aux_beacon(bool stop_lsi) {
 	if (is_aux_mode(IDM_BEACON))
 		off_aux_cmd(stop_lsi);
 }
+/** @brief Stop voltage warning mode if active. */
 void stop_aux_voltage(bool stop_lsi) {
 	if (is_aux_mode(IDM_VWARNING))
 		off_aux_cmd(stop_lsi);
 }
+/** @brief Stop strobe mode if active. */
 void stop_aux_strobe(bool stop_lsi) {
 	if (is_aux_mode(IDM_STROBE))
 		off_aux_cmd(stop_lsi);

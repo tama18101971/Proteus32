@@ -1,27 +1,23 @@
-/*
- * dac.c — Драйвер ЦАП DAC7571 (I2C, 12-бит)
+/**
+ * @file dac.c
+ * @brief DAC7571 I2C DAC driver
  *
- * DAC7571 подключён по I2C1 (PC1=SDA, PC2=SCL).
- * Используется для управления яркостью светодиодов (12-бит, 4096 уровней).
+ * DAC7571 connected via I2C1 (PC1=SDA, PC2=SCL).
+ * 12-bit resolution for LED brightness control.
  *
- * Протокол передачи:
+ * Protocol:
  *   1. i2c_start()
- *   2. Отправка адреса (0x4C << 1 | 0 = 0x98)
- *   3. MSB: [режим(2 бита)] [00] [старшие 4 бита данных]
- *   4. LSB: [младшие 8 бит данных]
+ *   2. Send address (0x4C << 1 | 0 = 0x98)
+ *   3. MSB: [mode(2b)] [00] [upper 4 data bits]
+ *   4. LSB: [lower 8 data bits]
  *   5. i2c_stop()
  *
- * Управление питанием:
- *   PD0 (GPIOD) — включение/отключение питания DAC
- *   При выключении питания DAC переходит в Hi-Z (экономия тока)
+ * Power control: PD0 (GPIOD) switches DAC supply.
+ * On power-off DAC enters Hi-Z (power saving).
  *
- * Обработка ошибок:
- *   dac_write() проверяет ACK на каждом шаге (адрес, MSB, LSB) через
- *   i2c_send_addr() / i2c_write_byte(), которые сами генерируют STOP и
- *   освобождают шину при NACK. Если любой шаг не подтверждён — транзакция
- *   прерывается немедленно и наружу возвращается I2C_NACK, вместо того
- *   чтобы продолжать отправку в пустоту (например, если DAC не запитан
- *   или физически отсутствует на шине).
+ * Error handling: dac_write() checks ACK on every step.
+ * If any step gets NACK (DAC unpowered or missing), transaction
+ * aborts immediately and returns I2C_NACK.
  */
 
 #include "dac.h"

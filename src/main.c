@@ -1,19 +1,20 @@
-/*
- * main.c — Точка входа и главный цикл проекта Proteus003
+/**
+ * @file main.c
+ * @brief Entry point and main loop for Proteus003 firmware
  *
- * Управление фонариком на базе CH32V003:
- * - 2 канала LED (красный, зелёный) через DAC
- * - NTC-датчик температуры (ADC)
- * - Кнопка управления (EXTI)
- * - AWU (Auto Wake-Up) для периодических задач и сна
- * - TIM2 (1мс системный тик) для таймерных интервалов
- * - EEPROM-эмуляция во Flash (настройки)
+ * CH32V003-based flashlight with:
+ * - Red/green AUX LEDs via GPIO
+ * - NTC temperature sensing (ADC)
+ * - Button control (EXTI)
+ * - AWU (Auto Wake-Up) for periodic tasks and sleep
+ * - TIM2 (1 ms system tick)
+ * - EEPROM emulation in Flash (settings)
  *
- * Главный цикл:
- * 1. Если need_sleep — останавливаем ADC и TIM2, засыпаем в STANDBY
- * 2. При пробуждении по AWU — обрабатываем AUX-команды
- * 3. При пробуждении по кнопке — восстанавливаем периферию
- * 4. По таймерам: 150Гц (UI + softstart), 60Гц (ADC), 5с (EEPROM)
+ * Main loop:
+ * 1. If need_sleep -> stop ADC + TIM2, enter STANDBY
+ * 2. AWU wake -> handle AUX commands
+ * 3. Button wake -> restore peripherals
+ * 4. Timer tasks: 160 Hz (UI + softstart), 30 Hz (ADC + limiters), 2 Hz (debug), 5 s (EEPROM)
  */
 #include <stdint.h>
 #include <stdbool.h>

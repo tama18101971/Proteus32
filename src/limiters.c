@@ -1,36 +1,43 @@
+/**
+ * @file limiters.c
+ * @brief Thermal and electrical limiter coordinator
+ *
+ * Implements sys_init(), scan_limiters() and reset_limiters().
+ * Thermal limiter configuration and runtime state are defined here
+ * (see thermal_limiter.h/c for the PI controller implementation).
+ */
+
 #include "adc.h"
 #include "ui.h"
 #include "limiters.h"
 #include "app_data.h"
 #include "proteus_config.h"
 
-/* ============ СТРУКТУРЫ РЕГУЛЯТОРА ============ */
-
+/** @brief Thermal limiter runtime state (RAM). */
 ThermalLimiterState_t  state;
+/** @brief Thermal limiter configuration (flash). */
 const ThermalLimiterConfig_t config = {
-    .kp_left_shift        = 5,   /* Zone 3 P: error << 5 — прежнее значение 4 давало
-                                     установившийся перелёт ~+17 кодов (P=272 при error=17);
-                                     при том же P error нужен вдвое меньше (~8-9) */
-    .ki_decimation_shift  = 7,   /* Заряд I раз в 128 тиков (~4.3 сек) */
-    .ki_left_shift        = 0,   /* Zones 2/3 I: error << 0 (плавный заряд) */
-    .t_anticipate_offset  = 30,  /* Зона anticipation: [670, 700) — компромисс между
-                                     20 (слишком узко, полный сброс I каждый цикл) и
-                                     50 (слишком широко, I рос при остывании) */
-    .filter_shift         = 1,   /* EMA: tau = 2 выборки = 0.067 сек */
-    .max_drop_rate        = 3,   /* Скорость гашения (90/сек) */
-    .max_recovery_rate    = 1,   /* Скорость восстановления (30/сек) */
-    .overheat_leak_decimation_shift = 6, /* Утечка Zone2-latch раз в 64 тика (~2.1 сек) */
-    .max_limiter          = 255  /* Потолок лимитера: яркость не ниже 511-255=256 (~50%) */
+    .kp_left_shift        = 5,
+    .ki_decimation_shift  = 7,
+    .ki_left_shift        = 0,
+    .t_anticipate_offset  = 30,
+    .filter_shift         = 1,
+    .max_drop_rate        = 3,
+    .max_recovery_rate    = 1,
+    .overheat_leak_decimation_shift = 6,
+    .max_limiter          = 255
 };
 
+/** @brief Current limiter value (PWM ceiling). */
 uint16_t limiter = 0;
 
+/** @brief Initialise thermal limiter state. */
 void sys_init(void)
 {
-    /* Инициализация регулятора (обнуление состояния) */
     ThermalLimiter_Init(&state);
 }
 
+/** @brief Scan thermal limiter (call at 30 Hz). */
 void scan_limiters(void)
 {
 #define MIN(a, b) ((a < b) ? (a) : (b))
@@ -40,9 +47,6 @@ void scan_limiters(void)
     if (driver_mode < MODE_ON)
         return;
 
-    /* Шаг 2: Вызвать регулятор → получить limiter
-        * limiter = 0..user_pwm
-        * pwm_out = user_pwm - limiter (пользователь управляет ШИМ) */
     uint16_t exact_adc = get_exact_temp_adc();
     uint16_t t_set = BASE_TEMPERATURE + (uint16_t)EE.usr.t_calibr;
     limiter = ThermalLimiter_Update(&config, &state, exact_adc, t_set, step_user);
@@ -50,23 +54,23 @@ void scan_limiters(void)
     if (old_correction != limiter)
     {
         uint16_t up_level = MAX_STEP - limiter;
-        set_current_ll(MIN(up_level, step_user), SS_NO); // обновляем только когда включено для того,  чтобы не зажечь диод когда этого не надо.
+        set_current_ll(MIN(up_level, step_user), SS_NO);
 
-        if ((EE.uif.ui_index > 1) && (mode_current == CMODE_TURBO)) // дискретный UI и режим Турбо
+        if ((EE.uif.ui_index > 1) && (mode_current == CMODE_TURBO))
         {
-            if (up_level < get_stepi(CMODE_MAX)) // термоконтроль уронил яркость ниже CMODE_MAX — выходим из Турбо
+            if (up_level < get_stepi(CMODE_MAX))
             {
                 mode_current = CMODE_MAX;
-                ps.use_prev = false; // отключаем возврат по двойному клику из Турбо
+                ps.use_prev = false;
             }
         }
         old_correction = limiter;
     }
 }
 
+/** @brief Reset all limiters to initial state. */
 void reset_limiters(void)
 {
-    /* Инициализация регулятора (обнуление состояния) */
     ThermalLimiter_Init(&state);
     limiter = 0;
 }

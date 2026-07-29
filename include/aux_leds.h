@@ -1,19 +1,26 @@
-/*
- * aux_leds.h — Модуль управления AUX-светодиодами (красный, зелёный, подсветка)
+/**
+ * @file aux_leds.h
+ * @brief AUX LED controller module (red, green, backlight)
  *
- * Формат 32-битной команды (union AUX_Cmd_u):
- *   [2:0]   device     — канал: 1=RED, 2=GRN, 4=HBL (можно комбинировать: 3=RED+GRN)
- *   [3]     cycle      — 0=однократно, 1=зациклено (бесконечно)
- *   [7:4]   count      — количество повторов (0..15). При cycle=0 уменьшается
- *   [10:8]  psc0       — индекс предделителя 1-го полупериода (0..7 → 128..61440)
- *   [16:11] win0       — значение окна 1-го полупериода (0..63)
- *   [19:17] psc1       — индекс предделителя 2-го полупериода (0..7)
- *   [25:20] win1       — значение окна 2-го полупериода (0..63)
- *   [28:26] brightness0 — яркость 1-го полупериода (0=выкл, 1=ярко)
- *   [31:29] brightness1 — яркость 2-го полупериода (0=выкл, 1=ярко)
+ * Supports two operating modes:
+ *   1. Single command (start_aux_cmd) — one blink with given parameters
+ *   2. Command array (start_aux_array) — sequence of commands from Flash
  *
- * Время полупериода: (psc_значение × win) / 128000 секунд
- * Параметры задаются через MAKE_CMD(device, cycle, count, psc0, win0, psc1, win1, brightness0, brightness1)
+ * handle_aux() must be called on each AWU wake (~15 ms for AWU_15MS).
+ *
+ * 32-bit command format (union AUX_Cmd_u):
+ *   [2:0]   device     — channel: 1=RED, 2=GRN, 4=HBL (combinable: 3=RED+GRN)
+ *   [3]     cycle      — 0=once, 1=looped (infinite)
+ *   [7:4]   count      — repeat count (0..15). Decrements when cycle=0
+ *   [10:8]  psc0       — AWU prescaler index for 1st half-period (0..7 → 128..61440)
+ *   [16:11] win0       — AWU window for 1st half-period (0..63)
+ *   [19:17] psc1       — AWU prescaler index for 2nd half-period
+ *   [25:20] win1       — AWU window for 2nd half-period
+ *   [28:26] brightness0 — brightness of 1st half-period (0=off, 1=on)
+ *   [31:29] brightness1 — brightness of 2nd half-period (0=off, 1=on)
+ *
+ * Half-period time: (prescaler_value × win) / 128000 seconds
+ * Parameters set via MAKE_CMD(device, cycle, count, psc0, win0, psc1, win1, brightness0, brightness1)
  */
 
 #ifndef AUX_LEDS_H_
@@ -24,65 +31,79 @@
 #include "button_gpio.h"
 #include "proteus_config.h"
 
-/* Каналы LED (битовые маски, можно комбинировать: RED|GRN = 3) */
+/**
+ * @brief LED channels (bitmasks, combinable: RED|GRN = 3).
+ */
 typedef enum {
-	RED_LED = 0b001,   /* Красный LED */
-	GRN_LED	= 0b010,   /* Зелёный LED */
-	HBL_LED	= 0b100    /* Подсветка (backlight) */
+	RED_LED = 0b001,   /**< Red LED */
+	GRN_LED	= 0b010,   /**< Green LED */
+	HBL_LED	= 0b100    /**< Backlight */
 } LED_Bits_t;
 
-/* Уровни предупреждения о напряжении (задают частоту моргания) */
+/**
+ * @brief Voltage warning levels (determine blink frequency).
+ */
 typedef enum {
-	VWARNING_FAST =	0U,   /* ~2с */
-	VWARNING_MEDIUM,          /* ~4с */
-	VWARNING_SLOW,            /* ~8с */
-	VWARNING_NONE             /* Предупреждение не активно */
+	VWARNING_FAST =	0U,   /**< ~2 s period */
+	VWARNING_MEDIUM,        /**< ~4 s period */
+	VWARNING_SLOW,          /**< ~8 s period */
+	VWARNING_NONE           /**< No warning active */
 } WARNING_Fr_t;
 
-/* Режимы индикации (для отслеживания что сейчас работает) */
+/**
+ * @brief Indication mode tags (for tracking which mode is running).
+ */
 typedef enum {
-	IDM_OTHER = 0U,    /* Обычное моргание */
-	IDM_BEACON,        /* Режим маяка (beacon) */
-	IDM_VWARNING,      /* Предупреждение о низком напряжении */
-	IDM_STROBE         /* Стробоскоп */
+	IDM_OTHER = 0U,    /**< Normal blinking */
+	IDM_BEACON,        /**< Beacon mode */
+	IDM_VWARNING,      /**< Low voltage warning */
+	IDM_STROBE         /**< Strobe mode */
 } IDM_Type_t;
 
-/* Цикл полупериодов (finite state machine):
- * PER_INIT → PER_FIRST (ON) → PER_SECOND (OFF) → PER_END → (PER_FIRST или PER_NEXT) */
+/**
+ * @brief Half-period FSM steps:
+ * PER_INIT → PER_FIRST (ON) → PER_SECOND (OFF) → PER_END → (PER_FIRST or PER_NEXT)
+ */
 typedef enum {
-	PER_INIT = 0U,  /* Инициализация: загрузка count из команды */
-	PER_FIRST,      /* 1-й полупериод: яркость0, MCU спит per0 */
-	PER_SECOND,     /* 2-й полупериод: яркость1, MCU спит per1 */
-	PER_END,        /* Конец цикла: обработка счётчика, запуск следующего */
-	PER_NEXT        /* Команда завершена: нужна загрузка следующей из массива */
+	PER_INIT = 0U,  /**< Initialisation: load count from command */
+	PER_FIRST,      /**< 1st half-period: brightness0, MCU sleeps per0 */
+	PER_SECOND,     /**< 2nd half-period: brightness1, MCU sleeps per1 */
+	PER_END,        /**< End of cycle: handle counter, launch next */
+	PER_NEXT        /**< Command done: need to load next from array */
 } PER_Step_t;
 
-/* Системные команды массива (is_cmd == 0, биты 5..31 == 0).
- * Обрабатываются в handle_aux_array перед возвратом указателя.
- * Если встретилась системная команда — цикл продолжается (break),
- * пока не найдётся LED-команда или AC_STOP. */
+/**
+ * @brief System commands in command array (is_cmd == 0, bits 5..31 == 0).
+ * Handled in handle_aux_array before returning pointer.
+ * If a system command is encountered, loop continues (break)
+ * until a LED command or AC_STOP is found.
+ */
 typedef enum {
-	AC_STOP = 0U,       /* Остановить обработку массива (вернуть NULL) */
-	AC_REP_ATSTART,     /* Зациклить с начала массива (arr_index = 0) */
-	AC_REP_ATSTEPS,     /* Зациклить с заданного шага (arr_index = steps) */
-	AC_RESERVED         /* Зарезервировано */
+	AC_STOP = 0U,       /**< Stop array processing (return NULL) */
+	AC_REP_ATSTART,     /**< Loop from array start (arr_index = 0) */
+	AC_REP_ATSTEPS,     /**< Loop from given step (arr_index = steps) */
+	AC_RESERVED         /**< Reserved */
 } Array_Cmd_t;
 
-/* Индексы предделителя AWU (для USE с макросом MAKE_CMD).
- * Записываются в биты psc0/psc1 команды.
- * Фактический делитель = значение таблицы (128..61440).
- * Время = (psc_значение × win) / 128000 секунд */
-#define AWU_PSC_128   0   /* LSI/128  = 1 кГц,  win=1 → 1мс */
-#define AWU_PSC_256   1   /* LSI/256  = 500 Гц, win=1 → 2мс */
-#define AWU_PSC_512   2   /* LSI/512  = 250 Гц, win=1 → 4мс */
-#define AWU_PSC_1024  3   /* LSI/1024 = 125 Гц, win=1 → 8мс */
-#define AWU_PSC_2048  4   /* LSI/2048 = 62.5Гц, win=1 → 16мс */
-#define AWU_PSC_4096  5   /* LSI/4096 = 31.25Гц, win=1 → 32мс */
-#define AWU_PSC_10240 6   /* LSI/10240 ≈ 12.5Гц, win=1 → 80мс */
-#define AWU_PSC_61440 7   /* LSI/61440 ≈ 2.1Гц, win=1 → 480мс */
+/**
+ * @brief AWU prescaler indices for MAKE_CMD macro.
+ * Values written to psc0/psc1 command bits.
+ * Actual divider = table value (128..61440).
+ * Period = (psc_value × win) / 128000 seconds
+ */
+#define AWU_PSC_128   0   /**< LSI/128  = 1 kHz,  win=1 → 1 ms */
+#define AWU_PSC_256   1   /**< LSI/256  = 500 Hz, win=1 → 2 ms */
+#define AWU_PSC_512   2   /**< LSI/512  = 250 Hz, win=1 → 4 ms */
+#define AWU_PSC_1024  3   /**< LSI/1024 = 125 Hz, win=1 → 8 ms */
+#define AWU_PSC_2048  4   /**< LSI/2048 = 62.5 Hz, win=1 → 16 ms */
+#define AWU_PSC_4096  5   /**< LSI/4096 = 31.25 Hz, win=1 → 32 ms */
+#define AWU_PSC_10240 6   /**< LSI/10240 ≈ 12.5 Hz, win=1 → 80 ms */
+#define AWU_PSC_61440 7   /**< LSI/61440 ≈ 2.1 Hz, win=1 → 480 ms */
 
-/* Фактический делитель AWU по индексу предделителя (нелинейная таблица).
- * Индекс 0..7 → 128, 256, 512, 1024, 2048, 4096, 10240, 61440. */
+/**
+ * @brief Actual AWU divider by prescaler index (non-linear table).
+ * Index 0..7 → 128, 256, 512, 1024, 2048, 4096, 10240, 61440.
+ */
 #define AWU_PSC_VALUE(psc_idx) \
 	((psc_idx) == 0 ? 128UL   : \
 	 (psc_idx) == 1 ? 256UL   : \
@@ -92,56 +113,69 @@ typedef enum {
 	 (psc_idx) == 5 ? 4096UL  : \
 	 (psc_idx) == 6 ? 10240UL : 61440UL)
 
-/* Вычисление времени полупериода в миллисекундах из индекса предделителя и окна.
- * Формула: time_ms = (psc_value × win) / 128 */
+/**
+ * @brief Compute half-period in milliseconds from prescaler index and window.
+ * Formula: time_ms = (psc_value × win) / 128
+ */
 #define AWU_PERIOD_MS(psc_idx, win) ((AWU_PSC_VALUE(psc_idx) * (uint32_t)(win)) / 128)
 
-/* 32-битная команда LED.
- * Два представления через union:
- *   aux  — команда для светодиода (яркость, тайминг)
- *   cmd  — системная команда массива (AC_STOP, AC_REP_ATSTART, AC_REP_ATSTEPS)
- *   aux_cmd — прямой доступ к 32-битному слову (для записи в Flash)
+/**
+ * @brief 32-bit LED command word.
  *
- * Различие: если биты 5..31 == 0, это системная команда (cmd.command).
- * Иначе — это LED-команда (aux.device, aux.psc0, и т.д.) */
+ * Two representations via union:
+ *   aux      — LED command (brightness, timing)
+ *   cmd      — System command (AC_STOP, AC_REP_ATSTART, AC_REP_ATSTEPS)
+ *   aux_cmd  — Direct 32-bit word access (for Flash storage)
+ *
+ * If bits 5..31 == 0 → system command (cmd.command).
+ * Otherwise → LED command (aux.device, aux.psc0, etc.)
+ */
 union AUX_Cmd_u {
+	/** @brief LED command fields */
 	struct __attribute__((packed)) {
-		uint32_t device      : 3;  /* Биты 0..2:   канал (1=RED, 2=GRN, 4=HBL, комбинации: 3=RED+GRN) */
-		uint32_t cycle       : 1;  /* Бит 3:       0=однократно, 1=зациклено (бесконечно) */
-		uint32_t count       : 4;  /* Биты 4..7:   количество повторов (0..15). При cycle=0 уменьшается */
-		uint32_t psc0        : 3;  /* Биты 8..10:  индекс предделителя AWU для 1-го полупериода (0..7) */
-		uint32_t win0        : 6;  /* Биты 11..16: значение окна AWU для 1-го полупериода (0..63) */
-		uint32_t psc1        : 3;  /* Биты 17..19: индекс предделителя AWU для 2-го полупериода */
-		uint32_t win1        : 6;  /* Биты 20..25: значение окна AWU для 2-го полупериода */
-		uint32_t brightness0 : 3;  /* Биты 26..28: яркость 1-го полупериода (0=выкл, 1=ярко) */
-		uint32_t brightness1 : 3;  /* Биты 29..31: яркость 2-го полупериода */
+		uint32_t device      : 3;  /**< Bits 0..2:   channel (1=RED, 2=GRN, 4=HBL, combos: 3=RED+GRN) */
+		uint32_t cycle       : 1;  /**< Bit 3:       0=once, 1=loop forever */
+		uint32_t count       : 4;  /**< Bits 4..7:   repeat count (0..15). Decrements when cycle=0 */
+		uint32_t psc0        : 3;  /**< Bits 8..10:  AWU prescaler index for 1st half-period (0..7) */
+		uint32_t win0        : 6;  /**< Bits 11..16: AWU window for 1st half-period (0..63) */
+		uint32_t psc1        : 3;  /**< Bits 17..19: AWU prescaler index for 2nd half-period */
+		uint32_t win1        : 6;  /**< Bits 20..25: AWU window for 2nd half-period */
+		uint32_t brightness0 : 3;  /**< Bits 26..28: brightness of 1st half-period (0=off, 1=on) */
+		uint32_t brightness1 : 3;  /**< Bits 29..31: brightness of 2nd half-period */
 	} aux;
 
+	/** @brief System command fields */
 	struct __attribute__((packed)) {
-		uint32_t command  : 2;   /* Биты 0..1:  системная команда (0=STOP, 1=REP_ATSTART, 2=REP_ATSTEPS) */
-		uint32_t steps    : 3;   /* Биты 2..4:  шаг зацикливания (0..7) для REP_ATSTEPS */
-		uint32_t is_cmd  : 27;   /* Биты 5..31: если == 0 → системная команда, иначе LED-команда */
+		uint32_t command  : 2;   /**< Bits 0..1:  system command (0=STOP, 1=REP_ATSTART, 2=REP_ATSTEPS) */
+		uint32_t steps    : 3;   /**< Bits 2..4:  loop step (0..7) for REP_ATSTEPS */
+		uint32_t is_cmd  : 27;   /**< Bits 5..31: if ==0 → system command, else LED command */
 	} cmd;
 
-	uint32_t aux_cmd; /* Прямой доступ к 32-битному слову (для записи/чтения в Flash) */
+	uint32_t aux_cmd; /**< Raw 32-bit word access (for Flash I/O) */
 };
 
-/* Compile-time проверки layout */
+/** @brief Compile-time layout check */
 _Static_assert(sizeof(union AUX_Cmd_u) == 4, "AUX_Cmd_u must be 32 bits");
 
-/* Контрольная структура состояния обработчика AUX (32 бита).
- * Хранит текущий этап автомата, яркость, индекс в массиве, счётчик.
- * Один экземпляр: aux_ctl */
+/**
+ * @brief AUX handler control structure (32 bits).
+ *
+ * Holds current FSM stage, brightness, array index, repeat counter.
+ * Single instance: aux_ctl
+ */
 typedef struct {
-	uint32_t enable             : 1;  /* Бит 0:      1=обработка активна, 0=выключена */
-	uint32_t period             : 3;  /* Биты 1..3:  текущий этап автомата (PER_INIT..PER_NEXT) */
-	uint32_t current_brightness : 3;  /* Биты 4..6:  текущая яркость (для оптимизации: менять только при смене) */
-	uint32_t idmode             : 2;  /* Биты 7..8:  режим индикации (IDM_OTHER/BEACON/VWARNING/STROBE) */
-	uint32_t arr_index          : 4;  /* Биты 9..12: текущий индекс в массиве команд (0..15) */
-	uint32_t work_count         : 4;  /* Биты 13..16: оставшиеся повторы команды (0..15) */
-	uint32_t reserved           : 15; /* Биты 17..31: резерв (не используется) */
+	uint32_t enable             : 1;  /**< Bit 0:      1=processing active, 0=disabled */
+	uint32_t period             : 3;  /**< Bits 1..3:  current FSM stage (PER_INIT..PER_NEXT) */
+	uint32_t current_brightness : 3;  /**< Bits 4..6:  current brightness (opt: change only on switch) */
+	uint32_t idmode             : 2;  /**< Bits 7..8:  indication mode (IDM_OTHER/BEACON/VWARNING/STROBE) */
+	uint32_t arr_index          : 4;  /**< Bits 9..12: current command array index (0..15) */
+	uint32_t work_count         : 4;  /**< Bits 13..16: remaining repeats of current command (0..15) */
+	uint32_t reserved           : 15; /**< Bits 17..31: reserved */
 } __attribute__((packed, aligned(4))) AUX_Ctr_t;
 
+/**
+ * @brief Beacon mode period options.
+ */
 typedef enum {
 	BCON_1S	= 0U,
 	BCON_2S,
@@ -149,65 +183,162 @@ typedef enum {
 	BCON_8S,
 } Beacon_Mode_t;
 
+/**
+ * @brief Backlight type (off/on).
+ */
 typedef enum {
 	BCK_TYPE_OFF = 0U,
 	BCK_TYPE_ON
 } BCK_Type_t;
 
+/**
+ * @brief Backlight colour.
+ */
 typedef enum {
 	BCK_COLOR_RED =	0U,
 	BCK_COLOR_GRN
 } BCK_Color_t;
 
-/* Единый буфер команд для start_aux_cmd() */
+/** @brief Single command buffer for start_aux_cmd(). */
 extern union AUX_Cmd_u aux_cmd;
-/* Единая структура состояния обработчика AUX */
+/** @brief Unified AUX handler state structure. */
 extern AUX_Ctr_t aux_ctl;
-/* Указатель на текущую команду (одиночная или из массива) */
+/** @brief Pointer to current command (single or from array). */
 extern union AUX_Cmd_u *p_aux;
 
-extern uint8_t vwarning;              /* Текущий уровень предупреждения о напряжении */
-extern uint8_t vwarning_old;          /* Предыдущий уровень (для отслеживания изменений) */
+/** @brief Current voltage warning level. */
+extern uint8_t vwarning;
+/** @brief Previous voltage warning level (for change detection). */
+extern uint8_t vwarning_old;
 
-extern bool EnableArrayProcessing;    /* true = обработка массива активна */
-extern const uint32_t *current_buf;   /* Указатель на текущий массив команд */
+/** @brief true = array processing active. */
+extern bool EnableArrayProcessing;
+/** @brief Pointer to current command array. */
+extern const uint32_t *current_buf;
 
-/* Массивы команд (хранятся в Flash, const) */
-extern const uint32_t buf_red[];      /* Мигание красным+подсветкой */
-extern const uint32_t buf_grn[];      /* Мигание зелёным */
-extern const uint32_t buf_sos_red[];  /* SOS-паттерн на красном */
-extern const uint32_t strobe[4];      /* Стробоскоп (4 режима) */
+/** @brief Red+backlight blink pattern (stored in Flash). */
+extern const uint32_t buf_red[];
+/** @brief Green blink pattern. */
+extern const uint32_t buf_grn[];
+/** @brief SOS pattern on red. */
+extern const uint32_t buf_sos_red[];
+/** @brief Strobe patterns (4 modes). */
+extern const uint32_t strobe[4];
 
-/* ===== API функции ===== */
+/* ===== API functions ===== */
 
-/* Проверка состояния */
-bool is_aux_active(void);             /* true если обработчик активен */
-bool is_aux_mode(IDM_Type_t mode);    /* true если работает в указанном режиме */
+/**
+ * @brief Check if AUX handler is active.
+ * @return true if active.
+ */
+bool is_aux_active(void);
 
-/* Остановка и управление */
-void stop_aux_mode(IDM_Type_t mode);  /* Остановка если работает в указанном режиме */
-void stop_aux_beacon(bool stop_lsi);  /* Остановка маяка */
-void stop_aux_voltage(bool stop_lsi); /* Остановка предупреждения о напряжении */
-void stop_aux_strobe(bool stop_lsi);  /* Остановка стробоскопа */
-void off_aux_cmd(bool stop_lsi);      /* Полная остановка + выключение всех LED */
+/**
+ * @brief Check if AUX is running in a specific mode.
+ * @param mode Mode to check (IDM_BEACON, IDM_VWARNING, IDM_STROBE, IDM_OTHER).
+ * @return true if active in that mode.
+ */
+bool is_aux_mode(IDM_Type_t mode);
 
-/* Запуск команд */
+/**
+ * @brief Stop AUX if running in specified mode.
+ * @param mode Mode to match for stopping.
+ */
+void stop_aux_mode(IDM_Type_t mode);
+
+/**
+ * @brief Stop beacon mode.
+ * @param stop_lsi If true, also stop LSI/AWU.
+ */
+void stop_aux_beacon(bool stop_lsi);
+
+/**
+ * @brief Stop voltage warning mode.
+ * @param stop_lsi If true, also stop LSI/AWU.
+ */
+void stop_aux_voltage(bool stop_lsi);
+
+/**
+ * @brief Stop strobe mode.
+ * @param stop_lsi If true, also stop LSI/AWU.
+ */
+void stop_aux_strobe(bool stop_lsi);
+
+/**
+ * @brief Full stop: disable handler and turn off all LEDs.
+ * @param stop_lsi If true, stop LSI/AWU.
+ */
+void off_aux_cmd(bool stop_lsi);
+
+/**
+ * @brief Start a single AUX command.
+ * @param command 32-bit packed command.
+ * @param enable   true = start processing immediately.
+ * @param idm_mode Indication mode tag.
+ * @param delay    Initial AWU delay before first half-period.
+ */
 void start_aux_cmd(uint32_t command, bool enable, IDM_Type_t idm_mode, awu_tick_t delay);
+
+/**
+ * @brief Start command array processing.
+ * @param pArray Pointer to Flash-resident command array.
+ * @param delay  Initial AWU delay.
+ */
 void start_aux_array(const uint32_t *pArray, awu_tick_t delay);
-void start_aux_beacon(void);          /* Запуск маяка из настроек EEPROM */
-uint32_t set_aux_count(uint8_t count);/* Формирование команды вспышек по количеству */
-void aux_count(uint8_t count);        /* Индикация числа: 0 → красная, иначе count зелёных */
-void aux_on(void);                    /* Одна зелёная вспышка (включение) */
-void aux_off(void);                   /* Одна красная вспышка (выключение) */
 
-/* Управление яркостью */
-void smart_off_leds(LED_Bits_t channel); /* Умное выключение с учётом подсветки */
+/**
+ * @brief Start beacon mode from EEPROM settings.
+ */
+void start_aux_beacon(void);
 
-/* Главный цикл обработки (вызывается при пробуждении по AWU)
- * Возвращает true если есть активные команды (AWU будет перезапущен),
- * false если все завершены */
+/**
+ * @brief Build flash command for a given count.
+ * @param count Number of flashes (0..6).
+ * @return 32-bit command for start_aux_cmd().
+ */
+uint32_t set_aux_count(uint8_t count);
+
+/**
+ * @brief Indicate a number via AUX LEDs.
+ * @param count 0 = one red flash, otherwise N green flashes.
+ */
+void aux_count(uint8_t count);
+
+/**
+ * @brief One green flash (power-on indication).
+ */
+void aux_on(void);
+
+/**
+ * @brief One red flash (power-off indication).
+ */
+void aux_off(void);
+
+/**
+ * @brief Smart LED off respecting backlight state.
+ * @param channel Bitmask of channels (RED_LED, GRN_LED, HBL_LED, combinable).
+ */
+void smart_off_leds(LED_Bits_t channel);
+
+/**
+ * @brief Main AUX processing loop (called on each AWU wake).
+ * @return true if commands still active (AWU will be restarted), false if all done.
+ */
 bool handle_aux(void);
+
+/**
+ * @brief Process one FSM step for a single AUX command.
+ * @param aux  Pointer to command.
+ * @param ubits Pointer to handler state.
+ */
 void handle_aux_cmd(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits);
+
+/**
+ * @brief Process one FSM step for command array.
+ * @param pBuffer Pointer to command array in Flash.
+ * @param ubits   Pointer to handler state.
+ * @return Pointer to current command, or NULL if AC_STOP.
+ */
 union AUX_Cmd_u *handle_aux_array(const uint32_t pBuffer[], AUX_Ctr_t *ubits);
 
 #define INFO_RED  MAKE_CMD(RED_LED, 0, 1, AWU_PSC_1024, 56, AWU_PSC_2048, 56, 1, 0)  /* 1 красная ~448мс */
