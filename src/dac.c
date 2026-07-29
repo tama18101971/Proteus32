@@ -75,15 +75,15 @@ uint8_t dac_pwrpin_is_on(void)
 
 /**
  * @brief Установка выходного напряжения на ЦАП DAC7571
- * @param data_12bit: значение от 0 до 4095 (12 бит)
+ * @param data_12bit: значение от 0 до DAC_MAX_VALUE (12 бит)
  * @return I2C_OK или I2C_NACK
  */
 uint8_t dac7571_set_voltage(uint16_t data_12bit)
 {
     // 1. Защита от выхода за границы 12-битного разрешения
-    if (data_12bit > 4095)
+    if (data_12bit > DAC_MAX_VALUE)
     {
-        data_12bit = 4095;
+        data_12bit = DAC_MAX_VALUE;
     }
 
     // 2. Формируем два байта по спецификации TI

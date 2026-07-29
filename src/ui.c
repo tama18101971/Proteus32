@@ -97,7 +97,7 @@ void OFF_POWER(void)
 
 void ee_defaults(void)
 {
-     EE.uif.ui_index = 1;
+    EE.uif.ui_index = 1;
     EE.uif.use_memory = 0;
 
     EE.aux.bcklight_color = BCK_COLOR_RED;
@@ -115,11 +115,6 @@ void ee_defaults(void)
     EE.default_ui2 = DEFAULT_MODE;
 
     EE.uif.off_bckl       = true;         
-    EE.aux.bcklight_color = BCK_COLOR_GRN;
-    EE.aux.beacon_mode    = BCON_4S;
-    EE.aux.beacon_on      = false;  
-    EE.aux.beacon_type    = RED_LED;
-
 }
 
 uint16_t get_step_tc(uint16_t step)
@@ -138,7 +133,7 @@ uint16_t getBright_CRT_9to12Bit(uint16_t val)
 {
     if (val < 2) return val;
     if (val < 10) return 1;
-    if (val >= 511) return 4095;
+    if (val >= MAX_STEP) return DAC_MAX_VALUE;
 
     uint32_t x = val;
     uint32_t result = (x * x * x * 16) >> 19;
@@ -151,7 +146,7 @@ uint16_t getBright_CRT_9to12Bit(uint16_t val)
 void out_set_stc(uint16_t step)
 {
     uint16_t out = getBright_CRT_9to12Bit(step) + get_min_level(step);
-    if (out > 4095) out = 4095;
+    if (out > DAC_MAX_VALUE) out = DAC_MAX_VALUE;
     dac7571_set_voltage(out);
 }
 
@@ -212,7 +207,7 @@ void off_driver(uint8_t reset_step, SoftStartSpeed_t ss_speed)
 
     // EEPROM write intentionally commented out per integration requirements
     // if (need_save) write_ee();
-    need_save = false;
+     //need_save = false;
 
     off_auto_repeat();
 
