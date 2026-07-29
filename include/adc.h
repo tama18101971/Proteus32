@@ -67,4 +67,9 @@ void scan_voltage(void);              /* Основной цикл защиты,
 extern uint8_t volt_max_mode;         /* Динамический потолок режима UI2 (обновляется в scan_voltage) */
 extern uint8_t volt_stop_mode;        /* Ратчет-память — исторический минимум volt_max_mode */
 
+extern uint8_t down_count;           /* Счётчик ступеней UI1 (сбрасывается в on_driver) */
+extern uint16_t max_min;              /* Монотонно убывающий потолок шага UI1 по напряжению */
+
+uint16_t get_max_step(void);         /* Потолок яркости UI1 по напряжению (монотонный, аналог AVR) */
+
 #endif /* ADC_H_ */

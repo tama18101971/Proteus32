@@ -37,6 +37,16 @@ uint16_t raw_temperature_adc = 0; // сырое значение темпера�
 uint8_t volt_max_mode = CMODE_TURBO;
 uint8_t volt_stop_mode = CMODE_TURBO;
 
+/* Счётчик ступеней снижения яркости UI1 при просадке АКБ.
+ * Сбрасывается в 5 в on_driver() (аналог AVR button.c:209).
+ * Глобальный — чтобы on_driver() в ui.c мог его сбросить. */
+uint8_t down_count = 5;
+
+/* Монотонно убывающий потолок шага по напряжению для UI1 (ramping).
+ * Аналог AVR adc.c max_min: только уменьшается, восстанавливается
+ * лишь при перезагрузке (reset_max_step в AVR закомментирован). */
+uint16_t max_min = MAX_STEP;
+
 /* Таймаут циклов опроса флагов/битов АЦП (защита от зависания при сбое) */
 #define ADC_WAIT_TIMEOUT 100000
 
@@ -331,6 +341,27 @@ static uint8_t calc_volt_max_mode(uint16_t exact_v)
     return CMODE_TURBO;
 }
 
+/* ============ Потолок яркости UI1 по напряжению (ramping) ============
+ * Аналог AVR adc.c limiter[2][6] + get_max_step().
+ * volt_max_tbl — пороги в мВ (по возрастанию), step_max_tbl —
+ * соответствующие 9-битные шаги (0..511), масштабированные из AVR 8-бит.
+ * max_min монотонно убывает (MIN), восстановление — только при reboot. */
+static const uint16_t volt_max_tbl[6] = {2500, 2820, 2930, 3080, 3190, 3300};
+static const uint16_t step_max_tbl[6] = {120, 240, 310, 400, 463, 511};
+
+uint16_t get_max_step(void)
+{
+    uint8_t i = 6;
+    while (i > 0)
+    {
+        i--;
+        if (vbat_mv > volt_max_tbl[i]) break;
+    }
+    uint16_t s = step_max_tbl[i];
+    if (s < max_min) max_min = s;
+    return max_min;
+}
+
 extern uint8_t need_sleep;  // из main.c
 
 static void down_forever(void)
@@ -345,7 +376,6 @@ void scan_voltage(void)
 {
     static uint8_t voff_count = 0;
     static uint8_t voff_count_off = 0;
-    static uint8_t down_count = 5;
     uint8_t ui_index = EE.uif.ui_index;
 
     /* Обновляем мгновенный потолок режима для дискретного UI */
@@ -356,7 +386,9 @@ void scan_voltage(void)
     /* ── Ramping UI (управление яркостью UI1) ── */
     if (ui_index == 1)
     {
-        /* Критический разряд: напряжение ниже mode_swt[0] */
+        /* Критический разряд: напряжение ниже mode_swt[0].
+         * Step-down и восстановление вложены в else — взаимоисключающе
+         * с критическим отключением (аналог AVR adc.c:255-292). */
         if (vbat_mv < mode_swt[0])
         {
             if (++voff_count_off > 3)
@@ -369,30 +401,30 @@ void scan_voltage(void)
         else
         {
             voff_count_off = 0;
-        }
 
-        /* Ступенчатое снижение яркости при просадке */
-        if (vbat_mv < mode_swt[down_count])
-        {
-            if (++voff_count > 3)
+            /* Ступенчатое снижение яркости при просадке */
+            if (vbat_mv < mode_swt[down_count])
             {
-                voff_count = 0;
-                if (down_count)
+                if (++voff_count > 3)
                 {
-                    down_count--;
-                    step_user = step_user - (step_user >> 2);
-                    set_current(step_user, SS_SLOW);
+                    voff_count = 0;
+                    if (down_count)
+                    {
+                        down_count--;
+                        step_user = step_user - (step_user >> 2);
+                        set_current(step_user, SS_SLOW);
+                    }
                 }
             }
-        }
-        else
-        {
-            voff_count = 0;
-        }
+            else
+            {
+                voff_count = 0;
 
-        /* Восстановление: напряжение поднялось выше порога */
-        if (vbat_mv > mode_swt[5])
-            down_count = 5;
+                /* Восстановление: напряжение поднялось выше верхнего порога */
+                if (vbat_mv > mode_swt[5])
+                    down_count = 5;
+            }
+        }
     }
 
     /* ── Discrete UI (дискретные режимы UI2) ── */
@@ -406,7 +438,11 @@ void scan_voltage(void)
                 if (volt_stop_mode > (--mode_current))
                     volt_stop_mode = mode_current;
                 if (mode_current)
-                    set_current(get_stepi(mode_current), SS_SLOW);
+                {
+                    /* В режиме стробоскопа яркость не меняем (аналог AVR adc.c:308) */
+                    if (driver_mode != MODE_STROB)
+                        set_current(get_stepi(mode_current), SS_SLOW);
+                }
                 else
                 {
                     down_forever();

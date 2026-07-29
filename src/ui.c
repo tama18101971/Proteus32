@@ -61,7 +61,6 @@ uint8_t clicks_count = 0;
 uint8_t ui_table_idx = 1;        // runtime selector for dispatch tables
 uint8_t ramp_speed = 2;          // replaces EE.eng.rump_speed (session only)
 uint8_t pid_time = 3;            // replaces EE.eng.pid_time (session only)
-uint8_t down_count = 0;
 uint8_t ui_save = 0;
 uint8_t beacon_save = 0;
 uint8_t bcklight_type_save = 0;
@@ -119,8 +118,12 @@ void ee_defaults(void)
 
 uint16_t get_step_tc(uint16_t step)
 {
-    int16_t tc_step = (MAX_STEP - 0);
-    uint16_t result = step <= tc_step ? step : (tc_step > 0 ? tc_step : 1);
+    /* Аналог AVR button.c get_step_tc(): clamp цели soft-start к
+     * MAX_STEP - limiter (термоконтроль). limiter — из limiters.c.
+     * Без этого ramp-up кратковременно превышает тепловой потолок,
+     * пока scan_limiters (30 Гц) не догонит. */
+    int16_t tc_step = (int16_t)(MAX_STEP - limiter);
+    uint16_t result = step <= tc_step ? step : (tc_step > 0 ? (uint16_t)tc_step : 1);
     return result;
 }
 
@@ -160,12 +163,13 @@ uint8_t on_driver(void)
     if (driver_mode < MODE_BLOCK_C)
     {
         EE_PRINTF("[UI] blocked, no on\r\n");
-        return 1;
+        return 0;
     }
 
     if (driver_mode < MODE_ON)
     {
         ON_POWER();
+        down_count = 5;               /* сброс ступеней снижения (аналог AVR button.c:209) */
         vwarning = VWARNING_NONE;
         vwarning_old = VWARNING_NONE;
         direction = DIR_UP;
@@ -234,11 +238,6 @@ void set_current(uint16_t step_target, SoftStartSpeed_t ss_speed)
     step_user = step_target;
     set_current_ll(step_target, ss_speed);
     if ((!step_target) && (!ss_speed)) OFF_POWER();
-}
-
-uint16_t get_max_step(void)
-{
-    return MAX_STEP;
 }
 
 void off_auto_repeat(void)
