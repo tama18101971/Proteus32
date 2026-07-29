@@ -228,6 +228,9 @@ uint32_t set_aux_count(uint8_t count) {
  * @param command   — 32-битная команда
  * @param enable    — true = начать обработку немедленно
  * @param idm_mode  — режим индикации (IDM_BEACON, IDM_VWARNING, IDM_STROBE, IDM_OTHER)
+ * @param delay     — начальная задержка перед первым полупериодом (awu_tick_t:
+ *                    AWU_15MS, AWU_120MS, AWU_250MS, AWU_500MS, AWU_1S и т.д.)
+ *                    После первого пробуждения AWU переключается на psc0/win0 команды.
  *
  * Таймер AWU настраивается в handle_aux_cmd при обработке PER_FIRST.
  */
@@ -473,20 +476,22 @@ void start_aux_beacon(void) {
  * @brief Запуск индикации предупреждения о напряжении
  * @param ex_mode — скорость моргания (VWARNING_FAST=2с, MEDIUM=4с, SLOW=8с)
  *
- * Формат команды: RED_LED, без зацикливания, 0 повторов, яркость1=ярко.
- * ON/OFF задаются AWU prescaler+window.
+ * Зацикленная (cycle=1) команда: одна вспышка RED_LED за период.
+ * ON-полупериод — короткая вспышка, OFF — пауза до следующей вспышки.
+ * Сумма ON+OFF ≈ период предупреждения (2/4/8 с).
+ * Яркость0=ярко, Яркость1=выкл.
  */
 void start_exaux_voltage(WARNING_Fr_t ex_mode) {
 	uint32_t cmd = 0;
 	switch (ex_mode) {
-	case VWARNING_FAST:   /* ON 100ms, OFF 1900ms → ~2с */
-		cmd = MAKE_CMD(RED_LED, 0, 0, AWU_PSC_256, 50, AWU_PSC_4096, 60, 1, 0);
+	case VWARNING_FAST:   /* ON 100мс, OFF 1900мс → период ~2с */
+		cmd = MAKE_CMD_MS(RED_LED, 1, 0, 100, 1900, 1, 0);
 		break;
-	case VWARNING_MEDIUM: /* ON 200ms, OFF 3840ms → ~4с */
-		cmd = MAKE_CMD(RED_LED, 0, 0, AWU_PSC_256, 100, AWU_PSC_10240, 48, 1, 0);
+	case VWARNING_MEDIUM: /* ON 200мс, OFF 3800мс → период ~4с */
+		cmd = MAKE_CMD_MS(RED_LED, 1, 0, 200, 3800, 1, 0);
 		break;
-	case VWARNING_SLOW:   /* ON 300ms, OFF 7680ms → ~8с */
-		cmd = MAKE_CMD(RED_LED, 0, 0, AWU_PSC_1024, 38, AWU_PSC_61440, 16, 1, 0);
+	case VWARNING_SLOW:   /* ON 300мс, OFF 7700мс → период ~8с */
+		cmd = MAKE_CMD_MS(RED_LED, 1, 0, 300, 7700, 1, 0);
 		break;
 	default:
 		break;
