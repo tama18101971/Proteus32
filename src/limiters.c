@@ -42,7 +42,7 @@ void scan_limiters(void)
 {
 #define MIN(a, b) ((a < b) ? (a) : (b))
 
-    static uint8_t old_correction;
+    static uint8_t old_limiter;
 
     if (driver_mode < MODE_ON)
         return;
@@ -51,7 +51,7 @@ void scan_limiters(void)
     uint16_t t_set = BASE_TEMPERATURE + (uint16_t)EE.usr.t_calibr;
     limiter = ThermalLimiter_Update(&config, &state, exact_adc, t_set, step_user);
 
-    if (old_correction != limiter)
+    if (old_limiter != limiter)
     {
         uint16_t up_level = MAX_STEP - limiter;
         set_current_ll(MIN(up_level, step_user), SS_NO);
@@ -64,7 +64,7 @@ void scan_limiters(void)
                 ps.use_prev = false;
             }
         }
-        old_correction = limiter;
+        old_limiter = limiter;
     }
 }
 

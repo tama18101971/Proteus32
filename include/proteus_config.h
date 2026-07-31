@@ -18,7 +18,7 @@
 //#define PRINT_ADC
 
 #define USE_BATTIND
-#define USE_EX_AUX
+//#define USE_EX_AUX
 #define USE_STROBE
 #define USE_BLOCK
 #define USE_MENU

@@ -34,7 +34,7 @@ typedef enum {
 	AWU_16S       /**< 16 seconds */
 } awu_tick_t;
 
-extern volatile uint8_t awu_event; /**< AWU event flag, set in ISR */
+//extern volatile uint8_t awu_event; /**< AWU event flag, set in ISR */
 extern uint8_t is_sleep_mode;      /**< Non-zero when MCU is in STANDBY */
 
 /** @brief Enable AWU peripheral. */

@@ -22,7 +22,7 @@ typedef enum
     WS_BUTTON     /**< Wake-up by button press */
 } wakeup_source_t;
 
-extern volatile uint8_t button_event;        /**< Button press event flag */
+//extern volatile uint8_t button_event;        /**< Button press event flag */
 extern volatile wakeup_source_t wakeup_source; /**< Last wake-up source */
 extern uint8_t need_sleep;                    /**< Request to enter STANDBY */
 

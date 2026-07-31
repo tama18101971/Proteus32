@@ -37,7 +37,7 @@ volatile wakeup_source_t wakeup_source = WS_NONE; /* Источник после
 
 uint8_t need_sleep = false; /* Флаг необходимости перейти в режим сна */
 
-int16_t error; /* Текущая ошибка (filtered - setpoint) */
+//int16_t error; /* Текущая ошибка (filtered - setpoint) */
 
 int main(void)
 {
@@ -70,6 +70,7 @@ int main(void)
     i2c_init(400000);
     dac7571_set_voltage(0);
 
+    ob_Init();
     if (!read_ee())
     {
         init_ee();
@@ -87,7 +88,7 @@ int main(void)
     button_init(&btn_cfg);
     ui_init();
 
-    start_aux_beacon();
+    //start_aux_beacon();
 
     need_sleep = true;
 
@@ -152,6 +153,8 @@ int main(void)
 
         if (tick_5s())
         {
+            if(need_save)
+                ob_Flush();             // временно - потом переделать!!!
             handle_ee();
             need_sleep = true;
         }

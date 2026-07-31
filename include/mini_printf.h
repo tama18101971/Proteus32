@@ -5,7 +5,7 @@
 #include <stdint.h>
 
 int mini_printf(const char *fmt, ...);
-void mini_vprintf(const char *fmt, va_list ap);
+//void mini_vprintf(const char *fmt, va_list ap);
 
 void uart_init(uint32_t baudrate);
 
