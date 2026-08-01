@@ -33,9 +33,9 @@ typedef struct {
     uint8_t long_mask;       // required long-click bits (0 = don't care)
     bool    hold;            // true = match hold events; false = match releases
     bool    wait_timeout;    // true = fire only on CLICK_SEQ timeout
-    uint8_t op_index;        // index into main_op[] (ignored if is_slot)
-    bool    is_slot;         // if true, use ee.slots[slot_idx] as op_index
-    uint8_t slot_idx;        // EEPROM slot index (0..9)
+    uint8_t op_index;        // fixed fallback index into main_op[]
+    bool    is_slot;         // true = a slot gesture; magic build overrides op_index
+    uint8_t slot_idx;        // Option Bytes slot index (0..9)
 } dispatch_t;
 
 /*******************************************************************************

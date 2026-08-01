@@ -447,7 +447,7 @@ void up_strobe(void)
 void back_strobe(void)
 {
 #if defined(USE_STROBE) && !defined(USE_MAGIC_SLOTS)
-    stop_aux_strobe();
+    stop_aux_strobe(false);
     if (ps.start) off_driver(false, SS_NO);
     else driver_mode = MODE_ON;
     if (ps.use_prev) step_user = ps.pr_step;
@@ -790,14 +790,6 @@ void exit_magic_mode(void)
 #endif
 }
 
-/** @brief Save click count to slot (internal). */
-static void slot_set(uint8_t slot)
-{
-    aux_count(clicks_count);
-    ob_SetSlot(slot, clicks_count);
-    driver_mode = MODE_MAGIC;
-}
-
 /** @brief Select a magic slot by current click count. */
 void select_slot(void)
 {
@@ -815,7 +807,9 @@ void slotN_clickX(void)
 {
 #ifdef USE_MAGIC_SLOTS
     uint8_t slot = driver_mode - MODE_SLOT01;
-    slot_set(slot);
+    aux_count(clicks_count);
+    ob_SetSlot(slot, clicks_count);
+    driver_mode = MODE_MAGIC;
 #else
     (void)0;
 #endif

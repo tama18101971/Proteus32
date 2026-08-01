@@ -27,6 +27,23 @@ typedef enum {
 	RESERV11,           /**< Reserved */
 } FUN_Index_t;
 
+/*
+ * Fixed commands for the ten OFF-state slot gestures.  These are also the
+ * factory contents programmed into Option Bytes.  Keeping this mapping here
+ * makes the non-configurable build behave exactly like a reset magic-slot
+ * configuration, without taking a dependency on Option Bytes at runtime.
+ */
+#define SLOT_DEFAULT_1CH  SLOT_BATT_IND
+#define SLOT_DEFAULT_2CH  SLOT_BEACON
+#define SLOT_DEFAULT_3C   SLOT_STROBE
+#define SLOT_DEFAULT_3CH  SLOT_TACTICAL
+#define SLOT_DEFAULT_4C   SLOT_BLOCK
+#define SLOT_DEFAULT_4CH  SLOT_OP_EMPTY
+#define SLOT_DEFAULT_5C   SLOT_OP_EMPTY
+#define SLOT_DEFAULT_5CH  SLOT_MEMORY
+#define SLOT_DEFAULT_6C   SLOT_BACKLIGHT
+#define SLOT_DEFAULT_6CH  SLOT_IPSMODE
+
 /** @brief Function pointer table for magic slot dispatch, defined in ui.c. */
 extern void (*main_op[])(void);
 

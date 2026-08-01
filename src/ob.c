@@ -217,16 +217,16 @@ bool ob_Init(void) {
         _cache.tc = 0;
         _cache.vc = 0;
         _cache.ml = 5;
-        _cache.slots[0] = SLOT_BATT_IND;
-        _cache.slots[1] = SLOT_BEACON;
-        _cache.slots[2] = SLOT_STROBE;
-        _cache.slots[3] = SLOT_TACTICAL;
-        _cache.slots[4] = SLOT_BLOCK;
-        _cache.slots[5] = SLOT_OP_EMPTY;
-        _cache.slots[6] = SLOT_OP_EMPTY;
-        _cache.slots[7] = SLOT_MEMORY;
-        _cache.slots[8] = SLOT_BACKLIGHT;
-        _cache.slots[9] = SLOT_IPSMODE;
+        _cache.slots[0] = SLOT_DEFAULT_1CH;
+        _cache.slots[1] = SLOT_DEFAULT_2CH;
+        _cache.slots[2] = SLOT_DEFAULT_3C;
+        _cache.slots[3] = SLOT_DEFAULT_3CH;
+        _cache.slots[4] = SLOT_DEFAULT_4C;
+        _cache.slots[5] = SLOT_DEFAULT_4CH;
+        _cache.slots[6] = SLOT_DEFAULT_5C;
+        _cache.slots[7] = SLOT_DEFAULT_5CH;
+        _cache.slots[8] = SLOT_DEFAULT_6C;
+        _cache.slots[9] = SLOT_DEFAULT_6CH;
         return false;
     }
     return true;

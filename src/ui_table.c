@@ -8,6 +8,7 @@
 
 #include <stddef.h>
 
+#include "proteus_config.h"
 #include "ui_table.h"
 #include "ui.h"
 #include "app_data.h"
@@ -36,6 +37,11 @@ enum {
     SLOT_6CH = 9,
 };
 
+/* In the fixed build default_op is used.  In the magic build lookup replaces
+ * it with Option Bytes slot_idx.  is_slot remains true in both builds so a
+ * hold gesture stays a one-shot command. */
+#define SLOT_ACTION(default_op, slot_idx)  (default_op), true, (slot_idx)
+
 /*******************************************************************************
  *  UI1 dispatch table (ramping interface)
  ******************************************************************************/
@@ -43,17 +49,17 @@ enum {
 static const dispatch_t ui1_table[] = {
     /* -- Mode: MODE_OFF -- */
     { MODE_OFF, 1, 0, false, true,  ON_XMODE_UI1,  false, 0 },
-    { MODE_OFF, 1, 0, true,  false, SLOT_BATT_IND,  true,  SLOT_1CH },
+    { MODE_OFF, 1, 0, true,  false, SLOT_ACTION(SLOT_DEFAULT_1CH, SLOT_1CH) },
     { MODE_OFF, 2, 0, false, true,  ON_TURBO_UI1,   false, 0 },
-    { MODE_OFF, 2, 0, true,  false, SLOT_BEACON,    true,  SLOT_2CH },
-    { MODE_OFF, 3, 0, false, true,  SLOT_STROBE,    true,  SLOT_3C  },
-    { MODE_OFF, 3, 0, true,  false, 0,              true,  SLOT_3CH },
-    { MODE_OFF, 4, 0, false, true,  SLOT_BLOCK,     true,  SLOT_4C  },
-    { MODE_OFF, 4, 0, true,  false, SLOT_BLOCK_BEACON, true, SLOT_4CH },
-    { MODE_OFF, 5, 0, false, true,  SLOT_TACTICAL,  true,  SLOT_5C  },
-    { MODE_OFF, 5, 0, true,  false, 0,              true,  SLOT_5CH },
-    { MODE_OFF, 6, 0, false, true,  0,              true,  SLOT_6C  },
-    { MODE_OFF, 6, 0, true,  false, SLOT_BACKLIGHT, true,  SLOT_6CH },
+    { MODE_OFF, 2, 0, true,  false, SLOT_ACTION(SLOT_DEFAULT_2CH, SLOT_2CH) },
+    { MODE_OFF, 3, 0, false, true,  SLOT_ACTION(SLOT_DEFAULT_3C, SLOT_3C) },
+    { MODE_OFF, 3, 0, true,  false, SLOT_ACTION(SLOT_DEFAULT_3CH, SLOT_3CH) },
+    { MODE_OFF, 4, 0, false, true,  SLOT_ACTION(SLOT_DEFAULT_4C, SLOT_4C) },
+    { MODE_OFF, 4, 0, true,  false, SLOT_ACTION(SLOT_DEFAULT_4CH, SLOT_4CH) },
+    { MODE_OFF, 5, 0, false, true,  SLOT_ACTION(SLOT_DEFAULT_5C, SLOT_5C) },
+    { MODE_OFF, 5, 0, true,  false, SLOT_ACTION(SLOT_DEFAULT_5CH, SLOT_5CH) },
+    { MODE_OFF, 6, 0, false, true,  SLOT_ACTION(SLOT_DEFAULT_6C, SLOT_6C) },
+    { MODE_OFF, 6, 0, true,  false, SLOT_ACTION(SLOT_DEFAULT_6CH, SLOT_6CH) },
     { MODE_OFF, 0, 0, true,  false, ON_RUMPUP_UI1,  false, 0 },
 
     /* -- Mode: MODE_ON -- */
@@ -86,17 +92,17 @@ static const dispatch_t ui2_table[] = {
     /* -- Mode: MODE_OFF -- */
     { MODE_OFF, 1, 1, false, false, ON_MIN_UI2,     false, 0 },
     { MODE_OFF, 1, 0, false, true,  ON_XMODE_UI2,   false, 0 },
-    { MODE_OFF, 1, 0, true,  false, 0,              true,  SLOT_1CH },
+    { MODE_OFF, 1, 0, true,  false, SLOT_ACTION(SLOT_DEFAULT_1CH, SLOT_1CH) },
     { MODE_OFF, 2, 0, false, true,  ON_TURBO_UI2,   false, 0 },
-    { MODE_OFF, 2, 0, true,  false, 0,              true,  SLOT_2CH },
-    { MODE_OFF, 3, 0, false, true,  0,              true,  SLOT_3C  },
-    { MODE_OFF, 3, 0, true,  false, 0,              true,  SLOT_3CH },
-    { MODE_OFF, 4, 0, false, true,  0,              true,  SLOT_4C  },
-    { MODE_OFF, 4, 0, true,  false, 0,              true,  SLOT_4CH },
-    { MODE_OFF, 5, 0, false, true,  0,              true,  SLOT_5C  },
-    { MODE_OFF, 5, 0, true,  false, 0,              true,  SLOT_5CH },
-    { MODE_OFF, 6, 0, false, true,  0,              true,  SLOT_6C  },
-    { MODE_OFF, 6, 0, true,  false, 0,              true,  SLOT_6CH },
+    { MODE_OFF, 2, 0, true,  false, SLOT_ACTION(SLOT_DEFAULT_2CH, SLOT_2CH) },
+    { MODE_OFF, 3, 0, false, true,  SLOT_ACTION(SLOT_DEFAULT_3C, SLOT_3C) },
+    { MODE_OFF, 3, 0, true,  false, SLOT_ACTION(SLOT_DEFAULT_3CH, SLOT_3CH) },
+    { MODE_OFF, 4, 0, false, true,  SLOT_ACTION(SLOT_DEFAULT_4C, SLOT_4C) },
+    { MODE_OFF, 4, 0, true,  false, SLOT_ACTION(SLOT_DEFAULT_4CH, SLOT_4CH) },
+    { MODE_OFF, 5, 0, false, true,  SLOT_ACTION(SLOT_DEFAULT_5C, SLOT_5C) },
+    { MODE_OFF, 5, 0, true,  false, SLOT_ACTION(SLOT_DEFAULT_5CH, SLOT_5CH) },
+    { MODE_OFF, 6, 0, false, true,  SLOT_ACTION(SLOT_DEFAULT_6C, SLOT_6C) },
+    { MODE_OFF, 6, 0, true,  false, SLOT_ACTION(SLOT_DEFAULT_6CH, SLOT_6CH) },
     { MODE_OFF, 0, 0, true,  false, ON_MOON_UI2,    false, 0 },
 
     /* -- Mode: MODE_ON -- */
@@ -255,7 +261,6 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout)
         uint8_t f_hold  = table[i].hold;
         uint8_t f_wait  = table[i].wait_timeout;
         uint8_t f_slot  = table[i].is_slot;
-        uint8_t f_sidx  = table[i].slot_idx;
         uint8_t f_op    = table[i].op_index;
 
         if (f_mode != mode) continue;
@@ -264,7 +269,11 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout)
         if (f_hold != (evt->type == BTN_EVT_HOLD)) continue;
         if (f_wait && !timeout) continue;
 
-        uint8_t op_idx = f_slot ? ob_GetSlot(f_sidx) : f_op;
+        uint8_t op_idx = f_op;
+#ifdef USE_MAGIC_SLOTS
+        if (f_slot)
+            op_idx = ob_GetSlot(table[i].slot_idx);
+#endif
 
         if (op_idx < MAIN_OP_COUNT && main_op[op_idx])
         {
