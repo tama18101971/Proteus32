@@ -69,6 +69,7 @@ int main(void)
     dac7571_set_voltage(0);
 
     ob_Init();
+    adc_read();
     if (!read_ee())
     {
         init_ee();
@@ -108,6 +109,7 @@ int main(void)
             i2c_init(400000);
             stop_aux_beacon(false);
             adc_init();
+            adc_read();
             tim2_start();
         }
 

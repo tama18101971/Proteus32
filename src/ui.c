@@ -1044,7 +1044,12 @@ void ui_process(void)
                 if (vbat_mv > 3100U)
                     reset_max_step();
 
-                max_step = get_max_step() - (limiter + 1); // термокоррекция — как Proteus84: max_step = get_max_step() - (pic.correction + 1)
+                /* Never turn an uninitialised/failed zero sample into a
+                 * permanent low-voltage ratchet.  Any non-zero reading,
+                 * including a genuinely depleted cell, still follows the
+                 * normal low-voltage ceiling and shutdown paths. */
+                if (vbat_mv != 0U)
+                    max_step = get_max_step() - (limiter + 1);
                 stop_aux_beacon(false);
                 if (step_tc >= max_step) direction = DIR_DOWN;
             }

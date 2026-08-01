@@ -62,16 +62,25 @@ uint16_t max_min = MAX_STEP;
  * Скорость: 1 вычитание + 1 сдвиг + 1 сложение на отсчёт.
  * Погрешность: max ошибка = 2^shift (±16 при shift=4). */
 static uint16_t ema_avg;
+static bool ema_seeded;
 
 /** @brief Initialise EMA filter with seed value. */
 void ema_init(uint16_t seed)
 {
     ema_avg = seed;
+    ema_seeded = false;
 }
 
 /** @brief Update EMA filter with new raw sample. */
 uint16_t ema_update(uint16_t raw)
 {
+    if (!ema_seeded)
+    {
+        ema_avg = raw;
+        ema_seeded = true;
+        return raw;
+    }
+
     int16_t diff = (int16_t)raw - (int16_t)ema_avg;
     ema_avg += diff >> EMA_SHIFT;
     return ema_avg;
@@ -234,8 +243,9 @@ void adc_init(void)
             ;
     }
 
-    // 20. Инициализация EMA-фильтра: (1200*1024)/3800 = 323 при Vdd=3.8V
-    ema_init(323);
+    /* First valid Vrefint conversion seeds EMA exactly; a guessed nominal
+     * voltage could briefly conceal a flat cell after wake. */
+    ema_init(0);
 }
 
 /**
@@ -277,10 +287,18 @@ void adc_read(void)
     raw_temperature_adc = ADC1->RDATAR;
 
     // Читаем результат инжектированного преобразования (Vrefint)
-    uint16_t vrefint_adc = ema_update(ADC1->IDATAR1);
+    uint16_t vrefint_raw = ADC1->IDATAR1;
 
     // Отключаем делитель напряжения: PD3 = 1 (ток через делитель не течёт, экономия заряда)
     GPIOD->BSHR = (1 << 3);
+
+    /* A zero Vref result means that conversion did not provide a usable
+     * sample.  Keep the previous voltage rather than dividing by zero or
+     * teaching the EMA an impossible value. */
+    if (vrefint_raw == 0u)
+        return;
+
+    uint16_t vrefint_adc = ema_update(vrefint_raw);
 
     // Вычисляем напряжение питания (мВ): Vrefint=1.2V, 10-бит ADC
     vbat_mv = (1200 * 1024) / vrefint_adc;
