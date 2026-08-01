@@ -53,12 +53,17 @@ void scan_limiters(void)
 
     if (old_limiter != limiter)
     {
-        uint16_t up_level = MAX_STEP - limiter;
-        set_current_ll(MIN(up_level, step_user), SS_NO);
+        /* ThermalLimiter_Update() returns a reduction relative to the
+         * user's request, not a ceiling relative to MAX_STEP.  Applying
+         * it to MAX_STEP only worked at full brightness and could leave the
+         * LED on during the NTC-rail failsafe at lower user levels. */
+        uint16_t limited_step = (step_user > limiter) ?
+                                (uint16_t)(step_user - limiter) : 0u;
+        set_current_ll(limited_step, SS_NO);
 
         if ((EE.uif.ui_index > 1) && (mode_current == CMODE_TURBO))
         {
-            if (up_level < get_stepi(CMODE_MAX))
+            if (limited_step < get_stepi(CMODE_MAX))
             {
                 mode_current = CMODE_MAX;
                 ps.use_prev = false;
