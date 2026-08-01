@@ -106,7 +106,6 @@ int main(void)
             wakeup_source = WS_NONE;
             dac_pwrpin_restore();
             i2c_init(400000);
-            stop_aux_strobe(false);
             stop_aux_beacon(false);
             adc_init();
             tim2_start();
@@ -126,7 +125,12 @@ int main(void)
 
         /* 3. Сон: AUX wake must be processed above before returning to
          * STANDBY, otherwise a strobe would repeatedly sleep on one phase. */
-        if (need_sleep || is_aux_mode(IDM_STROBE))
+        /* A strobe normally sleeps between AWU phases.  A button wake must
+         * instead leave the FSM running through the full click timeout;
+         * otherwise the first press would abort or be lost before UI can
+         * choose between OFF (one click) and next pattern (two clicks). */
+        if (need_sleep ||
+            (is_aux_mode(IDM_STROBE) && !button_sequence_active()))
         {
             adc_stop();
             tim2_stop();
@@ -145,9 +149,14 @@ int main(void)
 
         if (tick_30hz())
         {
-            adc_read();
-            scan_limiters();
-            scan_voltage();
+            /* The strobe owns the DAC waveform.  Do not let ADC/limiters
+             * write a regular brightness value during an input window. */
+            if (!is_aux_mode(IDM_STROBE))
+            {
+                adc_read();
+                scan_limiters();
+                scan_voltage();
+            }
         }
 
         if (tick_2hz())

@@ -108,6 +108,14 @@ void button_set_max_clicks(uint8_t clicks);
 const btn_evt_t* button_get_event(void);
 
 /**
+ * @brief Whether a physical press or click sequence is currently in progress.
+ *
+ * Used by the AWU strobe loop to stay awake long enough for the FSM to
+ * distinguish one click from a multi-click command after a button wake.
+ */
+bool button_sequence_active(void);
+
+/**
  * @brief Reset click counter and long mask.
  */
 void button_reset_click_count(void);

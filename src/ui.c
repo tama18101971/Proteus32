@@ -58,7 +58,7 @@ uint8_t need_save = false;
 
 uint8_t clicks_count = 0;
 uint8_t ui_table_idx = 1;        // runtime selector for dispatch tables
-uint8_t ramp_speed = 2;          // replaces EE.eng.rump_speed (session only)
+uint8_t ramp_speed = 0;          // EE.eng.rump_speed addend; 0 = fastest UI1 repeat
 uint8_t pid_time = 3;            // replaces EE.eng.pid_time (session only)
 uint8_t ui_save = 0;
 uint8_t beacon_save = 0;
@@ -66,6 +66,7 @@ uint8_t bcklight_type_save = 0;
 uint8_t strobe_index = 0;
 
 static uint8_t bt_r_time = 0;    // direction timeout counter
+static bool ui1_was_pressed;
 
 /*******************************************************************************
  *  UI2 discrete brightness table -- scaled to Proteus003 9-bit range (0..511)
@@ -965,9 +966,10 @@ void ui_init(void)
     stop_bit = false;
     need_save = 0;
     direction = DIR_UP;
+    ui1_was_pressed = false;
     mode_current = CMODE_OFF;
     ui_table_idx = EE.uif.ui_index;
-    ramp_speed = 2;
+    ramp_speed = 0;
     pid_time = 3;
 }
 
@@ -1002,8 +1004,18 @@ void ui_process(void)
     else
         button_set_max_clicks(BTN_MAX_CLICKS);
 
+    /* The AVR scanner flipped direction on every physical release, including
+     * a release after HOLD.  BTN_EVT_RELEASED deliberately excludes held
+     * presses, so this must be an edge check outside event dispatch. */
+    bool pressed = Pressed;
+    if (ui_idx == 1 && ui1_was_pressed && !pressed)
+    {
+        direction ^= 0x01;
+        bt_r_time = 0;
+    }
+
     /* Direction timeout for UI1 */
-    if (!Pressed)
+    if (!pressed)
     {
         if (bt_r_time < 0xFF) bt_r_time++;
         if (bt_r_time >= DIRECTION_TIMEOUT_UI1) direction = DIR_UP;
@@ -1012,6 +1024,7 @@ void ui_process(void)
     {
         bt_r_time = 0;
     }
+    ui1_was_pressed = (ui_idx == 1) && pressed;
 
     /* Consume pending button event */
     const btn_evt_t *evt = button_get_event();
@@ -1040,7 +1053,6 @@ void ui_process(void)
         case BTN_EVT_RELEASED:
             tick_5s_reset();
             stop_bit = false;
-            if (ui_idx == 1) direction ^= 0x01;
             ui_table_lookup(driver_mode, evt, false);
             break;
 

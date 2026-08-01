@@ -99,6 +99,11 @@ const btn_evt_t* button_get_event(void)
     return &pending_evt;
 }
 
+bool button_sequence_active(void)
+{
+    return (state != ST_IDLE) || Pressed;
+}
+
 void button_reset_click_count(void)
 {
     clicks = 0;
