@@ -47,8 +47,8 @@ uint8_t volt_stop_mode = CMODE_TURBO;
 uint8_t down_count = 5;
 
 /* Монотонно убывающий потолок шага по напряжению для UI1 (ramping).
- * Аналог AVR adc.c max_min: только уменьшается, восстанавливается
- * лишь при перезагрузке (reset_max_step в AVR закомментирован). */
+ * Он сбрасывается лишь на новой попытке включения с подтверждённо
+ * восстановившимся напряжением (reset_max_step()). */
 uint16_t max_min = MAX_STEP;
 
 /* Таймаут циклов опроса флагов/битов АЦП (защита от зависания при сбое) */
@@ -354,7 +354,7 @@ static uint8_t calc_volt_max_mode(uint16_t exact_v)
  * Аналог AVR adc.c limiter[2][6] + get_max_step().
  * volt_max_tbl — пороги в мВ (по возрастанию), step_max_tbl —
  * соответствующие 9-битные шаги (0..511), масштабированные из AVR 8-бит.
- * max_min монотонно убывает (MIN), восстановление — только при reboot. */
+ * max_min монотонно убывает (MIN) до явного безопасного восстановления. */
 static const uint16_t volt_max_tbl[6] = {2500, 2820, 2930, 3080, 3190, 3300};
 static const uint16_t step_max_tbl[6] = {120, 240, 310, 400, 463, 511};
 
@@ -370,6 +370,11 @@ uint16_t get_max_step(void)
     uint16_t s = step_max_tbl[i];
     if (s < max_min) max_min = s;
     return max_min;
+}
+
+void reset_max_step(void)
+{
+    max_min = MAX_STEP;
 }
 
 extern uint8_t need_sleep;

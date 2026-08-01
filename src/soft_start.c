@@ -10,11 +10,9 @@
  *   ss_init(target, current, SS_FAST);
  *   while (ss.enable) { ss_scan(); }
  *
- * Example: target=300, previous=100, speed=2 (SS_SLOW=1, SS_FAST=8)
- *   s_size = +2 (ramp-up)
- *   step_count = 200 / 2 = 100 steps
- *   Each ss_scan call: position += 2, step_count--
- *   After 100 calls: position = 300, enable = false
+ * Example: target=300, previous=100, speed=SS_FAST (7)
+ *   step_size = +7 (ramp-up)
+ *   step_count = 200 / 7 = 28 scans, then target is applied exactly.
  */
 
 #include <stdbool.h>
@@ -32,8 +30,9 @@ ss_st ss;
  * @param speed    Transition speed (SS_NO = instant).
  *
  * If target == previous, soft start is skipped (already at target).
- * step_size = direction (+/-) * speed.
- * step_count = distance / speed (calls to ss_scan needed).
+ * This retains the pre-FSM Proteus003 profile: step_size is +/- speed and
+ * step_count is distance / speed.  The final scan assigns target exactly,
+ * so truncation never leaves a transition one or more steps short.
  */
 void ss_init(uint16_t target, uint16_t previous, SoftStartSpeed_t speed)
 {

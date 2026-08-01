@@ -21,12 +21,12 @@
 #define ABS(x)				((x>0)?(x):(-x))
 
 /**
- * @brief Soft start speed (steps per ss_scan call).
+ * @brief Soft start speed in 9-bit brightness steps per 160 Hz ss_scan call.
  */
 typedef enum {
 	SS_NO = 0,  /**< Instant transition (no smoothing) */
 	SS_SLOW,    /**< Slow ramp: 1 step per call */
-	SS_FAST = 7 /**< Fast ramp: 8 steps per call */
+	SS_FAST = 7 /**< Fast ramp: 7 steps per call */
 } SoftStartSpeed_t;
 
 /** @brief Enable soft start processing. */

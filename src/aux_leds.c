@@ -100,12 +100,27 @@ bool EnableArrayProcessing = false;
 const uint32_t *current_buf = NULL;
 
 #ifdef USE_STROBE
-const uint32_t strobe[4] = {
-    MAKE_CMD_MS(HBL_LED, 1, 0, 3, 3, 1, 0),
-    MAKE_CMD_MS(HBL_LED, 1, 0, 10, 10, 1, 0),
-    MAKE_CMD_MS(HBL_LED, 1, 0, 32, 32, 1, 0),
-    MAKE_CMD_MS(HBL_LED, 1, 0, 3, 240, 1, 0),
+typedef struct {
+    uint16_t step0;
+    uint16_t step1;
+    uint8_t  psc0;
+    uint8_t  win0;
+    uint8_t  psc1;
+    uint8_t  win1;
+} strobe_pattern_t;
+
+/* Ported from the AVR HBL commands.  The original 8-bit levels 254, 150,
+ * and 98 are doubled for this project's 9-bit DAC step domain. */
+static const strobe_pattern_t strobe_patterns[STROBE_COUNT] = {
+    {508u,   0u, AWU_PSC_256, 15u, AWU_PSC_256, 15u}, /* 30ms / 30ms */
+    {508u, 196u, AWU_PSC_512, 15u, AWU_PSC_10240, 25u}, /* 60ms / 2s */
+    {300u,   0u, AWU_PSC_512, 15u, AWU_PSC_2048,  63u}, /* 60ms / ~1s */
+    {300u,   0u, AWU_PSC_512, 15u, AWU_PSC_10240, 50u}, /* 60ms / 4s */
 };
+
+static uint8_t strobe_index_active;
+static bool strobe_second_phase;
+static bool strobe_active;
 #endif
 
 /**
@@ -116,6 +131,7 @@ const uint32_t strobe[4] = {
  * и запоминает указатель на массив для дальнейшей обработки в handle_aux().
  */
 void start_aux_array(const uint32_t *pArray, awu_tick_t delay) {
+	off_aux_cmd(false);
 	memset(&aux_ctl, 0, sizeof(aux_ctl));
 
 	EnableArrayProcessing = true;
@@ -160,6 +176,18 @@ bool is_aux_mode(IDM_Type_t mode) {
 	return (aux_ctl.enable && (aux_ctl.idmode == mode));
 }
 
+bool aux_needs_dac(void)
+{
+	#ifdef USE_STROBE
+	if (strobe_active) {
+		return true;
+	}
+	#endif
+
+	return aux_ctl.enable && p_aux &&
+	       (((LED_Bits_t)p_aux->aux.device & HBL_LED) != 0u);
+}
+
 /**
  * @brief Проверка активности
  * @return true если обработчик активен (enable == true)
@@ -175,9 +203,24 @@ bool is_aux_active(void) {
  * Сбрасывает enable, period, idmode; выключает все светодиоды.
  */
 void off_aux_cmd(bool stop_lsi) {
+	bool had_dac_output = aux_needs_dac();
+
+	#ifdef USE_STROBE
+	if (strobe_active || aux_ctl.idmode == IDM_STROBE) {
+		strobe_active = false;
+		strobe_second_phase = false;
+	}
+	#endif
+	if (had_dac_output) {
+		out_set_stc(0u);
+	}
+
 	aux_ctl.enable = false;
 	aux_ctl.period = PER_INIT;
 	aux_ctl.idmode = IDM_OTHER;
+	EnableArrayProcessing = false;
+	p_aux = NULL;
+	current_buf = NULL;
 
 	smart_off_leds(RED_LED | GRN_LED | HBL_LED);
 
@@ -240,7 +283,7 @@ void start_aux_cmd(uint32_t command, bool enable, IDM_Type_t idm_mode, awu_tick_
 	debug_cmd(command);
 	#endif
 
-	EnableArrayProcessing = false;
+	off_aux_cmd(false);
 
 	aux_cmd.aux_cmd = command;
 
@@ -271,9 +314,55 @@ static void SetBrightness(LED_Bits_t device, uint8_t brightness) {
 		else smart_off_leds(GRN_LED);
 	}
 	if (device & HBL_LED) {
-		set_current(brightness, SS_NO);
+		/* HBL is an AUX indication level, not a user brightness request.
+	 * Never call set_current(): its OFF path would power down the DAC and
+	 * corrupt step_user while the AUX state machine is still active. */
+		out_set_stc(brightness ? 1u : 0u);
 	}
 }
+
+#ifdef USE_STROBE
+static void handle_aux_strobe(void)
+{
+	const strobe_pattern_t *pattern = &strobe_patterns[strobe_index_active];
+
+	if (strobe_second_phase) {
+		out_set_stc(pattern->step0);
+		AWU_set_raw(pattern->psc0, pattern->win0);
+		strobe_second_phase = false;
+	} else {
+		out_set_stc(pattern->step1);
+		AWU_set_raw(pattern->psc1, pattern->win1);
+		strobe_second_phase = true;
+	}
+}
+
+void start_aux_strobe(uint8_t index)
+{
+	if (index >= STROBE_COUNT) {
+		return;
+	}
+
+	off_aux_cmd(false);
+
+	strobe_index_active = index;
+	strobe_second_phase = false;
+	strobe_active = true;
+	aux_ctl.enable = true;
+	aux_ctl.idmode = IDM_STROBE;
+	p_aux = NULL;
+
+	const strobe_pattern_t *pattern = &strobe_patterns[index];
+	out_set_stc(pattern->step0);
+	AWU_set_raw(pattern->psc0, pattern->win0);
+	AWU_ON();
+}
+#else
+void start_aux_strobe(uint8_t index)
+{
+	(void)index;
+}
+#endif
 
 /**
  * @brief Пошаговая обработка одной AUX-команды (AWU-режим)
@@ -331,6 +420,11 @@ void handle_aux_cmd(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits) {
 			if (ubits->work_count == 0) {
 				ubits->enable = false;
 				ubits->period = PER_NEXT;
+				if (device & HBL_LED) {
+					/* A finite HBL command may end with brightness1 != 0.
+					 * Its terminal state must still be dark. */
+					SetBrightness(HBL_LED, 0u);
+				}
 				smart_off_leds(device);
 				return;
 			}
@@ -428,6 +522,12 @@ union AUX_Cmd_u *handle_aux_array(const uint32_t pArray[], AUX_Ctr_t *ctr) {
 bool handle_aux(void) {
 	AWU_OFF();
 
+	#ifdef USE_STROBE
+	if (strobe_active) {
+		handle_aux_strobe();
+	}
+	else
+	#endif
 	if (EnableArrayProcessing) {
 		p_aux = handle_aux_array(current_buf, &aux_ctl);
 		if (p_aux == NULL) EnableArrayProcessing = false;
@@ -524,8 +624,12 @@ void stop_aux_voltage(bool stop_lsi) {
 }
 /** @brief Stop strobe mode if active. */
 void stop_aux_strobe(bool stop_lsi) {
-	if (is_aux_mode(IDM_STROBE))
+	#ifdef USE_STROBE
+	if (strobe_active || is_aux_mode(IDM_STROBE))
 		off_aux_cmd(stop_lsi);
+	#else
+	(void)stop_lsi;
+	#endif
 }
 
 /**

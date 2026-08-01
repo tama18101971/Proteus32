@@ -37,6 +37,17 @@ void dac_pwrpin_init(void)
     GPIO_PinConfig(DAC_PWR_PORT, DAC_PWR_PIN, CFG_OUT_PP_2M);
 }
 
+void dac_pwrpin_restore(void)
+{
+    RCC->APB2PCENR |= (1 << 5); /* GPIOD clock enable (bit 5) */
+
+    /* Keep the output latch high before switching PD0 back to output mode.
+     * A strobe wake must not create a low pulse that power-cycles the DAC. */
+    DAC_PWR_PORT->BSHR = DAC_PWR_PIN;
+    GPIO_PinConfig(DAC_PWR_PORT, DAC_PWR_PIN, CFG_OUT_PP_2M);
+    DAC_PWR_PORT->BSHR = DAC_PWR_PIN;
+}
+
 /**
  * @brief Включить питание DAC (PD0 = HIGH)
  *

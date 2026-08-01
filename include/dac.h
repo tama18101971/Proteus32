@@ -49,6 +49,14 @@
 /** @brief Initialise DAC power pin (PD0) as output. */
 void dac_pwrpin_init(void);
 
+/**
+ * @brief Restore the DAC power-control pin after an AWU/STANDBY wake.
+ *
+ * Re-enables GPIOD and drives PD0 high without the low pulse performed by
+ * dac_pwrpin_init().  This preserves DAC supply during an AWU-driven strobe.
+ */
+void dac_pwrpin_restore(void);
+
 /** @brief Enable DAC power supply via PD0. */
 void dac_pwrpin_on(void);
 

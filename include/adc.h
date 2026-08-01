@@ -137,4 +137,12 @@ extern uint16_t max_min;
  */
 uint16_t get_max_step(void);
 
+/**
+ * @brief Clear the historical UI1 voltage ceiling after a confirmed recovery.
+ *
+ * Call only after a fresh voltage measurement is above the configured
+ * recovery threshold; this does not disable the low-voltage step-down logic.
+ */
+void reset_max_step(void);
+
 #endif /* ADC_H_ */

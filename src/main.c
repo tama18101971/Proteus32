@@ -98,33 +98,41 @@ int main(void)
 
     while (1)
     {
-        /* 1. Сон: останавливаем ADC и TIM2, засыпаем в STANDBY */
-        if (need_sleep)
-        {
-            adc_stop();
-            tim2_stop();
-            start_aux_beacon();
-            AWU_Sleep_Now();
-        }
-
-        /* 2. Пробуждение по кнопке: восстанавливаем периферию */
+        /* 1. Пробуждение по кнопке: восстанавливаем периферию */
         if ((wakeup_source == WS_BUTTON) && is_sleep_mode)
         {
             is_sleep_mode = false;
             need_sleep = false;
             wakeup_source = WS_NONE;
+            dac_pwrpin_restore();
+            i2c_init(400000);
+            stop_aux_strobe(false);
             stop_aux_beacon(false);
             adc_init();
             tim2_start();
-            dac_pwrpin_init();
-            i2c_init(400000);
         }
 
-        /* 3. Пробуждение по AWU: обрабатываем AUX-команды */
+        /* 2. Пробуждение по AWU: обрабатываем AUX-команды */
         if (wakeup_source == WS_AWU)
         {
             wakeup_source = WS_NONE;
+            if (aux_needs_dac())
+            {
+                dac_pwrpin_restore();
+                i2c_init(400000);
+            }
             handle_aux();
+        }
+
+        /* 3. Сон: AUX wake must be processed above before returning to
+         * STANDBY, otherwise a strobe would repeatedly sleep on one phase. */
+        if (need_sleep || is_aux_mode(IDM_STROBE))
+        {
+            adc_stop();
+            tim2_stop();
+            if (!is_aux_mode(IDM_STROBE))
+                start_aux_beacon();
+            AWU_Sleep_Now();
         }
 
         /* 4. Таймерные задачи */
@@ -147,9 +155,10 @@ int main(void)
 #ifdef WL_FLASH_DEBUG
             uint16_t pwm_out = (step_user > limiter) ? (step_user - limiter) : 0;
 #endif
-            EE_PRINTF("TEMP=%u TEMPF=%d I=%d LIM=%d PWM=%u\r\n STU=%u\r\n",
+            EE_PRINTF("T=%u F=%d I=%d L=%d P=%u S=%u V=%umV ramp=%u\r\n",
                       raw_temperature_adc, state.filtered_temp,
-                      state.integral, state.prev_limiter, pwm_out, step_user);
+                      state.integral, state.prev_limiter, pwm_out, step_user,
+                      vbat_mv, max_step);
         }
 
         if (tick_5s())

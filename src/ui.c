@@ -426,8 +426,7 @@ void slot_strobe(void)
     ps.pr_step = step_default;
     ps.start = start;
 
-    uint32_t s = strobe[strobe_index];
-    start_aux_cmd(s, true, IDM_STROBE, AWU_120MS);
+    start_aux_strobe(strobe_index);
     EE_PRINTF("[UI] slot_strobe idx=%u start=%u\r\n", strobe_index, start);
 #endif
 }
@@ -437,7 +436,8 @@ void up_strobe(void)
 {
 #ifdef USE_STROBE
     stop_aux_strobe(false);
-    if (++strobe_index == 4) strobe_index = 0;
+    if (++strobe_index == STROBE_COUNT) strobe_index = 0;
+    start_aux_strobe(strobe_index);
     EE_PRINTF("[UI] up_strobe idx=%u\r\n", strobe_index);
 #endif
 }
@@ -1025,6 +1025,12 @@ void ui_process(void)
             tick_5s_reset();
             if (ui_idx == 1)
             {
+                /* The UI1 ceiling is a sag ratchet.  A press starts a new
+                 * activation attempt, so clear a stale historical cap only
+                 * after a confirmed healthy voltage measurement. */
+                if (vbat_mv > 3100U)
+                    reset_max_step();
+
                 max_step = get_max_step() - (limiter + 1); // термокоррекция — как Proteus84: max_step = get_max_step() - (pic.correction + 1)
                 stop_aux_beacon(false);
                 if (step_tc >= max_step) direction = DIR_DOWN;

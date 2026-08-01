@@ -183,6 +183,9 @@ typedef enum {
 	BCON_8S,
 } Beacon_Mode_t;
 
+/** @brief Number of selectable AWU/DAC strobe profiles. */
+#define STROBE_COUNT 4u
+
 /**
  * @brief Backlight type (off/on).
  */
@@ -222,8 +225,6 @@ extern const uint32_t buf_red[];
 extern const uint32_t buf_grn[];
 /** @brief SOS pattern on red. */
 extern const uint32_t buf_sos_red[];
-/** @brief Strobe patterns (4 modes). */
-extern const uint32_t strobe[4];
 
 /* ===== API functions ===== */
 
@@ -239,6 +240,14 @@ bool is_aux_active(void);
  * @return true if active in that mode.
  */
 bool is_aux_mode(IDM_Type_t mode);
+
+/**
+ * @brief Whether the active AUX command needs the DAC/I2C output path.
+ *
+ * Used after an AWU/STANDBY wake to restore the peripheral before a HBL or
+ * strobe state changes its output.
+ */
+bool aux_needs_dac(void);
 
 /**
  * @brief Stop AUX if running in specified mode.
@@ -285,6 +294,15 @@ void start_aux_cmd(uint32_t command, bool enable, IDM_Type_t idm_mode, awu_tick_
  * @param delay  Initial AWU delay.
  */
 void start_aux_array(const uint32_t *pArray, awu_tick_t delay);
+
+/**
+ * @brief Start an energy-efficient two-phase DAC strobe.
+ *
+ * The pattern runs from AWU wake-ups and does not change step_user or invoke
+ * normal driver power management on its OFF phase.
+ * @param index Strobe profile in range 0..STROBE_COUNT-1.
+ */
+void start_aux_strobe(uint8_t index);
 
 /**
  * @brief Start beacon mode from EEPROM settings.
@@ -342,7 +360,7 @@ void handle_aux_cmd(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits);
 union AUX_Cmd_u *handle_aux_array(const uint32_t pBuffer[], AUX_Ctr_t *ubits);
 
 #define INFO_RED  MAKE_CMD(RED_LED, 0, 1, AWU_PSC_1024, 56, AWU_PSC_2048, 56, 1, 0)  /* 1 красная ~448мс */
-#define INFO_GRN  MAKE_CMD(GRN_LED, 0, 15, AWU_PSC_512, 56, AWU_PSC_4096, 35, 1, 0) /* 15 зелёных */
+#define INFO_GRN  MAKE_CMD(GRN_LED, 0, 1, AWU_PSC_512, 56, AWU_PSC_4096, 35, 1, 0)  /* 1 зелёная ~1.3с */
 #define ERRO_RED  MAKE_CMD(RED_LED, 0, 3, AWU_PSC_128, 15, AWU_PSC_256, 45, 1, 0)   /* 3 красных ~15/90мс */
 
 /**
