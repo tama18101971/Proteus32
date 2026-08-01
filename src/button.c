@@ -202,10 +202,11 @@ void button_tick(void)
                 break;
             }
             d_time++;
-            if (cfg.repeat_ticks && d_time >= cfg.repeat_ticks)
+            if (stop_bit || (cfg.repeat_ticks && d_time >= cfg.repeat_ticks))
             {
                 d_time = 1;
-                emit_event(BTN_EVT_HOLD);
+                if (!stop_bit)
+                    emit_event(BTN_EVT_HOLD);
                 state = ST_HOLD_REPEAT;
             }
             break;
@@ -222,7 +223,7 @@ void button_tick(void)
                 break;
             }
             d_time++;
-            if (cfg.repeat_ticks && d_time >= cfg.repeat_ticks)
+            if (!stop_bit && cfg.repeat_ticks && d_time >= cfg.repeat_ticks)
             {
                 d_time = 1;
                 emit_event(BTN_EVT_HOLD);
@@ -233,6 +234,7 @@ void button_tick(void)
         case ST_RELEASE_WAIT:
             if (rising)
             {
+                stop_bit = false;
                 d_time = 1;
                 state = ST_PRESSED;
                 break;

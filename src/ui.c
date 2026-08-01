@@ -1013,7 +1013,6 @@ void ui_process(void)
         direction ^= 0x01;
         bt_r_time = 0;
     }
-
     /* Direction timeout for UI1 */
     if (!pressed)
     {
@@ -1065,6 +1064,7 @@ void ui_process(void)
         {
             tick_5s_reset();
             uint8_t prev_mode = driver_mode;
+
             ui_table_lookup(driver_mode, evt, false);
 
             /* Hold in any slot programming mode -> exit back to magic menu */

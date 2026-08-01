@@ -43,7 +43,6 @@ enum {
 static const dispatch_t ui1_table[] = {
     /* -- Mode: MODE_OFF -- */
     { MODE_OFF, 1, 0, false, true,  ON_XMODE_UI1,  false, 0 },
-    { MODE_OFF, 0, 0, true,  false, ON_RUMPUP_UI1,  false, 0 },
     { MODE_OFF, 1, 0, true,  false, SLOT_BATT_IND,  true,  SLOT_1CH },
     { MODE_OFF, 2, 0, false, true,  ON_TURBO_UI1,   false, 0 },
     { MODE_OFF, 2, 0, true,  false, SLOT_BEACON,    true,  SLOT_2CH },
@@ -55,6 +54,7 @@ static const dispatch_t ui1_table[] = {
     { MODE_OFF, 5, 0, true,  false, 0,              true,  SLOT_5CH },
     { MODE_OFF, 6, 0, false, true,  0,              true,  SLOT_6C  },
     { MODE_OFF, 6, 0, true,  false, SLOT_BACKLIGHT, true,  SLOT_6CH },
+    { MODE_OFF, 0, 0, true,  false, ON_RUMPUP_UI1,  false, 0 },
 
     /* -- Mode: MODE_ON -- */
     { MODE_ON,  1, 0, false, true,  OFF_DRV_FALSE,  false, 0 },
@@ -84,7 +84,6 @@ static const dispatch_t ui1_table[] = {
 
 static const dispatch_t ui2_table[] = {
     /* -- Mode: MODE_OFF -- */
-    { MODE_OFF, 0, 0, true,  false, ON_MOON_UI2,    false, 0 },
     { MODE_OFF, 1, 1, false, false, ON_MIN_UI2,     false, 0 },
     { MODE_OFF, 1, 0, false, true,  ON_XMODE_UI2,   false, 0 },
     { MODE_OFF, 1, 0, true,  false, 0,              true,  SLOT_1CH },
@@ -98,6 +97,7 @@ static const dispatch_t ui2_table[] = {
     { MODE_OFF, 5, 0, true,  false, 0,              true,  SLOT_5CH },
     { MODE_OFF, 6, 0, false, true,  0,              true,  SLOT_6C  },
     { MODE_OFF, 6, 0, true,  false, 0,              true,  SLOT_6CH },
+    { MODE_OFF, 0, 0, true,  false, ON_MOON_UI2,    false, 0 },
 
     /* -- Mode: MODE_ON -- */
     { MODE_ON,  1, 1, false, false, STEP_DOWN_UI2,  false, 0 },
@@ -268,6 +268,11 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout)
 
         if (op_idx < MAIN_OP_COUNT && main_op[op_idx])
         {
+            /* Slots are one-shot commands during a hold.  The button FSM
+             * observes this existing AVR-compatible flag before emitting
+             * further HOLD repeats. */
+            if (f_slot)
+                off_auto_repeat();
             main_op[op_idx]();
             return 1;
         }
