@@ -49,9 +49,8 @@
  *  ------------------------------------------------------------------------
  *  A `t_raw` reading of exactly 0 or >= 1023 (10-bit rail-to-rail) can only
  *  happen if the NTC divider has failed open or shorted. In that case the
- *  entire control loop is bypassed for that tick: the Limiter is forced to
- *  `user_pwm` (i.e. output PWM = 0, LED fully OFF) and `"E_THERMAL_RUNAWAY\n"`
- *  is emitted on the debug UART.
+ *  entire control loop is bypassed for that tick and the returned Limiter is
+ *  forced to `user_pwm` (therefore output PWM = 0, LED fully OFF).
  *
  *  Register/type footprint:
  *  ------------------------------------------------------------------------
@@ -374,8 +373,9 @@ void ThermalLimiter_Init(ThermalLimiterState_t *state);
  * @param user_pwm  9-bit user-requested brightness (0..512). The controller
  *                  output can only reduce this value, never exceed it.
  *
- * @return          Final PWM duty value to apply to the LED driver
- *                   (0..user_pwm).
+ * @return          Limiter amount to subtract from `user_pwm`
+ *                  (0..user_pwm). The applied output is
+ *                  `user_pwm - returned_limiter`.
  */
 uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
                                 ThermalLimiterState_t *state,

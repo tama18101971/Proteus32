@@ -611,4 +611,3 @@ void debug_cmd(uint32_t cmd) {
     EE_PRINTF("  bright1   = %d\n", u.aux.brightness1);
 }
 #endif /* AUX_DEBUG */
-

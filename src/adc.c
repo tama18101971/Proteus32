@@ -72,10 +72,10 @@ void ema_init(uint16_t seed)
 /** @brief Update EMA filter with new raw sample. */
 uint16_t ema_update(uint16_t raw)
 {
-    ema_avg += (raw - ema_avg) >> EMA_SHIFT;
+    int16_t diff = (int16_t)raw - (int16_t)ema_avg;
+    ema_avg += diff >> EMA_SHIFT;
     return ema_avg;
 }
-
 /* Таблица ADC-кодов для NCP18XH103F03RB (схема D с Rpar=77.3k) */
 /* Диапазон: -20...+80°C, шаг 1°C, значения возрастают при нагреве */
 static const uint16_t termo_table[] = {

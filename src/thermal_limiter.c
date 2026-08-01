@@ -143,7 +143,8 @@ uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
      *    healthy divider never produces a rail-to-rail code. Bypass the
      *    entire loop (do NOT touch filtered_temp/integral with a garbage
      *    reading) and report the fault on the debug UART. This tick's
-     *    OUTPUT is forced to 0 (Limiter = user_pwm) regardless, but
+     *    Limiter is forced to user_pwm (therefore the applied PWM is 0)
+     *    regardless, but
      *    `prev_limiter` itself is deliberately left untouched: forcing it
      *    to user_pwm here would make the slew filter treat every glitch -
      *    even a single noisy ADC sample - as if the LED had just been
@@ -157,7 +158,8 @@ uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
      * ------------------------------------------------------------------ */
     if (t_raw == THERMAL_ADC_MIN || t_raw >= THERMAL_ADC_MAX) {
         state->flags = THERMAL_FLAG_ERROR;
-        return 0u; /* PWM = user_pwm - Limiter = user_pwm - user_pwm = 0 */
+        /* This API returns the limiter amount, not the applied PWM. */
+        return user_pwm;
     }
 
     /* Seed the filter on the very first call so the EMA does not "ramp up"
@@ -474,8 +476,9 @@ uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
     state->prev_limiter = next_limiter;
 
     /* --------------------------------------------------------------------
-     * Final applied duty cycle. Safe by construction: 0 <= next_limiter <= user_pwm.
+     * Final limiter amount. The caller applies it as:
+     *     pwm_out = user_pwm - limiter
+     * Safe by construction: 0 <= next_limiter <= user_pwm.
      * ------------------------------------------------------------------ */
-    //return (uint16_t)((int16_t)user_pwm - next_limiter);
     return next_limiter;
 }

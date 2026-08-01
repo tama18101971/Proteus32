@@ -37,8 +37,6 @@ volatile wakeup_source_t wakeup_source = WS_NONE; /* Источник после
 
 uint8_t need_sleep = false; /* Флаг необходимости перейти в режим сна */
 
-//int16_t error; /* Текущая ошибка (filtered - setpoint) */
-
 int main(void)
 {
     NVIC_PriorityGroupConfig(NVIC_PriorityGroup_1);
@@ -146,16 +144,20 @@ int main(void)
 
         if (tick_2hz())
         {
-            EE_PRINTF("T=%u F=%d I=%d L=%d P=%u\r\n",
+#ifdef WL_FLASH_DEBUG
+            uint16_t pwm_out = (step_user > limiter) ? (step_user - limiter) : 0;
+#endif
+            EE_PRINTF("TEMP=%u TEMPF=%d I=%d LIM=%d PWM=%u\r\n STU=%u\r\n",
                       raw_temperature_adc, state.filtered_temp,
-                      state.integral, state.prev_limiter, step_user);
+                      state.integral, state.prev_limiter, pwm_out, step_user);
         }
 
         if (tick_5s())
         {
-            if(need_save)
+            if(need_save) {
                 ob_Flush();             // временно - потом переделать!!!
-            handle_ee();
+                handle_ee();
+            }
             need_sleep = true;
         }
     }

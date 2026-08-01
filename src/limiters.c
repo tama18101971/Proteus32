@@ -28,7 +28,7 @@ const ThermalLimiterConfig_t config = {
     .max_limiter          = 255
 };
 
-/** @brief Current limiter value (PWM ceiling). */
+/** @brief Current limiter amount subtracted from the user brightness. */
 uint16_t limiter = 0;
 
 /** @brief Initialise thermal limiter state. */
