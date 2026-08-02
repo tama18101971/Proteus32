@@ -103,39 +103,21 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout);
 /* -- Magic slot (48) -- */
 #define ENTER_MAGIC_MODE    48
 
-/* -- Reconfigurable slots: select + clickX (49..68) -- */
-#define SELECT_SLOT01       49
-#define SLOT01_CLICKX       50
-#define SELECT_SLOT02       51
-#define SLOT02_CLICKX       52
-#define SELECT_SLOT03       53
-#define SLOT03_CLICKX       54
-#define SELECT_SLOT04       55
-#define SLOT04_CLICKX       56
-#define SELECT_SLOT05       57
-#define SLOT05_CLICKX       58
-#define SELECT_SLOT06       59
-#define SLOT06_CLICKX       60
-#define SELECT_SLOT07       61
-#define SLOT07_CLICKX       62
-#define SELECT_SLOT08       63
-#define SLOT08_CLICKX       64
-#define SELECT_SLOT09       65
-#define SLOT09_CLICKX       66
-#define SELECT_SLOT10       67
-#define SLOT10_CLICKX       68
+/* -- Shared magic-slot handlers (49..50) -- */
+#define SELECT_SLOT         49
+#define SLOT_CLICKX         50
 
-/* -- UI2 actions (69..78) -- */
-#define MODE_UP_UI2         69
-#define ON_TURBO_UI2        70
-#define ON_MIN_UI2          71
-#define ON_MOON_UI2         72
-#define ON_XMODE_UI2        73
-#define MODE_DOWN_UI2       74
-#define STEP_DOWN_UI2       75
-#define ENTER_UIS_MODE      76
-#define UIS_CLICKX          77
-#define RESET2DEF           78
+/* -- UI2 actions (51..60) -- */
+#define MODE_UP_UI2         51
+#define ON_TURBO_UI2        52
+#define ON_MIN_UI2          53
+#define ON_MOON_UI2         54
+#define ON_XMODE_UI2        55
+#define MODE_DOWN_UI2       56
+#define STEP_DOWN_UI2       57
+#define ENTER_UIS_MODE      58
+#define UIS_CLICKX          59
+#define RESET2DEF           60
 
 /*******************************************************************************
  *  Main action function table

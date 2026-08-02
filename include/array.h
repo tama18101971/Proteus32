@@ -27,6 +27,9 @@ typedef enum {
 	RESERV11,           /**< Reserved */
 } FUN_Index_t;
 
+#define SLOT_OP_FIRST  SLOT_OP_EMPTY
+#define SLOT_OP_LAST   SLOT_MEMORY
+
 /*
  * Fixed commands for the ten OFF-state slot gestures.  These are also the
  * factory contents programmed into Option Bytes.  Keeping this mapping here

@@ -807,8 +807,10 @@ void slotN_clickX(void)
 {
 #ifdef USE_MAGIC_SLOTS
     uint8_t slot = driver_mode - MODE_SLOT01;
+    uint8_t op = (clicks_count >= SLOT_OP_FIRST && clicks_count <= SLOT_OP_LAST)
+               ? clicks_count : SLOT_OP_EMPTY;
     aux_count(clicks_count);
-    ob_SetSlot(slot, clicks_count);
+    ob_SetSlot(slot, op);
     driver_mode = MODE_MAGIC;
 #else
     (void)0;

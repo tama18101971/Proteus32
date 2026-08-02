@@ -15,7 +15,7 @@
 #include "array.h"
 #include "ob.h"
 
-#define MAIN_OP_COUNT 79
+#define MAIN_OP_COUNT 61
 
 /* Current UI index used for table selection. Defined in ui.c. */
 extern uint8_t ui_table_idx;
@@ -186,29 +186,29 @@ static const dispatch_t usr_table[] = {
     { MODE_CTK_H, 0, 0, true,  false, MENU_EXIT,   false, 0 },
 
     /* -- Magic mode -- */
-    { MODE_MAGIC, 1,  0, false, true,  SELECT_SLOT01, false, 0 },
-    { MODE_MAGIC, 2,  0, false, true,  SELECT_SLOT02, false, 0 },
-    { MODE_MAGIC, 3,  0, false, true,  SELECT_SLOT03, false, 0 },
-    { MODE_MAGIC, 4,  0, false, true,  SELECT_SLOT04, false, 0 },
-    { MODE_MAGIC, 5,  0, false, true,  SELECT_SLOT05, false, 0 },
-    { MODE_MAGIC, 6,  0, false, true,  SELECT_SLOT06, false, 0 },
-    { MODE_MAGIC, 7,  0, false, true,  SELECT_SLOT07, false, 0 },
-    { MODE_MAGIC, 8,  0, false, true,  SELECT_SLOT08, false, 0 },
-    { MODE_MAGIC, 9,  0, false, true,  SELECT_SLOT09, false, 0 },
-    { MODE_MAGIC, 10, 0, false, true,  SELECT_SLOT10, false, 0 },
+    { MODE_MAGIC, 1,  0, false, true,  SELECT_SLOT, false, 0 },
+    { MODE_MAGIC, 2,  0, false, true,  SELECT_SLOT, false, 0 },
+    { MODE_MAGIC, 3,  0, false, true,  SELECT_SLOT, false, 0 },
+    { MODE_MAGIC, 4,  0, false, true,  SELECT_SLOT, false, 0 },
+    { MODE_MAGIC, 5,  0, false, true,  SELECT_SLOT, false, 0 },
+    { MODE_MAGIC, 6,  0, false, true,  SELECT_SLOT, false, 0 },
+    { MODE_MAGIC, 7,  0, false, true,  SELECT_SLOT, false, 0 },
+    { MODE_MAGIC, 8,  0, false, true,  SELECT_SLOT, false, 0 },
+    { MODE_MAGIC, 9,  0, false, true,  SELECT_SLOT, false, 0 },
+    { MODE_MAGIC, 10, 0, false, true,  SELECT_SLOT, false, 0 },
     { MODE_MAGIC, 0,  0, true,  false, EXIT_MAGIC_MODE, false, 0 },
 
     /* -- Slot programming -- */
-    { MODE_SLOT01, 0, 0, false, true, SLOT01_CLICKX, false, 0 },
-    { MODE_SLOT02, 0, 0, false, true, SLOT02_CLICKX, false, 0 },
-    { MODE_SLOT03, 0, 0, false, true, SLOT03_CLICKX, false, 0 },
-    { MODE_SLOT04, 0, 0, false, true, SLOT04_CLICKX, false, 0 },
-    { MODE_SLOT05, 0, 0, false, true, SLOT05_CLICKX, false, 0 },
-    { MODE_SLOT06, 0, 0, false, true, SLOT06_CLICKX, false, 0 },
-    { MODE_SLOT07, 0, 0, false, true, SLOT07_CLICKX, false, 0 },
-    { MODE_SLOT08, 0, 0, false, true, SLOT08_CLICKX, false, 0 },
-    { MODE_SLOT09, 0, 0, false, true, SLOT09_CLICKX, false, 0 },
-    { MODE_SLOT10, 0, 0, false, true, SLOT10_CLICKX, false, 0 },
+    { MODE_SLOT01, 0, 0, false, true, SLOT_CLICKX, false, 0 },
+    { MODE_SLOT02, 0, 0, false, true, SLOT_CLICKX, false, 0 },
+    { MODE_SLOT03, 0, 0, false, true, SLOT_CLICKX, false, 0 },
+    { MODE_SLOT04, 0, 0, false, true, SLOT_CLICKX, false, 0 },
+    { MODE_SLOT05, 0, 0, false, true, SLOT_CLICKX, false, 0 },
+    { MODE_SLOT06, 0, 0, false, true, SLOT_CLICKX, false, 0 },
+    { MODE_SLOT07, 0, 0, false, true, SLOT_CLICKX, false, 0 },
+    { MODE_SLOT08, 0, 0, false, true, SLOT_CLICKX, false, 0 },
+    { MODE_SLOT09, 0, 0, false, true, SLOT_CLICKX, false, 0 },
+    { MODE_SLOT10, 0, 0, false, true, SLOT_CLICKX, false, 0 },
 
     /* -- Block/unblock -- */
     { MODE_BLOCK,  6, 0, false, false, UNBLOCK_DRV,   false, 0 },
@@ -272,7 +272,11 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout)
         uint8_t op_idx = f_op;
 #ifdef USE_MAGIC_SLOTS
         if (f_slot)
+        {
             op_idx = ob_GetSlot(table[i].slot_idx);
+            if (op_idx < SLOT_OP_FIRST || op_idx > SLOT_OP_LAST)
+                op_idx = SLOT_OP_EMPTY;
+        }
 #endif
 
         if (op_idx < MAIN_OP_COUNT && main_op[op_idx])
@@ -350,19 +354,10 @@ void (*main_op[])(void) = {
 
     /*48*/ enter_magic_mode,
 
-    /*49..68*/
-    select_slot, slotN_clickX,
-    select_slot, slotN_clickX,
-    select_slot, slotN_clickX,
-    select_slot, slotN_clickX,
-    select_slot, slotN_clickX,
-    select_slot, slotN_clickX,
-    select_slot, slotN_clickX,
-    select_slot, slotN_clickX,
-    select_slot, slotN_clickX,
+    /*49..50*/
     select_slot, slotN_clickX,
 
-    /*69..78*/
+    /*51..60*/
     mode_up_ui2,
     on_turbo_ui2,
     on_min_ui2,
