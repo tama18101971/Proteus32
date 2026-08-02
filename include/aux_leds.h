@@ -16,8 +16,8 @@
  *   [16:11] win0       — AWU window for 1st half-period (0..63)
  *   [19:17] psc1       — AWU prescaler index for 2nd half-period
  *   [25:20] win1       — AWU window for 2nd half-period
- *   [28:26] brightness0 — brightness of 1st half-period (0=off, 1=on)
- *   [31:29] brightness1 — brightness of 2nd half-period (0=off, 1=on)
+ *   [28:26] brightness0 — modes[] index for 1st half-period (0..6)
+ *   [31:29] brightness1 — modes[] index for 2nd half-period (0..6)
  *
  * Half-period time: (prescaler_value × win) / 128000 seconds
  * Parameters set via MAKE_CMD(device, cycle, count, psc0, win0, psc1, win1, brightness0, brightness1)
@@ -140,8 +140,8 @@ union AUX_Cmd_u {
 		uint32_t win0        : 6;  /**< Bits 11..16: AWU window for 1st half-period (0..63) */
 		uint32_t psc1        : 3;  /**< Bits 17..19: AWU prescaler index for 2nd half-period */
 		uint32_t win1        : 6;  /**< Bits 20..25: AWU window for 2nd half-period */
-		uint32_t brightness0 : 3;  /**< Bits 26..28: brightness of 1st half-period (0=off, 1=on) */
-		uint32_t brightness1 : 3;  /**< Bits 29..31: brightness of 2nd half-period */
+		uint32_t brightness0 : 3;  /**< Bits 26..28: modes[] index of 1st half-period */
+		uint32_t brightness1 : 3;  /**< Bits 29..31: modes[] index of 2nd half-period */
 	} aux;
 
 	/** @brief System command fields */
@@ -381,8 +381,8 @@ union AUX_Cmd_u *handle_aux_array(const uint32_t pBuffer[], AUX_Ctr_t *ubits);
  * @param win0         значение окна 1-го полупериода (0..63)
  * @param psc1         индекс предделителя 2-го полупериода
  * @param win1         значение окна 2-го полупериода (0..63)
- * @param brightness0  яркость 1-го полупериода (0=выкл, 1=ярко)
- * @param brightness1  яркость 2-го полупериода (0=выкл, 1=ярко)
+ * @param brightness0  индекс modes[] 1-го полупериода (0=выкл, 1..6=уровень)
+ * @param brightness1  индекс modes[] 2-го полупериода (0=выкл, 1..6=уровень)
  */
 #define MAKE_CMD(device, cycle, count, psc0, win0, psc1, win1, brightness0, brightness1) \
 	((uint32_t)((device) & 0x7)              | \
@@ -440,8 +440,8 @@ union AUX_Cmd_u *handle_aux_array(const uint32_t pBuffer[], AUX_Ctr_t *ubits);
  * @param count        количество повторов (0..15)
  * @param ms0          длительность 1-го полупериода в миллисекундах
  * @param ms1          длительность 2-го полупериода в миллисекундах
- * @param brightness0  яркость 1-го полупериода (0=выкл, 1=ярко)
- * @param brightness1  яркость 2-го полупериода (0=выкл, 1=ярко)
+ * @param brightness0  индекс modes[] 1-го полупериода (0=выкл, 1..6=уровень)
+ * @param brightness1  индекс modes[] 2-го полупериода (0=выкл, 1..6=уровень)
  */
 #define MAKE_CMD_MS(device, cycle, count, ms0, ms1, brightness0, brightness1) \
     MAKE_CMD(device, cycle, count, \

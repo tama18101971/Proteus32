@@ -16,8 +16,8 @@
  *   [16:11] p0.win    — window 1st half-period (0..63)
  *   [19:17] p1.psc    — prescaler 2nd half-period
  *   [25:20] p1.win    — window 2nd half-period (0..63)
- *   [28:26] brightness0 — brightness 1st half-period
- *   [31:29] brightness1 — brightness 2nd half-period
+ *   [28:26] brightness0 — modes[] index 1st half-period
+ *   [31:29] brightness1 — modes[] index 2nd half-period
  *
  * Array command elements:
  *   Each element is either an LED command (is_cmd != 0)
@@ -100,27 +100,19 @@ bool EnableArrayProcessing = false;
 const uint32_t *current_buf = NULL;
 
 #ifdef USE_STROBE
-typedef struct {
-    uint16_t step0;
-    uint16_t step1;
-    uint8_t  psc0;
-    uint8_t  win0;
-    uint8_t  psc1;
-    uint8_t  win1;
-} strobe_pattern_t;
-
-/* Ported from the AVR HBL commands.  The original 8-bit levels 254, 150,
- * and 98 are doubled for this project's 9-bit DAC step domain. */
-static const strobe_pattern_t strobe_patterns[STROBE_COUNT] = {
-    {508u,   0u, AWU_PSC_256, 15u, AWU_PSC_256, 15u}, /* 30ms / 30ms */
-    {508u, 196u, AWU_PSC_512, 15u, AWU_PSC_10240, 25u}, /* 60ms / 2s */
-    {300u,   0u, AWU_PSC_512, 15u, AWU_PSC_2048,  63u}, /* 60ms / ~1s */
-    {300u,   0u, AWU_PSC_512, 15u, AWU_PSC_10240, 50u}, /* 60ms / 4s */
+/* Strobe profiles use the same packed command format as every other AUX
+ * sequence.  The old raw levels map to the nearest entries in modes[]:
+ * 508 -> TURBO (511), 196 -> MID (220), and 300 -> MAX (360). */
+static const uint32_t strobe_commands[STROBE_COUNT] = {
+    MAKE_CMD(HBL_LED, 1, 0, AWU_PSC_256, 15, AWU_PSC_256, 15,
+             CMODE_TURBO, CMODE_OFF), /* 30ms / 30ms */
+    MAKE_CMD(HBL_LED, 1, 0, AWU_PSC_512, 15, AWU_PSC_10240, 25,
+             CMODE_TURBO, CMODE_MID), /* 60ms / 2s */
+    MAKE_CMD(HBL_LED, 1, 0, AWU_PSC_512, 15, AWU_PSC_2048, 63,
+             CMODE_MAX, CMODE_OFF), /* 60ms / ~1s */
+    MAKE_CMD(HBL_LED, 1, 0, AWU_PSC_512, 15, AWU_PSC_10240, 50,
+             CMODE_MAX, CMODE_OFF), /* 60ms / 4s */
 };
-
-static uint8_t strobe_index_active;
-static bool strobe_second_phase;
-static bool strobe_active;
 #endif
 
 /**
@@ -188,12 +180,6 @@ bool is_aux_mode(IDM_Type_t mode) {
  */
 bool aux_needs_dac(void)
 {
-	#ifdef USE_STROBE
-	if (strobe_active) {
-		return true;
-	}
-	#endif
-
 	return aux_ctl.enable && p_aux &&
 	       (((LED_Bits_t)p_aux->aux.device & HBL_LED) != 0u);
 }
@@ -215,12 +201,6 @@ bool is_aux_active(void) {
 void off_aux_cmd(bool stop_lsi) {
 	bool had_dac_output = aux_needs_dac();
 
-	#ifdef USE_STROBE
-	if (strobe_active || aux_ctl.idmode == IDM_STROBE) {
-		strobe_active = false;
-		strobe_second_phase = false;
-	}
-	#endif
 	if (had_dac_output) {
 		out_set_stc(0u);
 	}
@@ -310,11 +290,12 @@ void start_aux_cmd(uint32_t command, bool enable, IDM_Type_t idm_mode, awu_tick_
 }
 
 /**
- * @brief Установка яркости светодиодов
- * @param device — битовая маска каналов (RED_LED, GRN_LED, HBL_LED, комбинации)
- * @param brightness — яркость (0=выкл, 1=ярко)
+ * @brief Установка яркости каналов AUX/строба
+ * @param device Битовая маска каналов (RED_LED, GRN_LED, HBL_LED).
+ * @param brightness Индекс уровня в modes[] для HBL, 0/1 для GPIO LED.
  */
-static void SetBrightness(LED_Bits_t device, uint8_t brightness) {
+static void SetBrightness(LED_Bits_t device, uint8_t brightness)
+{
 	if (device & RED_LED) {
 		if (brightness) on_red_h();
 		else smart_off_leds(RED_LED);
@@ -324,65 +305,28 @@ static void SetBrightness(LED_Bits_t device, uint8_t brightness) {
 		else smart_off_leds(GRN_LED);
 	}
 	if (device & HBL_LED) {
-		/* HBL is an AUX indication level, not a user brightness request.
-	 * Never call set_current(): its OFF path would power down the DAC and
-	 * corrupt step_user while the AUX state machine is still active. */
-		out_set_stc(brightness ? 1u : 0u);
+		/* HBL uses the same discrete brightness index as UI2.  Do not call
+		 * set_current(): it changes step_user and can power down the DAC. */
+		if (brightness >= CMODE_NOACTION)
+			brightness = CMODE_OFF;
+		out_set_stc(get_stepi(brightness));
 	}
 }
 
 #ifdef USE_STROBE
 /**
- * @brief Пошаговая обработка strobe-режима (переключение фаз)
- *
- * Чередует две фазы стробоскопа: включает DAC step0/step1 и
- * переключает AWU на соответствующий psc/win. Вызывается из
- * handle_aux() при активном strobe режиме.
- */
-static void handle_aux_strobe(void)
-{
-	const strobe_pattern_t *pattern = &strobe_patterns[strobe_index_active];
-
-	if (strobe_second_phase) {
-		out_set_stc(pattern->step0);
-		AWU_set_raw(pattern->psc0, pattern->win0);
-		strobe_second_phase = false;
-	} else {
-		out_set_stc(pattern->step1);
-		AWU_set_raw(pattern->psc1, pattern->win1);
-		strobe_second_phase = true;
-	}
-}
-
-/**
- * @brief Запуск энергоэффективного двухфазного DAC-стробоскопа
- *
- * Пattern runs from AWU wake-ups and does not change step_user or invoke
- * normal driver power management on its OFF phase.
- *
+ * @brief Запуск стробоскопа через общий AUX command handler.
  * @param index Strobe profile in range 0..STROBE_COUNT-1.
  */
 void start_aux_strobe(uint8_t index)
 {
-	if (index >= STROBE_COUNT) {
+	if (index >= STROBE_COUNT)
 		return;
-	}
 
-	off_aux_cmd(false);
-
-	strobe_index_active = index;
-	strobe_second_phase = false;
-	strobe_active = true;
-	aux_ctl.enable = true;
-	aux_ctl.idmode = IDM_STROBE;
-	p_aux = NULL;
-
-	const strobe_pattern_t *pattern = &strobe_patterns[index];
-	out_set_stc(pattern->step0);
-	AWU_set_raw(pattern->psc0, pattern->win0);
-	AWU_ON();
+	start_aux_cmd(strobe_commands[index], true, IDM_STROBE, AWU_15MS);
 }
 #else
+/** @brief Stub when strobe support is disabled. */
 void start_aux_strobe(uint8_t index)
 {
 	(void)index;
@@ -547,12 +491,6 @@ union AUX_Cmd_u *handle_aux_array(const uint32_t pArray[], AUX_Ctr_t *ctr) {
 bool handle_aux(void) {
 	AWU_OFF();
 
-	#ifdef USE_STROBE
-	if (strobe_active) {
-		handle_aux_strobe();
-	}
-	else
-	#endif
 	if (EnableArrayProcessing) {
 		p_aux = handle_aux_array(current_buf, &aux_ctl);
 		if (p_aux == NULL) EnableArrayProcessing = false;
@@ -650,7 +588,7 @@ void stop_aux_voltage(bool stop_lsi) {
 /** @brief Stop strobe mode if active. */
 void stop_aux_strobe(bool stop_lsi) {
 	#ifdef USE_STROBE
-	if (strobe_active || is_aux_mode(IDM_STROBE))
+	if (is_aux_mode(IDM_STROBE))
 		off_aux_cmd(stop_lsi);
 	#else
 	(void)stop_lsi;
