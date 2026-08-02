@@ -15,7 +15,7 @@
 #include "array.h"
 #include "ob.h"
 
-#define MAIN_OP_COUNT 61
+#define MAIN_OP_COUNT (RESET2DEF + 1)
 
 /* Current UI index used for table selection. Defined in ui.c. */
 extern uint8_t ui_table_idx;
@@ -313,51 +313,51 @@ void (*main_op[])(void) = {
     /*10*/ slot_ipsmode,
     /*11*/ slot_memory,
 
-    /*12..20 reserved */
-    0, 0, 0, 0, 0, 0, 0, 0, 0,
+    /*12 reserved */
+    0,
 
-    /*21*/ up_strobe,
-    /*22*/ back_strobe,
-    /*23*/ off_strobe,
-    /*24*/ unblock_drv,
-    /*25*/ off_driver_false,
+    /*13*/ up_strobe,
+    /*14*/ back_strobe,
+    /*15*/ off_strobe,
+    /*16*/ unblock_drv,
+    /*17*/ off_driver_false,
 
-    /*26*/ on_xmode_ui1,
-    /*27*/ on_rumpup_ui1,
-    /*28*/ on_rumpdown_ui1,
-    /*29*/ on_turbo_ui1,
-    /*30*/ calibration,
+    /*18*/ on_xmode_ui1,
+    /*19*/ on_rumpup_ui1,
+    /*20*/ on_rumpdown_ui1,
+    /*21*/ on_turbo_ui1,
+    /*22*/ calibration,
 
-    /*31*/ enter_rs_mode,
-    /*32*/ enter_ml_mode,
-    /*33*/ enter_pt_mode,
-    /*34*/ save_def_ui1,
-    /*35*/ save_def_ui2,
+    /*23*/ enter_rs_mode,
+    /*24*/ enter_ml_mode,
+    /*25*/ enter_pt_mode,
+    /*26*/ save_def_ui1,
+    /*27*/ save_def_ui2,
 
-    /*36*/ rs_clickX,
-    /*37*/ ml_clickX,
-    /*38*/ pt_clickX,
+    /*28*/ rs_clickX,
+    /*29*/ ml_clickX,
+    /*30*/ pt_clickX,
 
-    /*39*/ menu_exit,
+    /*31*/ menu_exit,
 
-    /*40*/ enter_chtk_mode,
-    /*41*/ chtk_clickX,
+    /*32*/ enter_chtk_mode,
+    /*33*/ chtk_clickX,
 
-    /*42*/ enter_bm_mode,
-    /*43*/ bm_clickX,
+    /*34*/ enter_bm_mode,
+    /*35*/ bm_clickX,
 
-    /*44*/ enter_bt_mode,
-    /*45*/ bt_clickX,
+    /*36*/ enter_bt_mode,
+    /*37*/ bt_clickX,
 
-    /*46*/ enter_bl_mode,
-    /*47*/ bl_clickX,
+    /*38*/ enter_bl_mode,
+    /*39*/ bl_clickX,
 
-    /*48*/ enter_magic_mode,
+    /*40*/ enter_magic_mode,
 
-    /*49..50*/
+    /*41..42*/
     select_slot, slotN_clickX,
 
-    /*51..60*/
+    /*43..52*/
     mode_up_ui2,
     on_turbo_ui2,
     on_min_ui2,

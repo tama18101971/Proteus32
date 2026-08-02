@@ -53,71 +53,71 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout);
  *    EXIT_MAGIC_MODE = 0, SLOT_EMPTY, SLOT_BATT_IND, ... SLOT_MEMORY
  */
 
-/* -- Reserved: 12..20 -- */
+/* -- Reserved: 12 -- */
 
-/* -- UI1 strobe / block (21..25) -- */
-#define UP_STROBE_UI1       21
-#define BACK_STROBE_UI1     22
-#define OFF_STROBE_UI1      23
-#define UNBLOCK_DRV         24
-#define OFF_DRV_FALSE       25
+/* -- UI1 strobe / block (13..17) -- */
+#define UP_STROBE_UI1       13
+#define BACK_STROBE_UI1     14
+#define OFF_STROBE_UI1      15
+#define UNBLOCK_DRV         16
+#define OFF_DRV_FALSE       17
 
-/* -- UI1 brightness / mode (26..30) -- */
-#define ON_XMODE_UI1        26
-#define ON_RUMPUP_UI1       27
-#define ON_RUMPDOWN_UI1     28
-#define ON_TURBO_UI1        29
-#define CALIBRATION         30
+/* -- UI1 brightness / mode (18..22) -- */
+#define ON_XMODE_UI1        18
+#define ON_RUMPUP_UI1       19
+#define ON_RUMPDOWN_UI1     20
+#define ON_TURBO_UI1        21
+#define CALIBRATION         22
 
-/* -- Engineering menu: enter (31..35) -- */
-#define ENTER_RS_MODE       31
-#define ENTER_ML_MODE       32
-#define ENTER_PT_MODE       33
-#define SAVE_DEF_UI1        34
-#define SAVE_DEF_UI2        35
+/* -- Engineering menu: enter (23..27) -- */
+#define ENTER_RS_MODE       23
+#define ENTER_ML_MODE       24
+#define ENTER_PT_MODE       25
+#define SAVE_DEF_UI1        26
+#define SAVE_DEF_UI2        27
 
-/* -- Engineering menu: click actions (36..38) -- */
-#define RS_CLICKX           36
-#define ML_CLICKX           37
-#define PT_CLICKX           38
+/* -- Engineering menu: click actions (28..30) -- */
+#define RS_CLICKX           28
+#define ML_CLICKX           29
+#define PT_CLICKX           30
 
-/* -- Menu exit (39) -- */
-#define MENU_EXIT           39
+/* -- Menu exit (31) -- */
+#define MENU_EXIT           31
 
-/* -- User menu: thermocontrol (40..41) -- */
-#define ENTER_CHTK_MODE     40
-#define CHTK_CLICKX         41
+/* -- User menu: thermocontrol (32..33) -- */
+#define ENTER_CHTK_MODE     32
+#define CHTK_CLICKX         33
 
-/* -- User menu: beacon mode (42..43) -- */
-#define ENTER_BM_MODE       42
-#define BM_CLICKX           43
+/* -- User menu: beacon mode (34..35) -- */
+#define ENTER_BM_MODE       34
+#define BM_CLICKX           35
 
-/* -- User menu: beacon type (44..45) -- */
-#define ENTER_BT_MODE       44
-#define BT_CLICKX           45
+/* -- User menu: beacon type (36..37) -- */
+#define ENTER_BT_MODE       36
+#define BT_CLICKX           37
 
-/* -- User menu: backlight (46..47) -- */
-#define ENTER_BL_MODE       46
-#define BL_CLICKX           47
+/* -- User menu: backlight (38..39) -- */
+#define ENTER_BL_MODE       38
+#define BL_CLICKX           39
 
-/* -- Magic slot (48) -- */
-#define ENTER_MAGIC_MODE    48
+/* -- Magic slot (40) -- */
+#define ENTER_MAGIC_MODE    40
 
-/* -- Shared magic-slot handlers (49..50) -- */
-#define SELECT_SLOT         49
-#define SLOT_CLICKX         50
+/* -- Shared magic-slot handlers (41..42) -- */
+#define SELECT_SLOT         41
+#define SLOT_CLICKX         42
 
-/* -- UI2 actions (51..60) -- */
-#define MODE_UP_UI2         51
-#define ON_TURBO_UI2        52
-#define ON_MIN_UI2          53
-#define ON_MOON_UI2         54
-#define ON_XMODE_UI2        55
-#define MODE_DOWN_UI2       56
-#define STEP_DOWN_UI2       57
-#define ENTER_UIS_MODE      58
-#define UIS_CLICKX          59
-#define RESET2DEF           60
+/* -- UI2 actions (43..52) -- */
+#define MODE_UP_UI2         43
+#define ON_TURBO_UI2        44
+#define ON_MIN_UI2          45
+#define ON_MOON_UI2         46
+#define ON_XMODE_UI2        47
+#define MODE_DOWN_UI2       48
+#define STEP_DOWN_UI2       49
+#define ENTER_UIS_MODE      50
+#define UIS_CLICKX          51
+#define RESET2DEF           52
 
 /*******************************************************************************
  *  Main action function table
