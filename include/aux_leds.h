@@ -353,10 +353,6 @@ void handle_aux_cmd(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits);
  */
 union AUX_Cmd_u *handle_aux_array(const uint32_t pBuffer[], AUX_Ctr_t *ubits);
 
-#define INFO_RED  MAKE_CMD(RED_LED, 0, 1, AWU_PSC_1024, 56, AWU_PSC_2048, 56, 1, 0)  /* 1 красная ~448мс */
-#define INFO_GRN  MAKE_CMD(GRN_LED, 0, 1, AWU_PSC_512, 56, AWU_PSC_4096, 35, 1, 0)  /* 1 зелёная ~1.3с */
-#define ERRO_RED  MAKE_CMD(RED_LED, 0, 3, AWU_PSC_128, 15, AWU_PSC_256, 45, 1, 0)   /* 3 красных ~15/90мс */
-
 /**
  * @brief Макрос формирования 32-битной AUX-команды
  *
@@ -390,41 +386,63 @@ union AUX_Cmd_u *handle_aux_array(const uint32_t pBuffer[], AUX_Ctr_t *ubits);
 	 ((uint32_t)((brightness1) & 0x7) << 29))
 
 /**
- * @brief Автоматический подбор предделителя и окна AWU по миллисекундам
+ * @brief Round an AWU window for a requested period.
  *
- * Формула: time_ms = (psc_value * win) / 128, ограничение win ≤ 63.
- * Выбирается минимальный предделитель, при котором win укладывается в 6 бит.
- * Целочисленное деление — подбирайте ms кратными делителю для точного совпадения.
+ * The AWU period is psc_value * window / 128 milliseconds.  The rounded
+ * window is clamped to the 6-bit hardware range.  A zero request remains
+ * zero because it is used by command encodings that must not wait.
+ */
+#define AWU_MS_WIN_FOR(ms, psc_value) \
+	((ms) == 0U ? 0U : \
+	 ((((uint32_t)(ms) * 128UL + ((psc_value) / 2UL)) / (psc_value)) < 1UL ? 1U : \
+	  (((uint32_t)(ms) * 128UL + ((psc_value) / 2UL)) / (psc_value)) > 63UL ? 63U : \
+	  (((uint32_t)(ms) * 128UL + ((psc_value) / 2UL)) / (psc_value))))
+
+/**
+ * @brief Compare period error without floating-point arithmetic.
+ * @return Absolute error multiplied by 128 (milliseconds * 128).
+ */
+#define AWU_MS_ERROR(ms, psc_value) \
+	((uint32_t)(((uint32_t)(ms) * 128UL) >= \
+	 ((uint32_t)(psc_value) * AWU_MS_WIN_FOR((ms), (psc_value))) ? \
+	 ((uint32_t)(ms) * 128UL) - \
+	 ((uint32_t)(psc_value) * AWU_MS_WIN_FOR((ms), (psc_value))) : \
+	 ((uint32_t)(psc_value) * AWU_MS_WIN_FOR((ms), (psc_value))) - \
+	 ((uint32_t)(ms) * 128UL)))
+
+/**
+ * @brief Select an AWU prescaler for a millisecond period.
  *
- * Границы:
- *   ms ≤ 63    → PSC_128,   win = ms
- *   ms ≤ 126   → PSC_256,   win = ms / 2
- *   ms ≤ 252   → PSC_512,   win = ms / 4
- *   ms ≤ 504   → PSC_1024,  win = ms / 8
- *   ms ≤ 1008  → PSC_2048,  win = ms / 16
- *   ms ≤ 2016  → PSC_4096,  win = ms / 32
- *   ms ≤ 5040  → PSC_10240, win = ms / 80
- *   иначе      → PSC_61440, win = ms / 480
+ * AWU windows are rounded to the nearest integer.  The limits below select
+ * the finest practical prescaler over each monotonic time range while
+ * keeping this macro small enough for the embedded compiler to expand.
+ * This is a monotonic approximation, not a full search for the globally
+ * smallest absolute error: the finer prescaler remains selected until its
+ * 6-bit window reaches the useful end of its range.  Ties at a boundary
+ * select the smaller prescaler.
+ *
+ * Supported nominal range is 0..30240 ms.  Requests above 30240 ms use
+ * AWU_PSC_61440 with window 63 and therefore saturate at 30240 ms.
  */
 #define AWU_MS_PSC(ms) \
-    ((ms) <= 63   ? AWU_PSC_128   : \
-     (ms) <= 126  ? AWU_PSC_256   : \
-     (ms) <= 252  ? AWU_PSC_512   : \
-     (ms) <= 504  ? AWU_PSC_1024  : \
-     (ms) <= 1008 ? AWU_PSC_2048  : \
-     (ms) <= 2016 ? AWU_PSC_4096  : \
-     (ms) <= 5040 ? AWU_PSC_10240 : \
-                    AWU_PSC_61440)
+	((ms) <= 63UL    ? AWU_PSC_128   : \
+	 (ms) <= 127UL   ? AWU_PSC_256   : \
+	 (ms) <= 254UL   ? AWU_PSC_512   : \
+	 (ms) <= 508UL   ? AWU_PSC_1024  : \
+	 (ms) <= 1016UL  ? AWU_PSC_2048  : \
+	 (ms) <= 2048UL  ? AWU_PSC_4096  : \
+	 (ms) <= 5160UL  ? AWU_PSC_10240 : \
+	                  AWU_PSC_61440)
 
+/**
+ * @brief Return the rounded AWU window for a millisecond period.
+ *
+ * The selected window is clamped to the hardware range 1..63 for a
+ * non-zero request.  Consequently, periods above the maximum AWU range
+ * saturate at the largest representable period.
+ */
 #define AWU_MS_WIN(ms) \
-    ((ms) <= 63   ? (ms)       : \
-     (ms) <= 126  ? ((ms)/2)   : \
-     (ms) <= 252  ? ((ms)/4)   : \
-     (ms) <= 504  ? ((ms)/8)   : \
-     (ms) <= 1008 ? ((ms)/16)  : \
-     (ms) <= 2016 ? ((ms)/32)  : \
-     (ms) <= 5040 ? ((ms)/80)  : \
-                    ((ms)/480))
+	AWU_MS_WIN_FOR((ms), AWU_PSC_VALUE(AWU_MS_PSC(ms)))
 
 /**
  * @brief MAKE_CMD с миллисекундами вместо psc/win
@@ -436,11 +454,20 @@ union AUX_Cmd_u *handle_aux_array(const uint32_t pBuffer[], AUX_Ctr_t *ubits);
  * @param ms1          длительность 2-го полупериода в миллисекундах
  * @param brightness0  индекс modes[] 1-го полупериода (0=выкл, 1..6=уровень)
  * @param brightness1  индекс modes[] 2-го полупериода (0=выкл, 1..6=уровень)
+ *
+ * Для каждого полупериода выбирается монотонный диапазон предделителя,
+ * затем окно округляется к ближайшему целому. Номинальный диапазон
+ * длительности — 0..30240 мс; значения больше 30240 мс насыщаются на
+ * максимуме AWU. Реальное время дополнительно зависит от частоты LSI.
  */
 #define MAKE_CMD_MS(device, cycle, count, ms0, ms1, brightness0, brightness1) \
     MAKE_CMD(device, cycle, count, \
              AWU_MS_PSC(ms0), AWU_MS_WIN(ms0), \
              AWU_MS_PSC(ms1), AWU_MS_WIN(ms1), \
              brightness0, brightness1)
+
+#define INFO_RED  MAKE_CMD_MS(RED_LED, 0, 1, 448, 896, 1, 0)  /* 1 красная ~448/896мс */
+#define INFO_GRN  MAKE_CMD_MS(GRN_LED, 0, 1, 224, 1120, 1, 0) /* 1 зелёная ~224/1120мс */
+#define ERRO_RED  MAKE_CMD_MS(RED_LED, 0, 3, 15, 90, 1, 0)    /* 3 красных ~15/90мс */
 
 #endif /* AUX_LEDS_H_ */

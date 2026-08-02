@@ -89,35 +89,23 @@ typedef struct {
  * Each pulse uses the same modes[] index as the single-command profiles. */
 static const uint32_t strobe_sos[] = {
     /* S: ... */
-    MAKE_CMD(HBL_LED, 0, 3, AWU_PSC_256, 63, AWU_PSC_256, 63,
-             CMODE_TURBO, CMODE_OFF),
+    MAKE_CMD_MS(HBL_LED, 0, 3, 126, 126, CMODE_TURBO, CMODE_OFF),
     /* O: --- */
-    MAKE_CMD(HBL_LED, 0, 3, AWU_PSC_1024, 47, AWU_PSC_256, 63,
-             CMODE_TURBO, CMODE_OFF),
+    MAKE_CMD_MS(HBL_LED, 0, 3, 376, 126, CMODE_TURBO, CMODE_OFF),
     /* S: ... */
-    MAKE_CMD(HBL_LED, 0, 3, AWU_PSC_256, 63, AWU_PSC_256, 63,
-             CMODE_TURBO, CMODE_OFF),
+    MAKE_CMD_MS(HBL_LED, 0, 3, 126, 126, CMODE_TURBO, CMODE_OFF),
     /* Pause between SOS repetitions. */
-    MAKE_CMD(HBL_LED, 0, 0, AWU_PSC_1024, 55, AWU_PSC_1024, 55,
-             CMODE_OFF, CMODE_OFF),
+    MAKE_CMD_MS(HBL_LED, 0, 0, 440, 440, CMODE_OFF, CMODE_OFF),
     AC_REP_ATSTART,
 };
 
 /* A profile may be one packed command or an arbitrary command array.  New
  * multi-phase strobes only need an array and one descriptor below. */
 static const strobe_profile_t strobe_commands[STROBE_COUNT] = {
-    { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD(
-        HBL_LED, 1, 0, AWU_PSC_256, 15, AWU_PSC_256, 15,
-        CMODE_TURBO, CMODE_OFF) } }, /* 30ms / 30ms */
-    { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD(
-        HBL_LED, 1, 0, AWU_PSC_512, 15, AWU_PSC_10240, 25,
-        CMODE_TURBO, CMODE_MID) } }, /* 60ms / 2s */
-    { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD(
-        HBL_LED, 1, 0, AWU_PSC_512, 15, AWU_PSC_2048, 63,
-        CMODE_MAX, CMODE_OFF) } }, /* 60ms / ~1s */
-    { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD(
-        HBL_LED, 1, 0, AWU_PSC_512, 15, AWU_PSC_10240, 50,
-        CMODE_MAX, CMODE_OFF) } }, /* 60ms / 4s */
+    { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD_MS(HBL_LED, 1, 0, 30, 30, CMODE_TURBO, CMODE_OFF) } }, /* 30ms / 30ms */
+    { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD_MS(HBL_LED, 1, 0, 60, 2000, CMODE_TURBO, CMODE_MID) } }, /* 60ms / 2s */
+    { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD_MS(HBL_LED, 1, 0, 60, 1008, CMODE_MAX, CMODE_OFF) } }, /* 60ms / ~1s */
+    { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD_MS(HBL_LED, 1, 0, 60, 4000, CMODE_MAX, CMODE_OFF) } }, /* 60ms / 4s */
     { STROBE_PROFILE_ARRAY,   { .array = strobe_sos } },
 };
 #endif
