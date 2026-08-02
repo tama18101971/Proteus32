@@ -140,6 +140,15 @@ int main(void)
          * instead leave the FSM running through the full click timeout;
          * otherwise the first press would abort or be lost before UI can
          * choose between OFF (one click) and next pattern (two clicks). */
+        /* Tactical mode bypasses the button FSM and must remain awake while
+         * the button is held.  Its release cannot wake the MCU because EXTI3
+         * is configured for the press (falling) edge only. */
+        if ((ui_table_idx == 0U) && Pressed)
+        {
+            need_sleep = false;
+            tick_5s_reset();
+        }
+
         if (need_sleep ||
             (is_aux_mode(IDM_STROBE) && !button_sequence_active()))
         {
