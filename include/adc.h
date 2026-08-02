@@ -115,7 +115,7 @@ uint16_t get_exact_temp_adc(void);
  * @brief Main battery protection loop (call at 30 Hz after adc_read()).
  *
  * Implements UI1 ramping and UI2 discrete mode voltage protection.
- * Updates volt_max_mode, volt_stop_mode, down_count, max_min.
+ * Updates volt_max_mode, volt_stop_mode, down_count, volt_step_ratchet.
  */
 void scan_voltage(void);
 
@@ -128,14 +128,16 @@ extern uint8_t volt_stop_mode;
 /** @brief UI1 step-down counter (reset in on_driver). */
 extern uint8_t down_count;
 
-/** @brief Monotonically decreasing UI1 step ceiling by voltage. */
-extern uint16_t max_min;
+/** @brief UI1 sag ratchet: monotonically decreasing step ceiling by voltage. */
+extern uint16_t volt_step_ratchet;
 
 /**
- * @brief Get UI1 brightness ceiling based on battery voltage.
- * @return Max allowed step (0..511).
+ * @brief Apply the UI1 sag ratchet and return the current ceiling.
+ *
+ * Lowers volt_step_ratchet to the Vbat-based tier when it is lower,
+ * then returns it. This function has a side effect.
  */
-uint16_t get_max_step(void);
+uint16_t ratchet_max_step(void);
 
 /**
  * @brief Clear the historical UI1 voltage ceiling after a confirmed recovery.

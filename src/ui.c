@@ -1045,7 +1045,14 @@ void ui_process(void)
                  * including a genuinely depleted cell, still follows the
                  * normal low-voltage ceiling and shutdown paths. */
                 if (vbat_mv != 0U)
-                    max_step = get_max_step() - (limiter + 1);
+                {
+                    /* Насыщающее вычитание: если термо-запас (limiter+1)
+                     * превысил крышку, uint16_t-перенос дал бы ~65000 и
+                     * молча отключил бы защиту АКБ. Предел 1 сохраняет
+                     * корректный DIR_DOWN и запрет рампы вверх. */
+                    uint16_t vcap = ratchet_max_step();
+                    max_step = (limiter + 1 >= vcap) ? 1u : (uint16_t)(vcap - (limiter + 1));
+                }
                 stop_aux_beacon(false);
                 if (step_tc >= max_step) direction = DIR_DOWN;
             }

@@ -46,10 +46,10 @@ uint8_t volt_stop_mode = CMODE_TURBO;
  * Глобальный — чтобы on_driver() в ui.c мог его сбросить. */
 uint8_t down_count = 5;
 
-/* Монотонно убывающий потолок шага по напряжению для UI1 (ramping).
- * Он сбрасывается лишь на новой попытке включения с подтверждённо
- * восстановившимся напряжением (reset_max_step()). */
-uint16_t max_min = MAX_STEP;
+/* Храповик потолка яркости UI1 (ramping): монотонно убывает по мере
+ * просадки АКБ и сбрасывается лишь на новой попытке включения с
+ * подтверждённо восстановившимся напряжением (reset_max_step()). */
+uint16_t volt_step_ratchet = MAX_STEP;
 
 /* Таймаут циклов опроса флагов/битов АЦП (защита от зависания при сбое) */
 #define ADC_WAIT_TIMEOUT 100000
@@ -369,15 +369,15 @@ static uint8_t calc_volt_max_mode(uint16_t exact_v)
 }
 
 /* ============ Потолок яркости UI1 по напряжению (ramping) ============
- * Аналог AVR adc.c limiter[2][6] + get_max_step().
+ * Аналог AVR adc.c limiter[2][6] + ratchet_max_step().
  * volt_max_tbl — пороги в мВ (по возрастанию), step_max_tbl —
  * соответствующие 9-битные шаги (0..511), масштабированные из AVR 8-бит.
- * max_min монотонно убывает (MIN) до явного безопасного восстановления. */
+ * volt_step_ratchet монотонно убывает (MIN) до явного безопасного восстановления. */
 static const uint16_t volt_max_tbl[6] = {2500, 2820, 2930, 3080, 3190, 3300};
 static const uint16_t step_max_tbl[6] = {120, 240, 310, 400, 463, 511};
 
-/** @brief Get max allowed brightness step based on Vbat (monotonic decreasing). */
-uint16_t get_max_step(void)
+/** @brief Чистый расчёт потолка по текущему vbat_mv (без побочных эффектов). */
+static uint16_t calc_step_ceiling(void)
 {
     uint8_t i = 6;
     while (i > 0)
@@ -385,14 +385,20 @@ uint16_t get_max_step(void)
         i--;
         if (vbat_mv > volt_max_tbl[i]) break;
     }
-    uint16_t s = step_max_tbl[i];
-    if (s < max_min) max_min = s;
-    return max_min;
+    return step_max_tbl[i];
+}
+
+/** @brief Применить храповик: понизить volt_step_ratchet и вернуть его. */
+uint16_t ratchet_max_step(void)
+{
+    uint16_t s = calc_step_ceiling();
+    if (s < volt_step_ratchet) volt_step_ratchet = s;
+    return volt_step_ratchet;
 }
 
 void reset_max_step(void)
 {
-    max_min = MAX_STEP;
+    volt_step_ratchet = MAX_STEP;
 }
 
 extern uint8_t need_sleep;
