@@ -46,7 +46,7 @@ Main loop polls tick helpers (not ISR-driven beyond `tim2_ms` increment):
 - **`need_sleep`**: request to enter STANDBY next loop iteration. Set by 5s timer, cleared by button ISR.
 - **`is_sleep_mode`**: `true` after `AWU_Sleep_Now()`, `false` after button wake restore.
 
-Before STANDBY: `adc_stop() + tim2_stop()`. On button wake: `adc_init() + tim2_start() + dac_pwrpin_init() + i2c_init()`.
+Before STANDBY: `adc_stop() + tim2_stop()`. On button wake: `dac_pwrpin_restore() + i2c_init(400000) + adc_init() + tim2_start()`. On AWU wake: restore DAC/I2C **only if** `aux_needs_dac()` (strobe/HBL active), then `handle_aux()`.
 `AWU_IRQHandler` calls `SystemInit()` **only** when `is_sleep_mode == true`.
 
 ### Button FSM (`button.c/h`)
@@ -55,7 +55,7 @@ Debounced state machine at 160 Hz. Emits events (`btn_evt_t`): PRESSED, RELEASED
 
 ### UI dispatch (`ui_table.c/h`)
 
-Table-driven: `dispatch_t` entries map `(driver_mode + btn_evt_t)` to action functions via `main_op[]` function pointer table (79 entries). One dispatch table per UI type (ramping/UI1, discrete/UI2, engineering menu, user menu).
+Table-driven: `dispatch_t` entries map `(driver_mode + btn_evt_t)` to action functions via `main_op[]` function pointer table (`MAIN_OP_COUNT = RESET2DEF + 1` = 53 entries). One dispatch table per UI type (ramping/UI1, discrete/UI2, engineering menu, user menu).
 `select_slot()`/`slotN_clickX()` are shared for all 10 magic slots — slot index is derived from `driver_mode - MODE_SLOT01` (or `clicks_count - 1`).
 
 ### Soft start (`soft_start.c`)
@@ -96,9 +96,14 @@ Two-layer calibration:
 - **WL_FLASH**: wear-leveling EEPROM over flash. Fields accessed via `EE.fieldname` macro (`app_data.h` overlay on `ee_data`). Uses `WL_FLASH_LIGHT` variant (see platformio.ini).
 - **Option Bytes** (`ob.c/h`): separate from WL_FLASH. Cached in RAM, flushed explicitly via `ob_Flush()`. Contains 10 slots (`ob_GetSlot/SetSlot`) + counters (`ml`, `tc`, `vc`).
 
-### AUX LEDs (`aux_leds.c/h`)
+### AUX LEDs / strobes (`aux_leds.c/h`)
 
-State machine for blinking red/green/backlight LEDs via AWU timer. Commands are 32-bit packed words (`MAKE_CMD` or `MAKE_CMD_MS` macros) encoding device, timing, brightness, repeat count. `MAKE_CMD_MS` takes milliseconds instead of raw psc/win pairs — prefer it. Processed in `handle_aux()` during AWU wake cycles. Strobe patterns live in `aux_leds.c` (`strobe[4]`).
+AWU-sleep-driven FSM: `handle_aux()` executes **one** transition per AWU wake (main loop `WS_AWU` branch), then MCU sleeps `psc*win/128` ms. Commands are 32-bit words (`MAKE_CMD`/`MAKE_CMD_MS`): `device[2:0]`, `cycle[3]`, `count[7:4]`, `psc0[10:8]`, `win0[16:11]`, `psc1[19:17]`, `win1[25:20]`, `brightness0[28:26]`, `brightness1[31:29]`. Brightness indexes `modes[]` levels; HBL uses `get_stepi()` — never `set_current()` (it changes `step_user` and powers down the DAC).
+
+- **`MAKE_CMD_MS(device, cycle, count, ms0, ms1, b0, b1)`** preferred over raw psc/win. `AWU_MS_PSC` boundaries: 63/127/254/508/1016/2048/5160 ms, saturates at 30240 ms. `ms=0` → `win=0` = "must not wait" (avoids the AWU delay). Multi-phase arrays pair phases like SOS does — avoid bare `ms1=0` off-phases.
+- **Arrays**: elements are LED commands or system commands `AC_STOP` (end), `AC_REP_ATSTART` (loop from index 0), `AC_REP_ATSTEPS` (loop from `steps` field). A finite (`cycle=0`, count→0) HBL command ends dark — next array element loads in the same wake (no visible gap).
+- **Strobe profiles**: `strobe_commands[STROBE_COUNT]` in aux_leds.c — 4 single-command profiles + arrays `strobe_sos[]`, `strobe_bike2[]`. Adding a profile = new array (or packed command) + descriptor + bump `STROBE_COUNT` in aux_leds.h; `ui.c` strobe cycling wraps automatically.
+- **Strobe owns the DAC**: while `is_aux_mode(IDM_STROBE)`, main loop skips `adc_read()/scan_limiters()/scan_voltage()`. Strobe normally sleeps between AWU phases; a button wake keeps the FSM running through the click timeout so the first press isn't lost (gate at main.c:144).
 
 ### Engineering / user menus
 
@@ -117,7 +122,8 @@ Gated by `#ifdef USE_MENU`. Engineering menu includes `calibration()` (tc/vc) an
 | `include/thermal_limiter.h` | Compile-time constants (`THERMAL_*`), `ThermalLimiterConfig_t` |
 
 Feature toggles in `proteus_config.h`:
-- `USE_BATTIND`, `USE_STROBE`, `USE_BLOCK`, `USE_MENU`, `USE_MAGIC_SLOTS`, `USE_EX_AUX`
+- `USE_BATTIND`, `USE_STROBE`, `USE_BLOCK`, `USE_MENU`, `USE_MAGIC_SLOTS` — enabled
+- `USE_EX_AUX` — present but commented out (off by default)
 
 ## Style
 
