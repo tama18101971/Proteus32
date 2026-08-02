@@ -8,6 +8,9 @@
  *   - Action functions реализованы в ui.c
  */
 
+#ifndef INC_UI_H_
+#define INC_UI_H_
+
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -637,3 +640,5 @@ void off_driver(uint8_t reset_step, SoftStartSpeed_t ss_speed);
  * @brief Cancel any pending auto-repeat.
  */
 void off_auto_repeat(void);
+
+#endif /* INC_UI_H_ */
