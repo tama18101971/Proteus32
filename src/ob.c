@@ -207,6 +207,14 @@ static flash_status_t _program(void) {
     return status;
 }
 
+/**
+ * @brief Инициализация модуля Option Bytes.
+ *
+ * Считывает данные из flash-области Option Bytes в кэш.
+ * Если magic-маркер не совпадает (первый запуск или повреждение),
+ * все поля кэша обнуляются.
+ * @return true — данные валидны (magic == 0xA5), false — данные невалидны.
+ */
 bool ob_Init(void) {
     /* Считывание данных из flash в кэш */
     _refresh();
@@ -232,44 +240,91 @@ bool ob_Init(void) {
     return true;
 }
 
+/**
+ * @brief Проверка валидности данных в кэше.
+ * @return true — magic-маркер совпадает (0xA5), false — данные невалидны.
+ */
 bool ob_IsValid(void) {
     return _cache.magic == MAGIC;
 }
 
+/**
+ * @brief Получение значения счётчика tc.
+ * @return Текущее значение tc (int8_t).
+ */
 int8_t ob_GetTc(void) {
     return _cache.tc;
 }
 
+/**
+ * @brief Получение значения счётчика vc.
+ * @return Текущее значение vc (int8_t).
+ */
 int8_t ob_GetVc(void) {
     return _cache.vc;
 }
 
+/**
+ * @brief Получение значения ml.
+ * @return Текущее значение ml (uint8_t).
+ */
 uint8_t ob_GetMl(void) {
     return _cache.ml;
 }
 
+/**
+ * @brief Установка значения счётчика tc.
+ * @param value Новое значение tc.
+ */
 void ob_SetTc(int8_t value) {
     _cache.tc = value;
 }
 
+/**
+ * @brief Установка значения счётчика vc.
+ * @param value Новое значение vc.
+ */
 void ob_SetVc(int8_t value) {
     _cache.vc = value;
 }
 
+/**
+ * @brief Установка значения ml.
+ * @param value Новое значение ml.
+ */
 void ob_SetMl(uint8_t value) {
     _cache.ml = value;
 }
 
+/**
+ * @brief Чтение элемента массива slots[] по индексу.
+ * @param index Индекс элемента (0..SLOTS_COUNT-1).
+ * @return Значение элемента или 0 при выходе за границы.
+ */
 uint8_t ob_GetSlot(uint8_t index) {
     if (index >= SLOTS_COUNT) return 0;
     return _cache.slots[index];
 }
 
+/**
+ * @brief Запись элемента массива slots[] по индексу.
+ * @param index Индекс элемента (0..SLOTS_COUNT-1).
+ * @param value Новое значение элемента.
+ */
 void ob_SetSlot(uint8_t index, uint8_t value) {
     if (index >= SLOTS_COUNT) return;
     _cache.slots[index] = value;
 }
 
+/**
+ * @brief Сохранение кэша в flash и верификация.
+ *
+ * Перед записью устанавливает magic-маркер (0xA5), помечая
+ * данные как валидные. Выполняет полный цикл записи:
+ * разблокировка flash, стирание, запись стандартных регистров
+ * и пользовательских данных, затем чтение обратно и сравнение.
+ * @return true — все данные записаны и верифицированы, false — ошибка.
+ */
 bool ob_Flush(void) {
     /* Установка маркера валидности перед записью */
     _cache.magic = MAGIC;

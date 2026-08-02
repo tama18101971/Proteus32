@@ -127,6 +127,7 @@ Feature toggles in `proteus_config.h`:
 - Comments explain **why**, not what. Russian for `main.c`, English for thermal limiter
 - Register writes: `RCC->APB2PCENR |= RCC_AFIOEN` (direct, not SDK helpers)
 - **BARE METAL > SDK**: All GPIO, UART, timer and peripheral code must use direct register writes (`port->CFGLR`, `USART1->DATAR`, etc.). Never replace bare-metal code with SDK helper calls. The `mini_gpio.h` helpers are acceptable for new GPIO code, but existing bare-metal inline functions must not be rewritten to use them.
+- **Function headers**: Every function (public and static) must have a Doxygen-style header (`/** @brief ... */`) immediately above its definition. When modifying a function's signature, parameters, or behavior, update its header to match — never leave stale or missing documentation.
 
 ## Thermal limiter constraints
 

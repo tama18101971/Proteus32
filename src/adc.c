@@ -360,7 +360,11 @@ static const uint16_t mode_swt[6] = {
     2700, 2750, 2800, 2900, 3000, 3100
 };
 
-/* Вычисляет максимально допустимый режим UI2 по текущему напряжению */
+/**
+ * @brief Вычисляет максимально допустимый режим UI2 по текущему напряжению.
+ * @param exact_v Точное напряжение питания в мВ.
+ * @return Индекс максимального режима (CMODE_MOON..CMODE_TURBO).
+ */
 static uint8_t calc_volt_max_mode(uint16_t exact_v)
 {
     for (uint8_t i = CMODE_MOON; i < CMODE_TURBO; i++)
@@ -396,6 +400,13 @@ uint16_t ratchet_max_step(void)
     return volt_step_ratchet;
 }
 
+/**
+ * @brief Сброс храповика потолка яркости UI1.
+ *
+ * Сбрасывает монотонно убывающий потолок (volt_step_ratchet) на MAX_STEP.
+ * Вызывается при новой попытке включения с подтверждённо восстановившимся
+ * напряжением, чтобы снять ограничение, наложленное просадкой АКБ.
+ */
 void reset_max_step(void)
 {
     volt_step_ratchet = MAX_STEP;

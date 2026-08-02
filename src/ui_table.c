@@ -46,8 +46,16 @@ enum {
  * hold gesture stays a one-shot command. */
 #define SLOT_ACTION(default_op, slot_idx)  (default_op), true, (slot_idx)
 
+/**
+ * @brief Check whether a dispatch table entry matches the current event.
+ * @param entry  Table entry to test.
+ * @param mode   Current driver_mode.
+ * @param evt    Current button event.
+ * @param timeout True if the click-sequence timeout has elapsed.
+ * @return true if all fields match (mode, clicks, long_mask, hold, timeout).
+ */
 static bool dispatch_matches(const dispatch_t *entry, uint8_t mode,
-                             const btn_evt_t *evt, bool timeout)
+                              const btn_evt_t *evt, bool timeout)
 {
     if (entry->mode != mode) return false;
     if (entry->clicks != 0 && entry->clicks != evt->clicks) return false;
@@ -222,6 +230,13 @@ static const dispatch_t usr_table[] = {
  *  UI dispatch lookup
  ******************************************************************************/
 
+/**
+ * @brief Look up and dispatch a button event in the active UI table.
+ * @param mode    Current driver_mode.
+ * @param evt     Current button event.
+ * @param timeout True if the click-sequence timeout has elapsed.
+ * @return 1 if an action was dispatched, 0 if no match found.
+ */
 uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout)
 {
     const dispatch_t *table;

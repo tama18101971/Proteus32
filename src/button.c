@@ -43,6 +43,10 @@ static bool     evt_pending;
  *  Helpers
  ******************************************************************************/
 
+/**
+ * @brief Queue a button event for the main loop to consume.
+ * @param type Event type to emit (PRESSED, RELEASED, CLICK_SEQ, HOLD).
+ */
 static void emit_event(btn_evt_type_t type)
 {
     pending_evt.type = type;
@@ -55,6 +59,11 @@ static void emit_event(btn_evt_type_t type)
  *  Public API
  ******************************************************************************/
 
+/**
+ * @brief Initialise button FSM with configuration.
+ * @param config Pointer to configuration structure (hold/repeat/release ticks,
+ *               max clicks, long-click threshold).
+ */
 void button_init(const btn_config_t *config)
 {
     cfg = *config;
@@ -72,26 +81,46 @@ void button_init(const btn_config_t *config)
     pending_evt.long_mask = 0;
 }
 
+/**
+ * @brief Change hold detection threshold at runtime.
+ * @param ticks New hold threshold in ticks.
+ */
 void button_set_hold_ticks(uint8_t ticks)
 {
     cfg.hold_ticks = ticks;
 }
 
+/**
+ * @brief Change hold repeat interval at runtime.
+ * @param ticks New repeat interval in ticks.
+ */
 void button_set_repeat_ticks(uint8_t ticks)
 {
     cfg.repeat_ticks = ticks;
 }
 
+/**
+ * @brief Change long click threshold at runtime.
+ * @param ticks New long-click threshold in ticks.
+ */
 void button_set_long_click_ticks(uint8_t ticks)
 {
     cfg.long_click_ticks = ticks;
 }
 
+/**
+ * @brief Change maximum clicks in a sequence at runtime.
+ * @param clicks_cnt New maximum clicks.
+ */
 void button_set_max_clicks(uint8_t clicks_cnt)
 {
     cfg.max_clicks = clicks_cnt;
 }
 
+/**
+ * @brief Get pending button event.
+ * @return Pointer to event structure, or NULL if none pending.
+ */
 const btn_evt_t* button_get_event(void)
 {
     if (!evt_pending) return NULL;
@@ -99,11 +128,20 @@ const btn_evt_t* button_get_event(void)
     return &pending_evt;
 }
 
+/**
+ * @brief Whether a physical press or click sequence is currently in progress.
+ *
+ * Used by the AWU strobe loop to stay awake long enough for the FSM to
+ * distinguish one click from a multi-click command after a button wake.
+ */
 bool button_sequence_active(void)
 {
     return (state != ST_IDLE) || Pressed;
 }
 
+/**
+ * @brief Reset click counter and long mask.
+ */
 void button_reset_click_count(void)
 {
     clicks = 0;
@@ -114,6 +152,13 @@ void button_reset_click_count(void)
  *  Main FSM tick -- call once per 160 Hz tick
  ******************************************************************************/
 
+/**
+ * @brief Main FSM tick — call once per 160 Hz tick.
+ *
+ * Reads the button pin, debounces, detects hold/repeat, and emits
+ * BTN_EVT_PRESSED / BTN_EVT_RELEASED / BTN_EVT_HOLD / BTN_EVT_CLICK_SEQ
+ * events via emit_event().
+ */
 void button_tick(void)
 {
     bool pin = Pressed;

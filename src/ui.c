@@ -361,6 +361,10 @@ void off_driver_false(void)
  *  AUX indicator helper 
  ******************************************************************************/
 
+/**
+ * @brief Set AUX indicator LED to green or red (single flash).
+ * @param ind_clr IND_GRN for green, IND_RED for red.
+ */
 static void clr_indicator(ind_clr_t ind_clr)  // бывшая onoff_indicator
 {
     off_auto_repeat();

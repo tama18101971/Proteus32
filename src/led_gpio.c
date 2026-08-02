@@ -12,6 +12,7 @@
  */
 #include "led_gpio.h"
 
+/** @brief Initialise all LED GPIO pins (red high/low-side, green). */
 void led_init(void)
 {
     RCC->APB2PCENR |= RCC_APB2Periph_GPIOC;

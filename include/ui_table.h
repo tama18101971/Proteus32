@@ -42,6 +42,13 @@ typedef struct {
  *  Lookup function
  ******************************************************************************/
 
+/**
+ * @brief Look up and dispatch a button event in the active UI table.
+ * @param mode    Current driver_mode.
+ * @param evt     Current button event.
+ * @param timeout True if the click-sequence timeout has elapsed.
+ * @return 1 if an action was dispatched, 0 if no match found.
+ */
 uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout);
 
 /*******************************************************************************

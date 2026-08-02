@@ -126,6 +126,8 @@ static bool strobe_active;
 /**
  * @brief Запуск пошаговой обработки массива команд
  * @param pArray — указатель на массив uint32_t команд в Flash
+ * @param delay  — начальная задержка перед первым полупериодом (awu_tick_t:
+ *                 AWU_15MS, AWU_120MS, AWU_250MS, AWU_500MS, AWU_1S и т.д.)
  *
  * Сбрасывает структуру состояния, устанавливает флаг EnableArrayProcessing
  * и запоминает указатель на массив для дальнейшей обработки в handle_aux().
@@ -176,6 +178,14 @@ bool is_aux_mode(IDM_Type_t mode) {
 	return (aux_ctl.enable && (aux_ctl.idmode == mode));
 }
 
+/**
+ * @brief Проверка необходимости DAC/I2C для активной AUX-команды
+ *
+ * Используется после пробуждения AWU/STANDBY для восстановления периферии
+ * перед изменением состояния HBL или strobe, которое затрагивает вывод DAC.
+ *
+ * @return true если активная команда использует HBL_LED или strobe режим
+ */
 bool aux_needs_dac(void)
 {
 	#ifdef USE_STROBE
@@ -322,6 +332,13 @@ static void SetBrightness(LED_Bits_t device, uint8_t brightness) {
 }
 
 #ifdef USE_STROBE
+/**
+ * @brief Пошаговая обработка strobe-режима (переключение фаз)
+ *
+ * Чередует две фазы стробоскопа: включает DAC step0/step1 и
+ * переключает AWU на соответствующий psc/win. Вызывается из
+ * handle_aux() при активном strobe режиме.
+ */
 static void handle_aux_strobe(void)
 {
 	const strobe_pattern_t *pattern = &strobe_patterns[strobe_index_active];
@@ -337,6 +354,14 @@ static void handle_aux_strobe(void)
 	}
 }
 
+/**
+ * @brief Запуск энергоэффективного двухфазного DAC-стробоскопа
+ *
+ * Пattern runs from AWU wake-ups and does not change step_user or invoke
+ * normal driver power management on its OFF phase.
+ *
+ * @param index Strobe profile in range 0..STROBE_COUNT-1.
+ */
 void start_aux_strobe(uint8_t index)
 {
 	if (index >= STROBE_COUNT) {

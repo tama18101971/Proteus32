@@ -121,6 +121,13 @@ static inline int16_t charge_integral(ThermalLimiterState_t *state,
 /* Public API                                                                */
 /* ------------------------------------------------------------------------ */
 
+/**
+ * @brief Reset a limiter instance to its power-on-safe state.
+ *
+ * Must be called once before the first ThermalLimiter_Update() call.
+ *
+ * @param state  State instance to initialize.
+ */
 void ThermalLimiter_Init(ThermalLimiterState_t *state)
 {
     state->filtered_temp   = 0;
@@ -131,6 +138,27 @@ void ThermalLimiter_Init(ThermalLimiterState_t *state)
     state->leak_tick_counter = 0u;
 }
 
+/**
+ * @brief Run one iteration of the thermal power limiter control loop.
+ *
+ * Non-blocking, deterministic execution time - a fixed handful of integer
+ * add/sub/shift/compare operations, no multiply, no divide. Safe to call
+ * from a timer ISR or a ~30Hz task.
+ *
+ * @param config    Controller configuration/tuning (typically `static const`).
+ * @param state     Persistent controller state (RAM).
+ * @param t_raw     Raw 10-bit ADC reading from the NTC divider (0..1023).
+ *                  Higher value == higher temperature (NTC in upper arm).
+ *                  A value of exactly 0 or >= 1023 triggers the failsafe
+ *                  (sensor open/short) and immediately shuts down the LED.
+ * @param t_set     10-bit ADC target set-point (0..1023).
+ * @param user_pwm  9-bit user-requested brightness (0..512). The controller
+ *                  output can only reduce this value, never exceed it.
+ *
+ * @return          Limiter amount to subtract from `user_pwm`
+ *                  (0..user_pwm). The applied output is
+ *                  `user_pwm - returned_limiter`.
+ */
 uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
                                 ThermalLimiterState_t *state,
                                 uint16_t t_raw,
