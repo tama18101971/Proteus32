@@ -184,7 +184,7 @@ typedef enum {
 } Beacon_Mode_t;
 
 /** @brief Number of selectable AWU/DAC strobe profiles. */
-#define STROBE_COUNT 4u
+#define STROBE_COUNT 5u
 
 /**
  * @brief Backlight type (off/on).
@@ -218,13 +218,6 @@ extern uint8_t vwarning_old;
 extern bool EnableArrayProcessing;
 /** @brief Pointer to current command array. */
 extern const uint32_t *current_buf;
-
-/** @brief Red+backlight blink pattern (stored in Flash). */
-extern const uint32_t buf_red[];
-/** @brief Green blink pattern. */
-extern const uint32_t buf_grn[];
-/** @brief SOS pattern on red. */
-extern const uint32_t buf_sos_red[];
 
 /* ===== API functions ===== */
 
@@ -296,10 +289,11 @@ void start_aux_cmd(uint32_t command, bool enable, IDM_Type_t idm_mode, awu_tick_
 void start_aux_array(const uint32_t *pArray, awu_tick_t delay);
 
 /**
- * @brief Start an energy-efficient two-phase DAC strobe.
+ * @brief Start an energy-efficient DAC strobe profile.
  *
- * The pattern runs from AWU wake-ups and does not change step_user or invoke
- * normal driver power management on its OFF phase.
+ * A profile may be a single packed command or an array of commands.  The
+ * common AUX handler processes both forms from AWU wake-ups without changing
+ * step_user or invoking normal driver power management on its OFF phase.
  * @param index Strobe profile in range 0..STROBE_COUNT-1.
  */
 void start_aux_strobe(uint8_t index);

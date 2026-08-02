@@ -42,34 +42,6 @@
 uint8_t vwarning = VWARNING_NONE;			// Текущий уровень предупреждения о напряжении
 uint8_t vwarning_old = VWARNING_NONE;		// Предыдущий уровень (для отслеживания изменений)
 
-/* Массивы команд для пошаговой обработки (хранятся в Flash).
- * Формат: MAKE_CMD(device, cycle, count, psc0, win0, psc1, win1, brightness0, brightness1)
- * Время полупериода = (psc_значение × win) / 128 мс.
- */
-const uint32_t buf_red[5] = {
-	MAKE_CMD(RED_LED|HBL_LED, 0, 8, AWU_PSC_128, 45, AWU_PSC_4096, 60, 1, 0),   /* ON 45ms, OFF 1920ms × 8 */
-	MAKE_CMD(RED_LED|HBL_LED, 0, 4, AWU_PSC_4096, 60, AWU_PSC_128, 45, 1, 0),   /* ON 1920ms, OFF 45ms × 4 */
-	MAKE_CMD(RED_LED|HBL_LED, 0, 4, AWU_PSC_128, 45, AWU_PSC_4096, 60, 1, 0),   /* ON 45ms, OFF 1920ms × 4 */
-	MAKE_CMD(RED_LED|HBL_LED, 0, 4, AWU_PSC_4096, 60, AWU_PSC_128, 45, 1, 0),   /* ON 1920ms, OFF 45ms × 4 */
-	0x1  /* AC_REP_ATSTART: зациклить весь массив */
-};
-const uint32_t buf_grn[3] = {
-	MAKE_CMD(GRN_LED, 0, 1, AWU_PSC_128, 45, AWU_PSC_256, 30, 1, 0),             /* ON 45ms, OFF 60ms */
-	MAKE_CMD(GRN_LED, 0, 1, AWU_PSC_256, 30, AWU_PSC_256, 30, 1, 0),             /* ON 60ms, OFF 60ms */
-	0x1  /* AC_REP_ATSTART: зациклить весь массив */
-};
-const uint32_t buf_sos_red[] = {
-	/* S: ··· (count=3) */
-	MAKE_CMD(RED_LED, 0, 3, AWU_PSC_256, 63, AWU_PSC_256, 63, 1, 0),             /* ·: ON 126ms, OFF 126ms ×3 */
-	/* O: ——— (count=3) */
-	MAKE_CMD(RED_LED, 0, 3, AWU_PSC_1024, 47, AWU_PSC_256, 63, 1, 0),            /* —: ON 376ms, OFF 126ms ×3 */
-	/* S: ··· (count=3) */
-	MAKE_CMD(RED_LED, 0, 3, AWU_PSC_256, 63, AWU_PSC_256, 63, 1, 0),             /* ·: ON 126ms, OFF 126ms ×3 */
-	/* Пауза между циклами SOS */
-	MAKE_CMD(RED_LED, 0, 0, AWU_PSC_1024, 55, AWU_PSC_1024, 55, 0, 0),            /* OFF 440ms + OFF 440ms = 880мс */
-	0x1  /* AC_REP_ATSTART */
-};
-
 /* Указатель на текущую AUX-команду (одиночная или из массива).
  * Если NULL — обработчик неактивен.
  * Используется handle_aux() для вызова handle_aux_cmd().
@@ -100,18 +72,53 @@ bool EnableArrayProcessing = false;
 const uint32_t *current_buf = NULL;
 
 #ifdef USE_STROBE
-/* Strobe profiles use the same packed command format as every other AUX
- * sequence.  The old raw levels map to the nearest entries in modes[]:
- * 508 -> TURBO (511), 196 -> MID (220), and 300 -> MAX (360). */
-static const uint32_t strobe_commands[STROBE_COUNT] = {
-    MAKE_CMD(HBL_LED, 1, 0, AWU_PSC_256, 15, AWU_PSC_256, 15,
-             CMODE_TURBO, CMODE_OFF), /* 30ms / 30ms */
-    MAKE_CMD(HBL_LED, 1, 0, AWU_PSC_512, 15, AWU_PSC_10240, 25,
-             CMODE_TURBO, CMODE_MID), /* 60ms / 2s */
-    MAKE_CMD(HBL_LED, 1, 0, AWU_PSC_512, 15, AWU_PSC_2048, 63,
-             CMODE_MAX, CMODE_OFF), /* 60ms / ~1s */
-    MAKE_CMD(HBL_LED, 1, 0, AWU_PSC_512, 15, AWU_PSC_10240, 50,
-             CMODE_MAX, CMODE_OFF), /* 60ms / 4s */
+typedef enum {
+    STROBE_PROFILE_COMMAND = 0,
+    STROBE_PROFILE_ARRAY,
+} strobe_profile_type_t;
+
+typedef struct {
+    strobe_profile_type_t type;
+    union {
+        uint32_t command;
+        const uint32_t *array;
+    } value;
+} strobe_profile_t;
+
+/* SOS is the former buf_sos_red[] pattern, moved to the main HBL/DAC output.
+ * Each pulse uses the same modes[] index as the single-command profiles. */
+static const uint32_t strobe_sos[] = {
+    /* S: ... */
+    MAKE_CMD(HBL_LED, 0, 3, AWU_PSC_256, 63, AWU_PSC_256, 63,
+             CMODE_TURBO, CMODE_OFF),
+    /* O: --- */
+    MAKE_CMD(HBL_LED, 0, 3, AWU_PSC_1024, 47, AWU_PSC_256, 63,
+             CMODE_TURBO, CMODE_OFF),
+    /* S: ... */
+    MAKE_CMD(HBL_LED, 0, 3, AWU_PSC_256, 63, AWU_PSC_256, 63,
+             CMODE_TURBO, CMODE_OFF),
+    /* Pause between SOS repetitions. */
+    MAKE_CMD(HBL_LED, 0, 0, AWU_PSC_1024, 55, AWU_PSC_1024, 55,
+             CMODE_OFF, CMODE_OFF),
+    AC_REP_ATSTART,
+};
+
+/* A profile may be one packed command or an arbitrary command array.  New
+ * multi-phase strobes only need an array and one descriptor below. */
+static const strobe_profile_t strobe_commands[STROBE_COUNT] = {
+    { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD(
+        HBL_LED, 1, 0, AWU_PSC_256, 15, AWU_PSC_256, 15,
+        CMODE_TURBO, CMODE_OFF) } }, /* 30ms / 30ms */
+    { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD(
+        HBL_LED, 1, 0, AWU_PSC_512, 15, AWU_PSC_10240, 25,
+        CMODE_TURBO, CMODE_MID) } }, /* 60ms / 2s */
+    { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD(
+        HBL_LED, 1, 0, AWU_PSC_512, 15, AWU_PSC_2048, 63,
+        CMODE_MAX, CMODE_OFF) } }, /* 60ms / ~1s */
+    { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD(
+        HBL_LED, 1, 0, AWU_PSC_512, 15, AWU_PSC_10240, 50,
+        CMODE_MAX, CMODE_OFF) } }, /* 60ms / 4s */
+    { STROBE_PROFILE_ARRAY,   { .array = strobe_sos } },
 };
 #endif
 
@@ -320,10 +327,18 @@ static void SetBrightness(LED_Bits_t device, uint8_t brightness)
  */
 void start_aux_strobe(uint8_t index)
 {
+	const strobe_profile_t *profile;
+
 	if (index >= STROBE_COUNT)
 		return;
 
-	start_aux_cmd(strobe_commands[index], true, IDM_STROBE, AWU_15MS);
+	profile = &strobe_commands[index];
+	if (profile->type == STROBE_PROFILE_COMMAND) {
+		start_aux_cmd(profile->value.command, true, IDM_STROBE, AWU_15MS);
+	} else {
+		start_aux_array(profile->value.array, AWU_15MS);
+		aux_ctl.idmode = IDM_STROBE;
+	}
 }
 #else
 /** @brief Stub when strobe support is disabled. */
