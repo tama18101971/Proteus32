@@ -99,6 +99,16 @@ static const uint32_t strobe_sos[] = {
     AC_REP_ATSTART,
 };
 
+/* Bike strobe 2: adapted from Caerus III — steady MID base with two
+ * TURBO pulses per cycle, looping forever. */
+static const uint32_t strobe_bike2[] = {
+    /* MID 3 s, then TURBO 30 ms. */
+    MAKE_CMD_MS(HBL_LED, 0, 1, 3000, 30, CMODE_MID, CMODE_TURBO),
+    /* MID 180 ms, then TURBO 30 ms. */
+    MAKE_CMD_MS(HBL_LED, 0, 1, 180, 30, CMODE_MID, CMODE_TURBO),
+    AC_REP_ATSTART,
+};
+
 /* A profile may be one packed command or an arbitrary command array.  New
  * multi-phase strobes only need an array and one descriptor below. */
 static const strobe_profile_t strobe_commands[STROBE_COUNT] = {
@@ -107,6 +117,7 @@ static const strobe_profile_t strobe_commands[STROBE_COUNT] = {
     { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD_MS(HBL_LED, 1, 0, 60, 1008, CMODE_MAX, CMODE_OFF) } }, /* 60ms / ~1s */
     { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD_MS(HBL_LED, 1, 0, 60, 4000, CMODE_MAX, CMODE_OFF) } }, /* 60ms / 4s */
     { STROBE_PROFILE_ARRAY,   { .array = strobe_sos } },
+    { STROBE_PROFILE_ARRAY,   { .array = strobe_bike2 } }, /* bike strobe 2 */
 };
 #endif
 
