@@ -20,6 +20,10 @@
 /* Current UI index used for table selection. Defined in ui.c. */
 extern uint8_t ui_table_idx;
 
+/* The slot which entered MODE_BLOCK/MODE_BLOCK0.  Standby preserves RAM, so
+ * the same gesture can unlock after a button wake without a flash write. */
+static uint8_t block_slot_idx = SLOTS_COUNT;
+
 /*******************************************************************************
  *  Slot indices
  ******************************************************************************/
@@ -41,6 +45,19 @@ enum {
  * it with Option Bytes slot_idx.  is_slot remains true in both builds so a
  * hold gesture stays a one-shot command. */
 #define SLOT_ACTION(default_op, slot_idx)  (default_op), true, (slot_idx)
+
+static bool dispatch_matches(const dispatch_t *entry, uint8_t mode,
+                             const btn_evt_t *evt, bool timeout)
+{
+    if (entry->mode != mode) return false;
+    if (entry->clicks != 0 && entry->clicks != evt->clicks) return false;
+    if (entry->long_mask
+        && (evt->long_mask & entry->long_mask) != entry->long_mask) return false;
+    if (entry->hold != (evt->type == BTN_EVT_HOLD)) return false;
+    if (entry->wait_timeout && !timeout) return false;
+
+    return true;
+}
 
 /*******************************************************************************
  *  UI1 dispatch table (ramping interface)
@@ -73,13 +90,6 @@ static const dispatch_t ui1_table[] = {
     { MODE_STROB, 1, 0, false, true,  OFF_STROBE_UI1, false, 0 },
     { MODE_STROB, 2, 0, false, true,  UP_STROBE_UI1,  false, 0 },
 
-    /* -- Mode: MODE_BLOCK / MODE_BLOCK0 -- */
-    { MODE_BLOCK,  6, 0, false, false, UNBLOCK_DRV,   false, 0 },
-    { MODE_BLOCK0, 6, 0, false, false, UNBLOCK_DRV,   false, 0 },
-
-    /* -- Fallback unblock for non-magic slot configuration -- */
-    { MODE_BLOCK,  4, 0, false, false, UNBLOCK_DRV,   false, 0 },
-    { MODE_BLOCK0, 4, 0, false, false, UNBLOCK_DRV,   false, 0 },
 };
 
 #define UI1_TABLE_SIZE (sizeof(ui1_table) / sizeof(ui1_table[0]))
@@ -116,9 +126,6 @@ static const dispatch_t ui2_table[] = {
     { MODE_STROB, 1, 0, false, true,  OFF_STROBE_UI1, false, 0 },
     { MODE_STROB, 2, 0, false, true,  UP_STROBE_UI1,  false, 0 },
 
-    /* -- Mode: MODE_BLOCK -- */
-    { MODE_BLOCK,  6, 0, false, false, UNBLOCK_DRV,   false, 0 },
-    { MODE_BLOCK0, 6, 0, false, false, UNBLOCK_DRV,   false, 0 },
 };
 
 #define UI2_TABLE_SIZE (sizeof(ui2_table) / sizeof(ui2_table[0]))
@@ -148,9 +155,6 @@ static const dispatch_t eng_table[] = {
     { MODE_PID_TIME,   0, 0, false, true,  PT_CLICKX,  false, 0 },
     { MODE_PID_TIME,   0, 0, true,  false, MENU_EXIT,  false, 0 },
 
-    /* -- Block/unblock -- */
-    { MODE_BLOCK,  6, 0, false, false, UNBLOCK_DRV,   false, 0 },
-    { MODE_BLOCK0, 6, 0, false, false, UNBLOCK_DRV,   false, 0 },
 };
 
 #define ENG_TABLE_SIZE (sizeof(eng_table) / sizeof(eng_table[0]))
@@ -210,9 +214,6 @@ static const dispatch_t usr_table[] = {
     { MODE_SLOT09, 0, 0, false, true, SLOT_CLICKX, false, 0 },
     { MODE_SLOT10, 0, 0, false, true, SLOT_CLICKX, false, 0 },
 
-    /* -- Block/unblock -- */
-    { MODE_BLOCK,  6, 0, false, false, UNBLOCK_DRV,   false, 0 },
-    { MODE_BLOCK0, 6, 0, false, false, UNBLOCK_DRV,   false, 0 },
 };
 
 #define USR_TABLE_SIZE (sizeof(usr_table) / sizeof(usr_table[0]))
@@ -253,27 +254,44 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout)
         return 0;
     }
 
+    if (mode == MODE_BLOCK || mode == MODE_BLOCK0)
+    {
+        if (block_slot_idx >= SLOTS_COUNT)
+            return 0;
+
+        for (uint8_t i = 0; i < size; i++)
+        {
+            const dispatch_t *entry = &table[i];
+
+            /* The OFF-state slot definition is the canonical gesture.  It
+             * retains both the click count and whether the action fires on
+             * hold or only after the click-sequence timeout. */
+            if (entry->mode != MODE_OFF || !entry->is_slot
+                || entry->slot_idx != block_slot_idx) continue;
+            if (!dispatch_matches(entry, MODE_OFF, evt, timeout)) continue;
+
+            off_auto_repeat();
+            unblock_drv();
+            block_slot_idx = SLOTS_COUNT;
+            return 1;
+        }
+
+        return 0;
+    }
+
     for (uint8_t i = 0; i < size; i++)
     {
-        uint8_t f_mode  = table[i].mode;
-        uint8_t f_clicks = table[i].clicks;
-        uint8_t f_lmask = table[i].long_mask;
-        uint8_t f_hold  = table[i].hold;
-        uint8_t f_wait  = table[i].wait_timeout;
-        uint8_t f_slot  = table[i].is_slot;
-        uint8_t f_op    = table[i].op_index;
+        const dispatch_t *entry = &table[i];
+        uint8_t f_slot = entry->is_slot;
+        uint8_t f_op = entry->op_index;
 
-        if (f_mode != mode) continue;
-        if (f_clicks != 0 && f_clicks != evt->clicks) continue;
-        if (f_lmask && (evt->long_mask & f_lmask) != f_lmask) continue;
-        if (f_hold != (evt->type == BTN_EVT_HOLD)) continue;
-        if (f_wait && !timeout) continue;
+        if (!dispatch_matches(entry, mode, evt, timeout)) continue;
 
         uint8_t op_idx = f_op;
 #ifdef USE_MAGIC_SLOTS
         if (f_slot)
         {
-            op_idx = ob_GetSlot(table[i].slot_idx);
+            op_idx = ob_GetSlot(entry->slot_idx);
             if (op_idx < SLOT_OP_FIRST || op_idx > SLOT_OP_LAST)
                 op_idx = SLOT_OP_EMPTY;
         }
@@ -287,6 +305,8 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout)
             if (f_slot)
                 off_auto_repeat();
             main_op[op_idx]();
+            if (f_slot && (driver_mode == MODE_BLOCK || driver_mode == MODE_BLOCK0))
+                block_slot_idx = entry->slot_idx;
             return 1;
         }
         return 0;
