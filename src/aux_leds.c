@@ -251,7 +251,9 @@ void off_aux_cmd(bool stop_lsi) {
  * Если EE.usr.id_plus_sid == 1, к каналу добавляется HBL_LED
  * (индикация ИД+СИД — индикатор + основной светодиод). Яркость HBL
  * берётся из последнего шага яркости (step_user ? step_user : step_default),
- * чтобы основной светодиод светился на той же яркости, что и фонарик.
+ * чтобы основной светодиод светился на той же яркости, что и фонарик,
+ * но не ниже get_stepi(CMODE_MIN): на минимальной яркости фонарика
+ * вспышка иначе не видна.
  * Время: ON=75мс, OFF=225мс.
  * @return 32-битная команда для start_aux_cmd()
  */
@@ -274,7 +276,13 @@ uint32_t set_aux_count(uint8_t count) {
 	if (EE.usr.id_plus_sid)
 	{
 		device |= HBL_LED;
-		aux_hbl_step = step_user ? step_user : step_default;
+		uint16_t hbl = step_user ? step_user : step_default;
+		/* Фонарик может светить на минимальной (~лунной) яркости — такой
+		 * шаг на DAC не читается глазом. Поднимаем вспышку индикации
+		 * минимум до CMODE_MIN, чтобы количество миганий было видно. */
+		if (hbl < get_stepi(CMODE_MIN))
+			hbl = get_stepi(CMODE_MIN);
+		aux_hbl_step = hbl;
 		brightness0 = AUX_HBL_DIRECT_STEP;
 	}
 
