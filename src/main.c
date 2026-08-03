@@ -116,7 +116,7 @@ int main(void)
             wakeup_source = WS_NONE;
             dac_pwrpin_restore();
             i2c_init(400000);
-            stop_aux_beacon(false);
+            stop_aux_if(IDM_BEACON, false);
             adc_init();
             adc_read();
             tim2_start();

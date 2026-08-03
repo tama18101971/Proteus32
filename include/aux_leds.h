@@ -244,34 +244,20 @@ bool is_aux_mode(IDM_Type_t mode);
 bool aux_needs_dac(void);
 
 /**
- * @brief Stop AUX if running in specified mode.
- * @param mode Mode to match for stopping.
- */
-void stop_aux_mode(IDM_Type_t mode);
-
-/**
- * @brief Stop beacon mode.
- * @param stop_lsi If true, also stop LSI/AWU.
- */
-void stop_aux_beacon(bool stop_lsi);
-
-/**
- * @brief Stop voltage warning mode.
- * @param stop_lsi If true, also stop LSI/AWU.
- */
-void stop_aux_voltage(bool stop_lsi);
-
-/**
- * @brief Stop strobe mode.
- * @param stop_lsi If true, also stop LSI/AWU.
- */
-void stop_aux_strobe(bool stop_lsi);
-
-/**
  * @brief Full stop: disable handler and turn off all LEDs.
  * @param stop_lsi If true, stop LSI/AWU.
  */
 void off_aux_cmd(bool stop_lsi);
+
+/**
+ * @brief Stop AUX if running in specified mode.
+ * @param mode Mode to match for stopping.
+ * @param stop_lsi If true, also stop LSI/AWU.
+ */
+static inline void stop_aux_if(IDM_Type_t mode, bool stop_lsi) {
+	if (is_aux_mode(mode))
+		off_aux_cmd(stop_lsi);
+}
 
 /**
  * @brief Start a single AUX command.

@@ -338,9 +338,7 @@ void ob_SetSlot(uint8_t index, uint8_t value) {
 bool ob_Flush(void) {
 
     if (!change)
-    {
         return false;
-    }
     
     /* Установка маркера валидности перед записью */
     _cache.magic = MAGIC;

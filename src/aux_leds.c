@@ -601,40 +601,9 @@ void start_exaux_voltage(WARNING_Fr_t ex_mode) {
 	default:
 		break;
 	}
-	start_aux_cmd(cmd, true, IDM_VWARNING, AWU_15MS);
+start_aux_cmd(cmd, true, IDM_VWARNING, AWU_15MS);
 }
 #endif
-
-/**
- * @brief Остановка команды с проверкой режима
- * @param mode — режим индикации для проверки
- *
- * Если обработчик активен и работает в указанном режиме — останавливает его.
- */
-void stop_aux_mode(IDM_Type_t mode) {
-	if (is_aux_mode(mode))
-		off_aux_cmd(false);
-}
-
-/** @brief Stop beacon mode if active. */
-void stop_aux_beacon(bool stop_lsi) {
-	if (is_aux_mode(IDM_BEACON))
-		off_aux_cmd(stop_lsi);
-}
-/** @brief Stop voltage warning mode if active. */
-void stop_aux_voltage(bool stop_lsi) {
-	if (is_aux_mode(IDM_VWARNING))
-		off_aux_cmd(stop_lsi);
-}
-/** @brief Stop strobe mode if active. */
-void stop_aux_strobe(bool stop_lsi) {
-	#ifdef USE_STROBE
-	if (is_aux_mode(IDM_STROBE))
-		off_aux_cmd(stop_lsi);
-	#else
-	(void)stop_lsi;
-	#endif
-}
 
 /**
  * @brief Индикация уровня заряда батареи
@@ -644,7 +613,7 @@ void stop_aux_strobe(bool stop_lsi) {
  */
 void slot_batt_ind(void) {
 #ifdef USE_BATTIND
-	stop_aux_beacon(false);
+	stop_aux_if(IDM_BEACON, false);
 	uint8_t flashes = bat_get_flashes();
 	//EE_PRINTF("[AUX] slot_batt_ind flashes=%u\r\n", (unsigned)flashes);
 	uint32_t cmd = set_aux_count(flashes);

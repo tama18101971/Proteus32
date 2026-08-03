@@ -228,8 +228,8 @@ void off_driver(uint8_t reset_step, SoftStartSpeed_t ss_speed)
         step_tactic = MAX_STEP;
     }
 
-    stop_aux_voltage(false);
-    stop_aux_beacon(false);
+    stop_aux_if(IDM_VWARNING, false);
+    stop_aux_if(IDM_BEACON, false);
     //EE_PRINTF("[UI] AUX stops skipped (debug mode)\r\n");
 
     // EEPROM write intentionally commented out per integration requirements
@@ -439,7 +439,7 @@ void slot_strobe(void)
 void up_strobe(void)
 {
 #ifdef USE_STROBE
-    stop_aux_strobe(false);
+    stop_aux_if(IDM_STROBE, false);
     if (++strobe_index == STROBE_COUNT) strobe_index = 0;
     start_aux_strobe(strobe_index);
     //EE_PRINTF("[UI] up_strobe idx=%u\r\n", strobe_index);
@@ -450,7 +450,7 @@ void up_strobe(void)
 void back_strobe(void)
 {
 #if defined(USE_STROBE) && !defined(USE_MAGIC_SLOTS)
-    stop_aux_strobe(false);
+    stop_aux_if(IDM_STROBE, false);
     if (ps.start) off_driver(false, SS_NO);
     else driver_mode = MODE_ON;
     if (ps.use_prev) step_user = ps.pr_step;
@@ -463,7 +463,7 @@ void back_strobe(void)
 void off_strobe(void)
 {
 #ifdef USE_STROBE
-    stop_aux_strobe(false);
+    stop_aux_if(IDM_STROBE, false);
     off_driver(false, SS_NO);
     if (ps.use_prev) step_default = ps.pr_step;
     ps.use_prev = false;
@@ -1056,7 +1056,7 @@ void ui_process(void)
                     uint16_t vcap = ratchet_max_step();
                     max_step = (limiter + 1 >= vcap) ? 1u : (uint16_t)(vcap - (limiter + 1));
                 }
-                stop_aux_beacon(false);
+                stop_aux_if(IDM_BEACON, false);
                 if (step_tc >= max_step) direction = DIR_DOWN;
             }
             break;
