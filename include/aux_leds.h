@@ -16,7 +16,8 @@
  *   [16:11] win0       — AWU window for 1st half-period (0..63)
  *   [19:17] psc1       — AWU prescaler index for 2nd half-period
  *   [25:20] win1       — AWU window for 2nd half-period
- *   [28:26] brightness0 — modes[] index for 1st half-period (0..6)
+ *   [28:26] brightness0 — modes[] index for 1st half-period (0..6), or
+ *                         CMODE_NOACTION for a direct-step HBL command
  *   [31:29] brightness1 — modes[] index for 2nd half-period (0..6)
  *
  * Half-period time: (prescaler_value × win) / 128000 seconds
@@ -372,6 +373,7 @@ union AUX_Cmd_u *handle_aux_array(const uint32_t pBuffer[], AUX_Ctr_t *ubits);
  * @param psc1         индекс предделителя 2-го полупериода
  * @param win1         значение окна 2-го полупериода (0..63)
  * @param brightness0  индекс modes[] 1-го полупериода (0=выкл, 1..6=уровень)
+ *                     или CMODE_NOACTION для прямого шага HBL
  * @param brightness1  индекс modes[] 2-го полупериода (0=выкл, 1..6=уровень)
  */
 #define MAKE_CMD(device, cycle, count, psc0, win0, psc1, win1, brightness0, brightness1) \

@@ -224,7 +224,7 @@ bool ob_Init(void) {
         /* Первый запуск или повреждение — применяем значения по умолчанию */
         _cache.tc = 0;
         _cache.vc = 0;
-        _cache.ml = 5;
+        _cache.ml = 3;
         _cache.slots[0] = SLOT_DEFAULT_1CH;
         _cache.slots[1] = SLOT_DEFAULT_2CH;
         _cache.slots[2] = SLOT_DEFAULT_3C;

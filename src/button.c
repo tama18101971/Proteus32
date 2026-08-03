@@ -172,6 +172,7 @@ void button_tick(void)
         case ST_IDLE:
             if (rising)
             {
+                stop_bit = false;
                 deb_cnt = 0;
                 emit_event(BTN_EVT_PRESSED);
                 state = ST_DEBOUNCE;

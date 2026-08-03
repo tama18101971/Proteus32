@@ -684,7 +684,7 @@ void slot_eauxmode(void)
 #endif
 }
 
-/** @brief Toggle IPS (internal power supply) mode. */
+/** @brief Toggle IPS mode. */
 void slot_ipsmode(void)
 {
 #ifdef USE_MENU

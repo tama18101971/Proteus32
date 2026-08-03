@@ -198,12 +198,14 @@ void AWU_Sleep_Now(void)
  *
  * Вызывается при пробуждении от AWU-события (EXTI Line9).
  * Если MCU был в STANDBY (is_sleep_mode), восстанавливает системные часы.
- * Устанавливает wakeup_source = WS_AWU и очищает флаг EXTI9.
+ * Устанавливает wakeup_source = WS_AWU и очищает флаг EXTI9 прямой записью
+ * в регистр EXTI->INTFR, без вызовов SDK.
  */
 void AWU_IRQHandler(void) __attribute__((interrupt("WCH-Interrupt-fast")));
 void AWU_IRQHandler(void)
 {
-    if (EXTI_GetITStatus(EXTI_Line9) != RESET)
+    /* EXTI_GetITStatus(): pending flag AND interrupt mask for AWU line 9. */
+    if ((EXTI->INTFR & EXTI->INTENR & (1U << 9)) != 0U)
     {
         if (is_sleep_mode) {
             SystemInit();            /* Восстанавливаем системные часы после пробуждения */
@@ -219,8 +221,8 @@ void AWU_IRQHandler(void)
 
         wakeup_source = WS_AWU;
 
-        /* Очищаем флаг EXTI9 */
-        EXTI_ClearITPendingBit(EXTI_Line9);
+        /* Очищаем pending-флаг EXTI9: CH32V003 clears it by writing 1. */
+        EXTI->INTFR = (1U << 9);
     }
 }
 

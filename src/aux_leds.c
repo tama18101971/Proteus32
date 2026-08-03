@@ -16,7 +16,8 @@
  *   [16:11] p0.win    — window 1st half-period (0..63)
  *   [19:17] p1.psc    — prescaler 2nd half-period
  *   [25:20] p1.win    — window 2nd half-period (0..63)
- *   [28:26] brightness0 — modes[] index 1st half-period
+ *   [28:26] brightness0 — modes[] index 1st half-period (or direct-step
+ *                         marker for the battery-indicator HBL command)
  *   [31:29] brightness1 — modes[] index 2nd half-period
  *
  * Array command elements:
@@ -70,6 +71,16 @@ bool EnableArrayProcessing = false;
  * Нужен, чтобы handle_aux() знал какой массив передавать в handle_aux_array().
  */
 const uint32_t *current_buf = NULL;
+
+/* HBL battery indication uses a command-field marker and keeps the exact
+ * ramping step separately.  The 3-bit command field cannot carry a 9-bit
+ * brightness value without rounding small UI1 levels down to an invisible
+ * result. */
+static uint16_t aux_hbl_step;
+
+/* CMODE_NOACTION is unused by normal AUX brightness commands and is therefore
+ * available as the direct-step marker for the battery-indicator HBL phase. */
+#define AUX_HBL_DIRECT_STEP CMODE_NOACTION
 
 #ifdef USE_STROBE
 typedef enum {
@@ -237,13 +248,17 @@ void off_aux_cmd(bool stop_lsi) {
  *   5   → 5 вспышек GRN_LED
  *   6   → 6 вспышек GRN_LED
  *
- * Если EE.usr.id_plus_sid == 1, к каналу добавляется HBL_LED.
+ * Если EE.usr.id_plus_sid == 1, к каналу добавляется HBL_LED
+ * (индикация ИД+СИД — индикатор + основной светодиод). Яркость HBL
+ * берётся из последнего шага яркости (step_user ? step_user : step_default),
+ * чтобы основной светодиод светился на той же яркости, что и фонарик.
  * Время: ON=75мс, OFF=225мс.
  * @return 32-битная команда для start_aux_cmd()
  */
 uint32_t set_aux_count(uint8_t count) {
 	LED_Bits_t device;
 	uint8_t flashes;
+	uint8_t brightness0 = 1;
 
 	if (count <= 2) {
 		device = RED_LED;
@@ -257,9 +272,13 @@ uint32_t set_aux_count(uint8_t count) {
 	}
 
 	if (EE.usr.id_plus_sid)
+	{
 		device |= HBL_LED;
+		aux_hbl_step = step_user ? step_user : step_default;
+		brightness0 = AUX_HBL_DIRECT_STEP;
+	}
 
-	return MAKE_CMD(device, 0, flashes, AWU_PSC_256, 38, AWU_PSC_1024, 28, 1, 0);
+	return MAKE_CMD(device, 0, flashes, AWU_PSC_256, 38, AWU_PSC_1024, 28, brightness0, 0);
 }
 #endif
 
@@ -298,7 +317,8 @@ void start_aux_cmd(uint32_t command, bool enable, IDM_Type_t idm_mode, awu_tick_
 /**
  * @brief Установка яркости каналов AUX/строба
  * @param device Битовая маска каналов (RED_LED, GRN_LED, HBL_LED).
- * @param brightness Индекс уровня в modes[] для HBL, 0/1 для GPIO LED.
+ * @param brightness Индекс уровня в modes[] для HBL, 0/1 для GPIO LED;
+ *                   CMODE_NOACTION означает aux_hbl_step.
  */
 static void SetBrightness(LED_Bits_t device, uint8_t brightness)
 {
@@ -313,9 +333,8 @@ static void SetBrightness(LED_Bits_t device, uint8_t brightness)
 	if (device & HBL_LED) {
 		/* HBL uses the same discrete brightness index as UI2.  Do not call
 		 * set_current(): it changes step_user and can power down the DAC. */
-		if (brightness >= CMODE_NOACTION)
-			brightness = CMODE_OFF;
-		out_set_stc(get_stepi(brightness));
+		out_set_stc(brightness == AUX_HBL_DIRECT_STEP ?
+				aux_hbl_step : get_stepi(brightness));
 	}
 }
 
@@ -621,6 +640,10 @@ void slot_batt_ind(void) {
 	uint8_t flashes = bat_get_flashes();
 	//EE_PRINTF("[AUX] slot_batt_ind flashes=%u\r\n", (unsigned)flashes);
 	uint32_t cmd = set_aux_count(flashes);
+	/* The HBL battery indication can be requested immediately after the
+	 * flashlight was switched off, before STANDBY restores the DAC path. */
+	if (EE.usr.id_plus_sid)
+		ON_POWER();
 	start_aux_cmd(cmd, true, IDM_OTHER, AWU_120MS);
 #endif
 }

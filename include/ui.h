@@ -267,7 +267,7 @@ void out_set_stc(uint16_t step);
 /**
  * @brief Power up DAC and I2C.
  */
-void ON_POWER(void);
+void ON_POWER(void) __attribute__((noinline));
 
 /**
  * @brief Power down DAC and I2C.
