@@ -279,8 +279,9 @@ uint8_t ob_GetMl(void) {
  * @param value Новое значение tc.
  */
 void ob_SetTc(int8_t value) {
+    if(value != _cache.tc)
+        change = true;
     _cache.tc = value;
-    change = true;
 }
 
 /**
@@ -288,8 +289,9 @@ void ob_SetTc(int8_t value) {
  * @param value Новое значение vc.
  */
 void ob_SetVc(int8_t value) {
+    if(value != _cache.vc)
+        change = true;
     _cache.vc = value;
-    change = true;
 }
 
 /**
@@ -297,8 +299,9 @@ void ob_SetVc(int8_t value) {
  * @param value Новое значение ml.
  */
 void ob_SetMl(uint8_t value) {
+    if(value != _cache.ml)
+        change = true;
     _cache.ml = value;
-    change = true;
 }
 
 /**
@@ -318,8 +321,9 @@ uint8_t ob_GetSlot(uint8_t index) {
  */
 void ob_SetSlot(uint8_t index, uint8_t value) {
     if (index >= SLOTS_COUNT) return;
+    if(value != _cache.slots[index])
+        change = true;
     _cache.slots[index] = value;
-    change = true;
 }
 
 /**
