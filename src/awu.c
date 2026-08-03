@@ -211,14 +211,6 @@ void AWU_IRQHandler(void)
             SystemInit();            /* Восстанавливаем системные часы после пробуждения */
             SystemCoreClockUpdate(); /* Обновляем переменную SystemCoreClock */
         }
-
-    //EE_PRINTF("[AWU] WAKEUP Source: AWU TIMER\r\n");
-#ifdef WL_FLASH_DEBUG
-        while (!(USART1->STATR & USART_STATR_TC))
-        {
-        }
-#endif
-
         wakeup_source = WS_AWU;
 
         /* Очищаем pending-флаг EXTI9: CH32V003 clears it by writing 1. */

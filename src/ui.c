@@ -181,7 +181,6 @@ uint8_t on_driver(void)
 
     if (driver_mode < MODE_BLOCK_C)
     {
-        EE_PRINTF("[UI] blocked, no on\r\n");
         return 0;
     }
 
@@ -432,7 +431,7 @@ void slot_strobe(void)
     ps.start = start;
 
     start_aux_strobe(strobe_index);
-    EE_PRINTF("[UI] slot_strobe idx=%u start=%u\r\n", strobe_index, start);
+    //EE_PRINTF("[UI] slot_strobe idx=%u start=%u\r\n", strobe_index, start);
 #endif
 }
 
@@ -443,7 +442,7 @@ void up_strobe(void)
     stop_aux_strobe(false);
     if (++strobe_index == STROBE_COUNT) strobe_index = 0;
     start_aux_strobe(strobe_index);
-    EE_PRINTF("[UI] up_strobe idx=%u\r\n", strobe_index);
+    //EE_PRINTF("[UI] up_strobe idx=%u\r\n", strobe_index);
 #endif
 }
 
@@ -557,7 +556,7 @@ void save_def_ui1(void)
         clr_indicator(IND_GRN);
 
     EE.default_ui1 = step_tc;
-    EE_PRINTF("[UI] save_def_ui1 step=%u (save commented)\r\n", (unsigned)step_tc);
+    //EE_PRINTF("[UI] save_def_ui1 step=%u (save commented)\r\n", (unsigned)step_tc);
 }
 
 /** @brief Save current UI2 mode as power-on default. */
@@ -574,7 +573,7 @@ void save_def_ui2(void)
         clr_indicator(IND_GRN);
 
     EE.default_ui2 = mode_current;
-    EE_PRINTF("[UI] save_def_ui2 mode=%u (save commented)\r\n", (unsigned)mode_current);
+    //EE_PRINTF("[UI] save_def_ui2 mode=%u (save commented)\r\n", (unsigned)mode_current);
 }
 
 /*******************************************************************************
@@ -648,7 +647,7 @@ void menu_exit(void)
     EE.uif.ui_index = ui_save;
     EE.aux.beacon_on = beacon_save;
     ui_table_idx = ui_save;
-    EE_PRINTF("[UI] menu exit -> ui=%u beacon=%u\r\n", (unsigned)ui_save, (unsigned)beacon_save);
+    //EE_PRINTF("[UI] menu exit -> ui=%u beacon=%u\r\n", (unsigned)ui_save, (unsigned)beacon_save);
 #endif
 }
 
