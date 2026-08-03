@@ -193,7 +193,7 @@ int main(void)
         if (tick_5s())
         {
             if(need_save) {
-                ob_Flush();             // временно - потом переделать!!!
+                ob_Flush();            
                 handle_ee();
             }
             need_sleep = true;

@@ -28,6 +28,8 @@
 #include "ch32v00x_flash.h"
 #include "array.h"
 
+uint8_t change = false;
+
 /* Ключи разблокировки flash-контроллера (из datasheet CH32V003) */
 #define FLASH_KEY1      0x45670123u
 #define FLASH_KEY2      0xCDEF89ABu
@@ -278,6 +280,7 @@ uint8_t ob_GetMl(void) {
  */
 void ob_SetTc(int8_t value) {
     _cache.tc = value;
+    change = true;
 }
 
 /**
@@ -286,6 +289,7 @@ void ob_SetTc(int8_t value) {
  */
 void ob_SetVc(int8_t value) {
     _cache.vc = value;
+    change = true;
 }
 
 /**
@@ -294,6 +298,7 @@ void ob_SetVc(int8_t value) {
  */
 void ob_SetMl(uint8_t value) {
     _cache.ml = value;
+    change = true;
 }
 
 /**
@@ -314,6 +319,7 @@ uint8_t ob_GetSlot(uint8_t index) {
 void ob_SetSlot(uint8_t index, uint8_t value) {
     if (index >= SLOTS_COUNT) return;
     _cache.slots[index] = value;
+    change = true;
 }
 
 /**
@@ -326,6 +332,12 @@ void ob_SetSlot(uint8_t index, uint8_t value) {
  * @return true — все данные записаны и верифицированы, false — ошибка.
  */
 bool ob_Flush(void) {
+
+    if (!change)
+    {
+        return false;
+    }
+    
     /* Установка маркера валидности перед записью */
     _cache.magic = MAGIC;
 
