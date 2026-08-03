@@ -141,7 +141,7 @@ static const strobe_profile_t strobe_commands[STROBE_COUNT] = {
  * Сбрасывает структуру состояния, устанавливает флаг EnableArrayProcessing
  * и запоминает указатель на массив для дальнейшей обработки в handle_aux().
  */
-void start_aux_array(const uint32_t *pArray, awu_tick_t delay) {
+static void start_aux_array(const uint32_t *pArray, awu_tick_t delay) {
 	off_aux_cmd(false);
 	memset(&aux_ctl, 0, sizeof(aux_ctl));
 
@@ -163,7 +163,7 @@ void start_aux_array(const uint32_t *pArray, awu_tick_t delay) {
  *   - Иначе — полное выключение (off_*)
  * Если подсветка выключена — полное выключение.
  */
-void smart_off_leds(LED_Bits_t channel) {
+static void smart_off_leds(LED_Bits_t channel) {
 	if (EE.aux.bcklight_type != BCK_TYPE_ON) {
 		if (channel & RED_LED) off_red();
 		if (channel & GRN_LED) off_grn();
@@ -205,7 +205,7 @@ bool aux_needs_dac(void)
  * @brief Проверка активности
  * @return true если обработчик активен (enable == true)
  */
-bool is_aux_active(void) {
+static bool is_aux_active(void) {
 	return aux_ctl.enable;
 }
 
@@ -257,7 +257,7 @@ void off_aux_cmd(bool stop_lsi) {
  * Время: ON=75мс, OFF=225мс.
  * @return 32-битная команда для start_aux_cmd()
  */
-uint32_t set_aux_count(uint8_t count) {
+static uint32_t set_aux_count(uint8_t count) {
 	LED_Bits_t device;
 	uint8_t flashes;
 	uint8_t brightness0 = 1;
@@ -301,7 +301,7 @@ uint32_t set_aux_count(uint8_t count) {
  *
  * Таймер AWU настраивается в handle_aux_cmd при обработке PER_FIRST.
  */
-void start_aux_cmd(uint32_t command, bool enable, IDM_Type_t idm_mode, awu_tick_t delay) {
+static void start_aux_cmd(uint32_t command, bool enable, IDM_Type_t idm_mode, awu_tick_t delay) {
 	#ifdef AUX_DEBUG
 	debug_cmd(command);
 	#endif
@@ -328,7 +328,7 @@ void start_aux_cmd(uint32_t command, bool enable, IDM_Type_t idm_mode, awu_tick_
  * @param brightness Индекс уровня в modes[] для HBL, 0/1 для GPIO LED;
  *                   CMODE_NOACTION означает aux_hbl_step.
  */
-static void SetBrightness(LED_Bits_t device, uint8_t brightness)
+static __attribute__((noinline)) void SetBrightness(LED_Bits_t device, uint8_t brightness)
 {
 	if (device & RED_LED) {
 		if (brightness) on_red_h();
@@ -388,7 +388,7 @@ void start_aux_strobe(uint8_t index)
  * Вызывается из handle_aux() после пробуждения MCU.
  * AWU таймер задаёт длительность сна между вызовами.
  */
-void handle_aux_cmd(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits) {
+static void handle_aux_cmd(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits) {
 	if (!ubits->enable) return;
 
 	LED_Bits_t device = (LED_Bits_t)aux->aux.device;
@@ -466,7 +466,7 @@ void handle_aux_cmd(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits) {
  *   (т.е. предыдущая команда полностью завершена).
  *   Увеличивает индекс, загружает следующую команду.
  */
-union AUX_Cmd_u *handle_aux_array(const uint32_t pArray[], AUX_Ctr_t *ctr) {
+static union AUX_Cmd_u *handle_aux_array(const uint32_t pArray[], AUX_Ctr_t *ctr) {
 
 	union AUX_Cmd_u *p = (union AUX_Cmd_u*)pArray;
 
@@ -601,7 +601,7 @@ void start_exaux_voltage(WARNING_Fr_t ex_mode) {
 	default:
 		break;
 	}
-start_aux_cmd(cmd, true, IDM_VWARNING, AWU_15MS);
+	start_aux_cmd(cmd, true, IDM_VWARNING, AWU_15MS);
 }
 #endif
 

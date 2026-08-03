@@ -223,12 +223,6 @@ extern const uint32_t *current_buf;
 /* ===== API functions ===== */
 
 /**
- * @brief Check if AUX handler is active.
- * @return true if active.
- */
-bool is_aux_active(void);
-
-/**
  * @brief Check if AUX is running in a specific mode.
  * @param mode Mode to check (IDM_BEACON, IDM_VWARNING, IDM_STROBE, IDM_OTHER).
  * @return true if active in that mode.
@@ -260,22 +254,6 @@ static inline void stop_aux_if(IDM_Type_t mode, bool stop_lsi) {
 }
 
 /**
- * @brief Start a single AUX command.
- * @param command 32-bit packed command.
- * @param enable   true = start processing immediately.
- * @param idm_mode Indication mode tag.
- * @param delay    Initial AWU delay before first half-period.
- */
-void start_aux_cmd(uint32_t command, bool enable, IDM_Type_t idm_mode, awu_tick_t delay);
-
-/**
- * @brief Start command array processing.
- * @param pArray Pointer to Flash-resident command array.
- * @param delay  Initial AWU delay.
- */
-void start_aux_array(const uint32_t *pArray, awu_tick_t delay);
-
-/**
  * @brief Start an energy-efficient DAC strobe profile.
  *
  * A profile may be a single packed command or an array of commands.  The
@@ -289,13 +267,6 @@ void start_aux_strobe(uint8_t index);
  * @brief Start beacon mode from EEPROM settings.
  */
 void start_aux_beacon(void);
-
-/**
- * @brief Build flash command for a given count.
- * @param count Number of flashes (0..6).
- * @return 32-bit command for start_aux_cmd().
- */
-uint32_t set_aux_count(uint8_t count);
 
 /**
  * @brief Indicate a number via AUX LEDs.
@@ -314,31 +285,10 @@ void aux_on(void);
 void aux_off(void);
 
 /**
- * @brief Smart LED off respecting backlight state.
- * @param channel Bitmask of channels (RED_LED, GRN_LED, HBL_LED, combinable).
- */
-void smart_off_leds(LED_Bits_t channel);
-
-/**
  * @brief Main AUX processing loop (called on each AWU wake).
  * @return true if commands still active (AWU will be restarted), false if all done.
  */
 bool handle_aux(void);
-
-/**
- * @brief Process one FSM step for a single AUX command.
- * @param aux  Pointer to command.
- * @param ubits Pointer to handler state.
- */
-void handle_aux_cmd(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits);
-
-/**
- * @brief Process one FSM step for command array.
- * @param pBuffer Pointer to command array in Flash.
- * @param ubits   Pointer to handler state.
- * @return Pointer to current command, or NULL if AC_STOP.
- */
-union AUX_Cmd_u *handle_aux_array(const uint32_t pBuffer[], AUX_Ctr_t *ubits);
 
 /**
  * @brief Макрос формирования 32-битной AUX-команды

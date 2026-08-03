@@ -32,6 +32,11 @@
 #include "ui.h"
 #include "app_data.h"
 #include "ob.h"
+#include "aux_leds.h"
+#include "dac.h"
+#include "timers.h"
+#include "awu.h"
+#include "led_gpio.h"
 
 
 uint16_t vbat_mv = 0;  /* Напряжение питания в мВ (обновляется в adc_read) */
@@ -415,12 +420,57 @@ void reset_max_step(void)
 extern uint8_t need_sleep;
 
 /**
- * @brief Force shutdown: turn off driver and request STANDBY.
+ * @brief Необратимое выключение: обесточить нагрузку и уйти в вечный STANDBY.
+ *
+ * Защита от глубокого разряда. Обесточивает нагрузку (LED через off_red/off_grn,
+ * DAC PD0), переводит I2C и делитель NTC в Hi-Z, отключает AWU/LSI и все
+ * источники пробуждения (кнопка EXTI3, AWU EXTI9 и прочие EXTI-линии).
+ * Вечный цикл STANDBY: функция не возвращается (в отличие от AWU_Sleep_Now(),
+ * который мог вернуться и отменить PDDS).
  */
 static void down_forever(void)
 {
-    off_driver(false, SS_NO);
-    need_sleep = true;
+    /* 1. Обесточить нагрузку: AUX-светодиоды погасить через штатные ф-ции
+     *    (уважают особенность PC6/PC7), питание DAC (PD0)=0. */
+    off_red();
+    off_grn();
+    DAC_PWR_PORT->BCR = DAC_PWR_PIN;
+
+    /* 2. I2C-линии PC1/PC2 и делитель NTC PD2/PD3 → Hi-Z: нет утечек.
+     *    Тактирование АЦП/TIM2 выключать не нужно — в STANDBY чип и так
+     *    полностью обесточен (PDDS=1). */
+    GPIOC->CFGLR &= ~((0x0F << 4) | (0x0F << 8));
+    GPIOD->CFGLR &= ~((0xF << 8) | (0xF << 12));
+
+    /* 3. Остановить AWU и LSI — не потребляют ток в STANDBY и не дают
+     *    события пробуждения (EXTI Line9). */
+    PWR->AWUCSR &= ~PWR_AWUCSR_AWUEN;
+    RCC->RSTSCKR &= ~RCC_LSION;
+
+    /* 4. Замаскировать ВСЕ EXTI-прерывания и события: ни кнопка (Line3),
+     *    ни AWU (Line9) не смогут разбудить MCU из STANDBY. Очистка
+     *    триггеров и pending-флагов — чтобы нажатие во время входа
+     *    в сон не сформировало отложенное событие. */
+    EXTI->INTENR = 0;
+    EXTI->EVENR  = 0;
+    EXTI->RTENR  = 0;
+    EXTI->FTENR  = 0;
+    EXTI->INTFR  = 0;
+
+    /* 5. Снять IRQ EXTI7_0 (кнопка), AWU и TIM2 из NVIC — страховка на
+     *    случай теоретического пробуждения: обработчики не выполнятся. */
+    NVIC->IRER[0] = (1 << 20) | (1 << 21);
+    NVIC->IRER[1] = (1 << (38 & 0x1F));
+
+    /* 6. Вечный STANDBY: AWU_Sleep_Now() содержит тяжёлую последовательность
+     *    __WFI() (WCH: PDDS+SLEEPDEEP+WFE) — она уже слинкована и используется
+     *    main loop, поэтому здесь её не инлайним, а вызываем. Если каким-то
+     *    образом WFI вернулся (все EXTI замаскированы — вернуться не может),
+     *    цикл снова уходит в STANDBY. Управление не возвращается. */
+    for (;;)
+    {
+        AWU_Sleep_Now();
+    }
 }
 
 /**
