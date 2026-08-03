@@ -305,13 +305,6 @@ uint16_t getBright_CRT_9to12Bit(uint16_t val);
 uint16_t get_stepi(uint8_t index);
 
 /**
- * @brief Get next higher discrete mode index (wraps at CMODE_TURBO).
- * @param mode Current mode.
- * @return Next mode index.
- */
-uint8_t get_up_mode(uint8_t mode);
-
-/**
  * @brief Set current step from discrete mode index.
  * @param cmode Discrete mode index (CMODE_*).
  */

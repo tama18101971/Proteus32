@@ -364,7 +364,7 @@ void off_driver_false(void)
  * @brief Set AUX indicator LED to green or red (single flash).
  * @param ind_clr IND_GRN for green, IND_RED for red.
  */
-static void clr_indicator(ind_clr_t ind_clr)  // бывшая onoff_indicator
+static __attribute__((noinline)) void clr_indicator(ind_clr_t ind_clr)  // бывшая onoff_indicator
 {
     off_auto_repeat();
     if (ind_clr == IND_GRN)
@@ -542,8 +542,13 @@ void calibration(void)
  *  а не спрятаны под USE_MENU.
  ******************************************************************************/
 
-/** @brief Save current UI1 step as power-on default. */
-void save_def_ui1(void)
+/**
+ * @brief Общая «мигающая» часть сохранения default: мигнуть бэклайтом/индикатором.
+ *
+ * Выделена из save_def_ui1/2 — обе функции дублировали тело. Функционально
+ * идентично прежнему коду (out_set_stc(0)+пауза для гашения бэклайта).
+ */
+static void save_def_blink(void)
 {
     off_auto_repeat();
     if (EE.uif.off_bckl)
@@ -554,7 +559,12 @@ void save_def_ui1(void)
     }
     else
         clr_indicator(IND_GRN);
+}
 
+/** @brief Save current UI1 step as power-on default. */
+void save_def_ui1(void)
+{
+    save_def_blink();
     EE.default_ui1 = step_tc;
     //EE_PRINTF("[UI] save_def_ui1 step=%u (save commented)\r\n", (unsigned)step_tc);
 }
@@ -562,16 +572,7 @@ void save_def_ui1(void)
 /** @brief Save current UI2 mode as power-on default. */
 void save_def_ui2(void)
 {
-    off_auto_repeat();
-    if (EE.uif.off_bckl)
-    {
-        out_set_stc(0);
-        Delay_Ms(30);
-        out_set_stc(step_user);
-    }
-    else
-        clr_indicator(IND_GRN);
-
+    save_def_blink();
     EE.default_ui2 = mode_current;
     //EE_PRINTF("[UI] save_def_ui2 mode=%u (save commented)\r\n", (unsigned)mode_current);
 }
@@ -832,7 +833,7 @@ uint16_t get_stepi(uint8_t index)
 }
 
 /** @brief Clamp mode to voltage-limited ceiling. */
-uint8_t get_up_mode(uint8_t mode)
+static __attribute__((noinline)) uint8_t get_up_mode(uint8_t mode)
 {
     uint8_t up_mode = MIN(volt_stop_mode, volt_max_mode);
     return MIN(up_mode, mode);
@@ -845,7 +846,7 @@ void set_curri(uint8_t cmode)
 }
 
 /** @brief Enter given mode (internal helper). */
-static void on_mode(uint8_t m)
+static __attribute__((noinline)) void on_mode(uint8_t m)
 {
     ps.use_prev = false;
     on_driver();

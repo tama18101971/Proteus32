@@ -434,8 +434,8 @@ static void down_forever(void)
      *    (уважают особенность PC6/PC7), питание DAC (PD0)=0. */
     off_red();
     off_grn();
-    DAC_PWR_PORT->BCR = DAC_PWR_PIN;
-
+    dac_pwrpin_off();
+ 
     /* 2. I2C-линии PC1/PC2 и делитель NTC PD2/PD3 → Hi-Z: нет утечек.
      *    Тактирование АЦП/TIM2 выключать не нужно — в STANDBY чип и так
      *    полностью обесточен (PDDS=1). */
