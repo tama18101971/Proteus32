@@ -280,6 +280,10 @@ bool adc_read(void)
     bool regular_ready;
     bool injected_ready;
 
+    /* A new conversion invalidates the previous sample until the complete
+     * NTC/Vrefint pair passes all acquisition checks below. */
+    voltage_ok = false;
+
     // Включаем делитель напряжения: PD3 = 0 ("земля" нижнего плеча, ток через NTC течёт)
     GPIOD->BCR = (1 << 3);
 
@@ -337,7 +341,7 @@ bool adc_read(void)
 #ifdef PRINT_ADC
     // Выводим результат
     EE_PRINTF("%04d, %04d -> Vbat: %ld mV | Temp: %d.%d C\r\n",
-              vrefint_adc, raw_temperature_adc, (long)vbat_to_mv(vrefint_adc),
+              vrefint_adc, raw_temperature_adc, (long)vbat_to_mv_calibrated(),
               temperature_c / 10, temperature_c % 10);
 #endif
 
@@ -376,12 +380,13 @@ void adc_stop(void)
 
 /**
  * @brief Пересчёт кода Vrefint в милливольты (точно, без libgcc).
- * @param vrefint_adc Код Vrefint (валидный диапазон 1..1023).
+ * @param vrefint_adc Код Vrefint (валидный диапазон 256..512).
  * @return Напряжение в мВ = floor(1228800/adc), 0 при adc==0.
- * @details Школьное деление по битам частного (13 итераций). Точно при
- * vrefint_adc >= 151 (частное < 8192); фактический диапазон выборки >= 256
- * (guard в adc_read), т.е. всегда на валидных данных. Используется только
- * для отладочного вывода — защита работает непосредственно в кодах АЦП.
+ * @details Школьное деление по битам частного (14 итераций). Точно при
+ * vrefint_adc >= 129 (частное < 16384); это покрывает и фактический
+ * диапазон выборки 256..512, и его возможный калибровочный сдвиг ±127.
+ * Используется только для отладочного вывода — защита работает
+ * непосредственно в кодах АЦП.
  */
 __attribute__((noinline)) uint16_t vbat_to_mv(uint16_t vrefint_adc)
 {
@@ -391,7 +396,7 @@ __attribute__((noinline)) uint16_t vbat_to_mv(uint16_t vrefint_adc)
     if (vrefint_adc == 0u)
         return 0u;
 
-    for (int8_t i = 12; i >= 0; i--)
+    for (int8_t i = 13; i >= 0; i--)
     {
         uint32_t t = (uint32_t)vrefint_adc << i;
         if (rem >= t)
@@ -401,6 +406,25 @@ __attribute__((noinline)) uint16_t vbat_to_mv(uint16_t vrefint_adc)
         }
     }
     return q;
+}
+
+/**
+ * @brief Convert the current valid calibrated Vrefint sample to mV.
+ * @return Calibrated battery voltage in mV, or 0 without a valid sample.
+ */
+uint16_t vbat_to_mv_calibrated(void)
+{
+    if (!voltage_ok)
+        return 0u;
+
+    int32_t effective_code = (int32_t)vrefint_adc - (int32_t)ob_GetVc();
+    /* vbat_to_mv() uses 14 quotient bits; with a valid raw sample and the
+     * documented vc range the normal lower bound is 129.  Treat an invalid
+     * Option Bytes value or an impossible effective code as no reading. */
+    if (effective_code < 129)
+        return 0u;
+
+    return vbat_to_mv((uint16_t)effective_code);
 }
 
 /* ============ Защита по разряду батареи (в кодах Vrefint) ============
@@ -436,7 +460,8 @@ static const uint16_t ceil_cap[6] =
 
 /**
  * @brief Вычисляет максимально допустимый режим UI2 по текущему напряжению.
- * @param vref Код Vrefint (эффективный, после вычета vc в вызывающем коде).
+ * @param vref Сырой отфильтрованный код Vrefint.
+ * @param vc Калибровочный сдвиг кода из Option Bytes.
  * @return Индекс максимального режима (CMODE_MOON..CMODE_TURBO).
  */
 static uint8_t calc_volt_max_mode(uint16_t vref, int16_t vc)

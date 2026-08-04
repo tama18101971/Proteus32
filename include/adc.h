@@ -106,12 +106,23 @@ extern bool voltage_ok;
 
 /**
  * @brief Пересчёт кода Vrefint в милливольты (точно, без libgcc).
- * @param vrefint_adc Код Vrefint (реальный диапазон выборки 256..512,
- *                    гарантирован guard'ом в adc_read).
+ * @param vrefint_adc Код Vrefint. Сырая выборка находится в диапазоне
+ *                    256..512; после калибровочного сдвига vc эффективный
+ *                    код для диагностического вывода может быть 129..639.
  * @return Напряжение в мВ (floor(1228800/adc)). 0 при adc==0.
  * Используется только для отладочного вывода — горячий путь в кодах.
  */
 uint16_t vbat_to_mv(uint16_t vrefint_adc);
+
+/**
+ * @brief Get the calibrated battery voltage for diagnostic output.
+ *
+ * Applies the Option Bytes code offset to the current filtered Vrefint code
+ * and returns zero when the current voltage sample is not valid. This helper
+ * is intentionally kept out of the battery-protection hot path.
+ * @return Calibrated battery voltage in mV, or 0 without a valid sample.
+ */
+uint16_t vbat_to_mv_calibrated(void);
 
 /** @brief Temperature in °C (updated by adc_read). */
 extern int16_t temperature_c;

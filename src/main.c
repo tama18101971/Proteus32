@@ -216,7 +216,7 @@ int main(void)
                 EE_PRINTF("[THERMAL WAKE] ok=%u T=%u F=%d I=%d L=%u V=%umV\r\n",
                           (unsigned)sample_ok, raw_temperature_adc,
                           state.filtered_temp, state.integral, limiter,
-                          vbat_to_mv(vrefint_adc));
+                          vbat_to_mv_calibrated());
                 if (!sample_ok || !thermal_sleep_allowed())
                 {
                     is_sleep_mode = false;
@@ -328,7 +328,7 @@ int main(void)
             EE_PRINTF("[NORMAL] T=%u F=%d I=%d L=%d P=%u S=%u V=%umV ramp=%u\r\n",
                       raw_temperature_adc, state.filtered_temp,
                       state.integral, state.prev_limiter, out, step_user,
-                      vbat_to_mv(vrefint_adc), max_step);
+                      vbat_to_mv_calibrated(), max_step);
         }
 
         if (tick_5s())

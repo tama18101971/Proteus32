@@ -523,18 +523,32 @@ void reset2def(void)
 void calibration(void)
 {
 #ifdef USE_MENU
+    if (!voltage_ok)
+    {
+        /* Do not save offsets derived from a stale or failed ADC pair. */
+        clr_indicator(IND_RED);
+        return;
+    }
+
     /* Калибровка в кодах Вrefint (см. adc.h): vc = измеренный код - опорный код.
      * Положительный vc повышает эффективное напряжение (сдвиг e = adc - vc). */
-    int8_t vc = (int8_t)((int16_t)vrefint_adc - (int16_t)REF_VREF_CODE);
-
-    int8_t tc = (int8_t)((int16_t)raw_temperature_adc - REF_TEMP_ADC);
+    int16_t vc_delta = (int16_t)vrefint_adc - (int16_t)REF_VREF_CODE;
+    int16_t tc_delta = (int16_t)raw_temperature_adc - (int16_t)REF_TEMP_ADC;
 
     uint8_t ok = 1;
-    if (vc > VC_CLIP_MAX || vc < VC_CLIP_MIN) { ok = 0; vc = 0; }
-    if (tc > TC_CLIP_MAX || tc < TC_CLIP_MIN) { ok = 0; tc = 0; }
+    if (vc_delta > VC_CLIP_MAX || vc_delta < VC_CLIP_MIN)
+    {
+        ok = 0;
+        vc_delta = 0;
+    }
+    if (tc_delta > TC_CLIP_MAX || tc_delta < TC_CLIP_MIN)
+    {
+        ok = 0;
+        tc_delta = 0;
+    }
 
-    ob_SetVc(vc);
-    ob_SetTc(tc);
+    ob_SetVc((int8_t)vc_delta);
+    ob_SetTc((int8_t)tc_delta);
     clr_indicator((ind_clr_t)ok);
 #endif
 }
