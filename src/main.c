@@ -39,9 +39,10 @@ volatile wakeup_source_t wakeup_source = WS_NONE; /* Источник после
 
 volatile uint8_t need_sleep = false; /* Флаг необходимости перейти в режим сна */
 
-/* AVR used step_tc > 255 - 120 as its high-power boundary.  Preserve that
- * fraction of the range after moving from 8-bit to the CH32 9-bit scale. */
-#define THERMAL_FAST_STEP       271U
+/* getBright_CRT_9to12Bit(322) = 1018, or 24.86% of DAC_MAX_VALUE.
+ * The strict '>' below therefore enters fast supervision at step 323:
+ * DAC=1028, approximately 25.1% of maximum output. */
+#define THERMAL_FAST_STEP       322U
 
 typedef enum
 {
@@ -212,6 +213,9 @@ int main(void)
                 adc_init();
 
                 bool sample_ok = sample_and_scan();
+                EE_PRINTF("[THERMAL WAKE] ok=%u T=%u F=%d I=%d L=%u V=%umV\r\n",
+                          (unsigned)sample_ok, raw_temperature_adc,
+                          state.filtered_temp, state.integral, limiter, vbat_mv);
                 if (!sample_ok || !thermal_sleep_allowed())
                 {
                     is_sleep_mode = false;
@@ -342,6 +346,8 @@ int main(void)
                     bool sample_ok = sample_and_scan();
                     if (sample_ok && thermal_sleep_allowed())
                     {
+                        EE_PRINTF("[THERMAL SLEEP] S=%u L=%u\r\n",
+                                  step_tc, limiter);
                         sleep_owner = SLEEP_OWNER_THERMAL;
                         need_sleep = true;
                     }
