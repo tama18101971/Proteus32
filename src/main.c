@@ -170,7 +170,7 @@ int main(void)
 
     reset_limiters();
 
-    EE_PRINTF("setpoint=%u kp_shift=%u ki_shift=%u ki_decim=%u offset=%u\r\n",
+    EE_PRINTF("[LIMITER INIT] setpoint=%u kp_shift=%u ki_shift=%u ki_decim=%u offset=%u\r\n",
               BASE_TEMPERATURE + EE.usr.t_calibr, config.kp_left_shift, config.ki_left_shift,
               config.ki_decimation_shift, config.t_anticipate_offset);
 
@@ -324,7 +324,7 @@ int main(void)
 #ifdef WL_FLASH_DEBUG
             uint16_t pwm_out = (step_user > limiter) ? (step_user - limiter) : 0;
 #endif
-            EE_PRINTF("T=%u F=%d I=%d L=%d P=%u S=%u V=%umV ramp=%u\r\n",
+            EE_PRINTF("[REGULAR] T=%u F=%d I=%d L=%d P=%u S=%u V=%umV ramp=%u\r\n",
                       raw_temperature_adc, state.filtered_temp,
                       state.integral, state.prev_limiter, pwm_out, step_user,
                       vbat_mv, max_step);
