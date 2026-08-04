@@ -519,12 +519,13 @@ void reset2def(void)
     clr_indicator(IND_GRN);
 }
 
-/** @brief Measure Vbat and temperature, compute vc/tc offsets and save to Option Bytes. */
+/** @brief Measure Vbat (в кодах Vrefint) and temperature, save vc/tc to Option Bytes. */
 void calibration(void)
 {
 #ifdef USE_MENU
-    uint16_t vbat_raw = vbat_mv - (int16_t)ob_GetVc();
-    int8_t vc = (int8_t)((int32_t)REF_VOLTAGE_MV - (int32_t)vbat_raw);
+    /* Калибровка в кодах Вrefint (см. adc.h): vc = измеренный код - опорный код.
+     * Положительный vc повышает эффективное напряжение (сдвиг e = adc - vc). */
+    int8_t vc = (int8_t)((int16_t)vrefint_adc - (int16_t)REF_VREF_CODE);
 
     int8_t tc = (int8_t)((int16_t)raw_temperature_adc - REF_TEMP_ADC);
 
@@ -1046,15 +1047,19 @@ void ui_process(void)
             {
                 /* The UI1 ceiling is a sag ratchet.  A press starts a new
                  * activation attempt, so clear a stale historical cap only
-                 * after a confirmed healthy voltage measurement. */
-                if (vbat_mv > 3100U)
+                 * after a confirmed healthy voltage measurement
+                 * (vbat > 3100 мВ ⟺ vrefint_adc <= MV_GE(3101)). */
+                if (voltage_ok &&
+                    ((int32_t)vrefint_adc - (int32_t)ob_GetVc() <= (int32_t)MV_GE(3101u)))
+                {
                     reset_max_step();
+                }
 
                 /* Never turn an uninitialised/failed zero sample into a
-                 * permanent low-voltage ratchet.  Any non-zero reading,
+                 * permanent low-voltage ratchet.  Any valid reading,
                  * including a genuinely depleted cell, still follows the
                  * normal low-voltage ceiling and shutdown paths. */
-                if (vbat_mv != 0U)
+                if (voltage_ok)
                 {
                     /* limiter is applied once when the physical target is
                      * written; keep the battery ceiling in user-step space. */

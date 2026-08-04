@@ -97,7 +97,7 @@ static bool sample_and_scan(void)
      * rail failsafe instead of reusing the previous global ADC value. */
     if (driver_mode != MODE_STROB)
     {
-        vbat_mv = 0u;
+        voltage_ok = false;
         scan_limiters_fault();
         scan_voltage();
     }
@@ -215,7 +215,8 @@ int main(void)
                 bool sample_ok = sample_and_scan();
                 EE_PRINTF("[THERMAL WAKE] ok=%u T=%u F=%d I=%d L=%u V=%umV\r\n",
                           (unsigned)sample_ok, raw_temperature_adc,
-                          state.filtered_temp, state.integral, limiter, vbat_mv);
+                          state.filtered_temp, state.integral, limiter,
+                          vbat_to_mv(vrefint_adc));
                 if (!sample_ok || !thermal_sleep_allowed())
                 {
                     is_sleep_mode = false;
@@ -322,12 +323,12 @@ int main(void)
         if (tick_2hz())
         {
 #ifdef WL_FLASH_DEBUG
-            uint16_t pwm_out = (step_user > limiter) ? (step_user - limiter) : 0;
+            uint16_t out = (step_user > limiter) ? (step_user - limiter) : 0;
 #endif
-            EE_PRINTF("[REGULAR] T=%u F=%d I=%d L=%d P=%u S=%u V=%umV ramp=%u\r\n",
+            EE_PRINTF("[NORMAL] T=%u F=%d I=%d L=%d P=%u S=%u V=%umV ramp=%u\r\n",
                       raw_temperature_adc, state.filtered_temp,
-                      state.integral, state.prev_limiter, pwm_out, step_user,
-                      vbat_mv, max_step);
+                      state.integral, state.prev_limiter, out, step_user,
+                      vbat_to_mv(vrefint_adc), max_step);
         }
 
         if (tick_5s())

@@ -15,7 +15,8 @@
  *         PD3 = 0 (GND) — divider active, NTC measured on PD2
  *         PD3 = 1 — divider chain broken, no current draw
  *
- * Voltage: Vbat = (1200 * 1024) / vrefint_adc (mV)
+ * Voltage: считается в кодах Vrefint, mV = (1200 * 1024) / vrefint_adc
+ * вычисляется только для отладки (vbat_to_mv).
  * Temperature: binary search + linear interpolation in termo_table
  *
  * Power saving: adc_stop() disables clock and sets GPIO to Hi-Z
@@ -39,7 +40,12 @@
 #include "led_gpio.h"
 
 
-uint16_t vbat_mv = 0;  /* Напряжение питания в мВ (обновляется в adc_read) */
+/* Напряжение целиком в кодах Vrefint: vbat_mv = floor(1228800/vrefint_adc).
+ * Горячий путь (scan_voltage и др.) работает с vrefint_adc и кодовыми
+ * порогами, без единого деления.  mB нужны только для отладочного вывода
+ * (vbat_to_mv()). */
+uint16_t vrefint_adc = 0;    /* код Vrefint после EMA (обновляется в adc_read) */
+bool voltage_ok = false;     /* false = нет валидной свежей выборки (сбой/таймаут) */
 int16_t temperature_c = 0;
 uint16_t raw_temperature_adc = 0; // сырое значение температуры с АЦП (обновляется в adc_read)
 
@@ -264,7 +270,8 @@ void adc_init(void)
  *
  * Powers the NTC divider (PD3=0), waits for settling, starts regular+injected
  * conversion, reads results, then powers down the divider (PD3=1).
- * Updates raw_temperature_adc, vbat_mv, temperature_c only after both
+ * Updates raw_temperature_adc, vrefint_adc, voltage_ok, temperature_c
+ * only after both
  * conversions complete successfully.
  * @return true if a fresh NTC/Vrefint pair was committed, false otherwise.
  */
@@ -317,19 +324,12 @@ bool adc_read(void)
     if ((vrefint_raw < 256u) || (vrefint_raw > 512u))
         return false;
 
-    uint16_t vrefint_adc = ema_update(vrefint_raw);
-
-    // Вычисляем напряжение питания (мВ): Vrefint=1.2V, 10-бит ADC
-    uint16_t new_vbat_mv = (1200 * 1024) / vrefint_adc;
-
-    // Применяем калибровку vc из Option Bytes (int8_t, ±127 мВ)
-    new_vbat_mv += (int16_t)ob_GetVc();
-
     /* Commit all values together.  get_exact_temp_adc() intentionally reads
      * the newly committed raw value so calibration and limiter see the same
-     * sample. */
+     * sample.  Voltage stays in raw Vrefint code domain — no division here. */
+    vrefint_adc = ema_update(vrefint_raw);
+    voltage_ok = true;
     raw_temperature_adc = new_raw_temperature_adc;
-    vbat_mv = new_vbat_mv;
 
     // Расчет температуры по таблице (с коррекцией tc)
     temperature_c = calc_temperature(get_exact_temp_adc());
@@ -337,7 +337,8 @@ bool adc_read(void)
 #ifdef PRINT_ADC
     // Выводим результат
     EE_PRINTF("%04d, %04d -> Vbat: %ld mV | Temp: %d.%d C\r\n",
-              vrefint_adc, raw_temperature_adc, vbat_mv, temperature_c / 10, temperature_c % 10);
+              vrefint_adc, raw_temperature_adc, (long)vbat_to_mv(vrefint_adc),
+              temperature_c / 10, temperature_c % 10);
 #endif
 
     return true;
@@ -373,9 +374,42 @@ void adc_stop(void)
     GPIOD->CFGLR &= ~(0xF << 12);  /* PD3: 0b0000 = Analog Input (Hi-Z) */
 }
 
-/* ============ Защита по разряду батареи ============ */
+/**
+ * @brief Пересчёт кода Vrefint в милливольты (точно, без libgcc).
+ * @param vrefint_adc Код Vrefint (валидный диапазон 1..1023).
+ * @return Напряжение в мВ = floor(1228800/adc), 0 при adc==0.
+ * @details Школьное деление по битам частного (13 итераций). Точно при
+ * vrefint_adc >= 151 (частное < 8192); фактический диапазон выборки >= 256
+ * (guard в adc_read), т.е. всегда на валидных данных. Используется только
+ * для отладочного вывода — защита работает непосредственно в кодах АЦП.
+ */
+__attribute__((noinline)) uint16_t vbat_to_mv(uint16_t vrefint_adc)
+{
+    uint32_t rem = VREF_NUMERATOR;
+    uint16_t q = 0u;
 
-/* Пороги напряжения для 1S Li-ion (мВ):
+    if (vrefint_adc == 0u)
+        return 0u;
+
+    for (int8_t i = 12; i >= 0; i--)
+    {
+        uint32_t t = (uint32_t)vrefint_adc << i;
+        if (rem >= t)
+        {
+            rem -= t;
+            q |= (uint16_t)(1u << i);
+        }
+    }
+    return q;
+}
+
+/* ============ Защита по разряду батареи (в кодах Vrefint) ============
+ * vbat_mv = floor(1228800/adc); Vrefint растёт при падении напряжения.
+ * Все пороги переведены в коды времени компиляции (MV_LT/MV_GE):
+ *   vbat < mV  ⟺  adc >= MV_LT(mV)   (низкое напряжение — код высокий)
+ *   vbat >= mV ⟺  adc <= MV_GE(mV)
+ * Калибровочный vc (int8, коды) входит как e = adc - vc.
+ * Смысл индексов сохранён из исходника:
  *   [0] = критический разряд → принудительный сон
  *   [1] = только CMODE_MOON
  *   [2] = CMODE_MIN
@@ -383,38 +417,56 @@ void adc_stop(void)
  *   [4] = CMODE_MID
  *   [5] = восстановление / без ограничений (CMODE_TURBO)
  */
-static const uint16_t mode_swt[6] = {
-    2700, 2750, 2800, 2900, 3000, 3100
+static const uint16_t swt_cut[6] =
+{   /* vbat < mV ⟺ adc >= это значение */
+    MV_LT(2700), MV_LT(2750), MV_LT(2800), MV_LT(2900), MV_LT(3000), MV_LT(3100)
 };
+/* То же, но для «vbat < mV+1» — исходная версия calc_volt_max_mode
+ * сравнивала exact_v < (порог_мВ[i] + 1). */
+static const uint16_t swt_cut1[6] =
+{
+    MV_LT(2701), MV_LT(2751), MV_LT(2801), MV_LT(2901), MV_LT(3001), MV_LT(3101)
+};
+/* vbat > mV ⟺ adc <= это значение (потолок яркости UI1). */
+static const uint16_t ceil_cap[6] =
+{
+    MV_GE(2501), MV_GE(2821), MV_GE(2931), MV_GE(3081), MV_GE(3191), MV_GE(3301)
+};
+#define CUT_RECOVERY_MV 3101u   /* vbat > 3100 мВ ⟺ adc <= MV_GE(3101)=396 */
 
 /**
  * @brief Вычисляет максимально допустимый режим UI2 по текущему напряжению.
- * @param exact_v Точное напряжение питания в мВ.
+ * @param vref Код Vrefint (эффективный, после вычета vc в вызывающем коде).
  * @return Индекс максимального режима (CMODE_MOON..CMODE_TURBO).
  */
-static uint8_t calc_volt_max_mode(uint16_t exact_v)
+static uint8_t calc_volt_max_mode(uint16_t vref, int16_t vc)
 {
     for (uint8_t i = CMODE_MOON; i < CMODE_TURBO; i++)
-        if (exact_v < (mode_swt[i] + 1)) return i;
+        if ((int32_t)vref - vc >= (int32_t)swt_cut1[i]) return i;
     return CMODE_TURBO;
 }
 
 /* ============ Потолок яркости UI1 по напряжению (ramping) ============
  * Аналог AVR adc.c limiter[2][6] + ratchet_max_step().
- * volt_max_tbl — пороги в мВ (по возрастанию), step_max_tbl —
- * соответствующие 9-битные шаги (0..511), масштабированные из AVR 8-бит.
+ * step_max_tbl — 9-битные шаги (0..511), масштабированные из AVR 8-бит.
  * volt_step_ratchet монотонно убывает (MIN) до явного безопасного восстановления. */
-static const uint16_t volt_max_tbl[6] = {2500, 2820, 2930, 3080, 3190, 3300};
 static const uint16_t step_max_tbl[6] = {120, 240, 310, 400, 463, 511};
 
-/** @brief Чистый расчёт потолка по текущему vbat_mv (без побочных эффектов). */
+/* Код Vrefint, представляющий «критически низкое напряжение» при отсутствии
+ * валидной выборки (voltage_ok == false).  Заменяет прежний маркер
+ * vbat_mv == 0: все пороги «vbat < mv» срабатывают, «vbat > mv» — нет. */
+#define VREF_SENTINEL 1023u
+
+/** @brief Чистый расчёт потолка по текущему коду Vrefint (без побочных эффектов). */
 static uint16_t calc_step_ceiling(void)
 {
+    int16_t vc = ob_GetVc();
+    uint16_t vcode = voltage_ok ? vrefint_adc : VREF_SENTINEL;
     uint8_t i = 6;
     while (i > 0)
     {
         i--;
-        if (vbat_mv > volt_max_tbl[i]) break;
+        if ((int32_t)vcode - vc <= (int32_t)ceil_cap[i]) break;
     }
     return step_max_tbl[i];
 }
@@ -496,27 +548,33 @@ static void down_forever(void)
 }
 
 /**
- * @brief Battery undervoltage protection (call at 30 Hz).
+ * @brief Battery undervoltage protection (call at 30 Hz), в кодах Vrefint.
  *
  * For UI1 (ramping): step-down brightness at each threshold, hard cutoff at 2700 mV.
  * For UI2 (discrete): reduce mode automatically, hard cutoff if already at mode 0.
  * Monotonic: volt_stop_mode only decreases, recovers on reboot.
+ *
+ * Все сравнения выполняются над кодом Vrefint (без делений); калибровочный
+ * vc учитывается как сдвиг кода.  При voltage_ok == false используется
+ * VREF_SENTINEL — аналог прежнего vbat_mv == 0 (критично низкое).
  */
 void scan_voltage(void)
 {
     static uint8_t voff_count = 0;
     static uint8_t voff_count_off = 0;
     uint8_t ui_index = EE.uif.ui_index;
+    int16_t vc = ob_GetVc();
+    uint16_t vcode = voltage_ok ? vrefint_adc : VREF_SENTINEL;
 
-    volt_max_mode = calc_volt_max_mode(vbat_mv);
+    volt_max_mode = calc_volt_max_mode(vcode, vc);
 
     if (driver_mode != MODE_ON) return;
 
     /* Ramping UI (brightness control UI1) */
     if (ui_index == 1)
     {
-        /* Critical undervoltage: below mode_swt[0] */
-        if (vbat_mv < mode_swt[0])
+        /* Critical undervoltage: vbat < 2700 ⟺ adc >= swt_cut[0] */
+        if ((int32_t)vcode - vc >= (int32_t)swt_cut[0])
         {
             if (++voff_count_off > 3)
             {
@@ -530,7 +588,7 @@ void scan_voltage(void)
             voff_count_off = 0;
 
             /* Step-down brightness on voltage sag */
-            if (vbat_mv < mode_swt[down_count])
+            if ((int32_t)vcode - vc >= (int32_t)swt_cut[down_count])
             {
                 if (++voff_count > 3)
                 {
@@ -547,8 +605,8 @@ void scan_voltage(void)
             {
                 voff_count = 0;
 
-                /* Recovery: voltage above top threshold */
-                if (vbat_mv > mode_swt[5])
+                /* Recovery: voltage above top threshold (vbat > 3100) */
+                if ((int32_t)vcode - vc <= (int32_t)MV_GE(CUT_RECOVERY_MV))
                     down_count = 5;
             }
         }
@@ -557,7 +615,7 @@ void scan_voltage(void)
     /* Discrete UI (mode-based UI2) */
     if ((ui_index > 1) && (ui_index < 4))
     {
-        if (mode_current && (vbat_mv < mode_swt[mode_current - 1]))
+        if (mode_current && ((int32_t)vcode - vc >= (int32_t)swt_cut[mode_current - 1]))
         {
             if (++voff_count > 3)
             {
@@ -583,11 +641,14 @@ void scan_voltage(void)
     }
 }
 
-/** @brief Get battery indicator flash count (0-6) based on Vbat. */
+/** @brief Get battery indicator flash count (0-6) based on Vbat (в кодах Vrefint). */
 uint8_t bat_get_flashes(void) {
-	static const uint16_t thresholds[] = {3000, 3200, 3400, 3600, 3800, 4000};
+	static const uint16_t thresholds[] = {MV_LT(3000), MV_LT(3200), MV_LT(3400),
+	                                      MV_LT(3600), MV_LT(3800), MV_LT(4000)};
+	int16_t vc = ob_GetVc();
+	uint16_t vcode = voltage_ok ? vrefint_adc : VREF_SENTINEL;
 	for (uint8_t i = 0; i < sizeof(thresholds) / sizeof(thresholds[0]); i++) {
-		if (vbat_mv < thresholds[i]) return i;
+		if ((int32_t)vcode - vc >= (int32_t)thresholds[i]) return i;
 	}
 	return 6;
 }

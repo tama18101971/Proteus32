@@ -77,8 +77,41 @@ void     ema_init(uint16_t seed);
  */
 uint16_t ema_update(uint16_t raw);
 
-/** @brief Battery voltage in millivolts (updated by adc_read). */
-extern uint16_t vbat_mv;
+/* ----------------------------------------------------------------------------
+ * Напряжение считается целиком в кодах Vrefint:  vbat_mv = floor(1228800/adc).
+ * Vrefint монотонно убывает при росте напряжения, поэтому все пороги защиты
+ * переводятся в коды времени компиляции и сравниваются без делений.
+ *   MV_GE(mv) = floor(1228800/mv):  vbat >= mV  ⟺  adc <= MV_GE(mV)
+ *   MV_LT(mv) = floor(1228800/mv)+1: vbat <  mV ⟺  adc >= MV_LT(mV)
+ * Калибровочный сдвиг vc (Option Bytes, int8_t) хранит ±127 КОДОВ и входит в
+ * сравнение аддитивно: эффективный код e = adc - vc.
+ * ------------------------------------------------------------------------- */
+
+#define VREF_NUMERATOR (1200u * 1024u)          /* 1228800: мВ * 2^10 */
+#define MV_GE(mv)      (VREF_NUMERATOR / (uint32_t)(mv))
+#define MV_LT(mv)      (MV_GE(mv) + 1u)
+
+/**
+ * @brief Измеренный код Vrefint после EMA-фильтра (обновляется в adc_read).
+ * Основная физическая величина ветки контроля напряжения в кодах.
+ */
+extern uint16_t vrefint_adc;
+
+/**
+ * @brief Признак валидной свежей выборки напряжения.
+ * false — после таймаута/сбоя АЦП (main); защита трактует это как
+ * «критически низкое» напряжение (sentinel), как раньше vbat_mv==0.
+ */
+extern bool voltage_ok;
+
+/**
+ * @brief Пересчёт кода Vrefint в милливольты (точно, без libgcc).
+ * @param vrefint_adc Код Vrefint (реальный диапазон выборки 256..512,
+ *                    гарантирован guard'ом в adc_read).
+ * @return Напряжение в мВ (floor(1228800/adc)). 0 при adc==0.
+ * Используется только для отладочного вывода — горячий путь в кодах.
+ */
+uint16_t vbat_to_mv(uint16_t vrefint_adc);
 
 /** @brief Temperature in °C (updated by adc_read). */
 extern int16_t temperature_c;
@@ -96,6 +129,11 @@ uint8_t bat_get_flashes(void);
 
 #define REF_TEMP_ADC    542    /**< Expected ADC at 25°C — termo_table[45] */
 #define REF_VOLTAGE_MV  4300   /**< Expected Vbat during calibration (mV) */
+
+/* Код Vrefint, соответствующий опорному напряжению калибровки (4300 мВ).
+ * Калибровка vc = vrefint_adc - REF_VREF_CODE (коды, ±127), сохранённая
+ * в Option Bytes. */
+#define REF_VREF_CODE  (MV_GE(REF_VOLTAGE_MV))
 
 #define VC_CLIP_MAX     127    /**< Max vc value (int8_t, ±127) */
 #define VC_CLIP_MIN     -127
