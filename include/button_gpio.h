@@ -6,7 +6,8 @@
  * Press = LOW -> EXTI Line3 falling edge.
  * In STANDBY mode the button wakes the MCU.
  *
- * In ISR: wakeup_source = WS_BUTTON, need_sleep = false.
+ * In ISR: need_sleep = false and wakeup_source = WS_BUTTON. Peripheral
+ * restoration remains in the main loop.
  */
 
 #ifndef BUTTON_GPIO_H
@@ -24,7 +25,7 @@ typedef enum
 
 //extern volatile uint8_t button_event;        /**< Button press event flag */
 extern volatile wakeup_source_t wakeup_source; /**< Last wake-up source */
-extern uint8_t need_sleep;                    /**< Request to enter STANDBY */
+extern volatile uint8_t need_sleep;           /**< Request to enter STANDBY */
 
 /** @brief Initialise button GPIO and EXTI Line3. */
 void button_gpio_init(void);

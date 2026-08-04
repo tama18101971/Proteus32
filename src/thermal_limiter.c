@@ -410,7 +410,10 @@ uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
          * and the Zone 2 gate above). */
         state->flags |= THERMAL_FLAG_OVERHEAT_LATCH | THERMAL_FLAG_IN_ZONE3;
 
-        int16_t error = t_cur - (int16_t)t_set;
+        /* Zone-3 hysteresis can keep this branch active slightly below the
+         * setpoint.  Hold P/I there instead of shifting a negative value. */
+        int16_t error = (t_cur > (int16_t)t_set) ?
+                        (int16_t)(t_cur - (int16_t)t_set) : 0;
 
         /* Overflow-safe P: widen to int32_t for the shift (free on RV32EC's
          * 32-bit register file, see charge_integral() @details), then clamp

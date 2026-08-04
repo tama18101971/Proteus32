@@ -9,6 +9,7 @@
 #ifndef LIMITERS_H
 #define LIMITERS_H
 
+#include <stdbool.h>
 #include "thermal_limiter.h"
 
 /** @brief ADC value in termo_table at 50 °C (table index 70). */
@@ -31,9 +32,21 @@
 void sys_init(void);
 
 /**
- * @brief Scan thermal and electrical limiters (called at 30 Hz).
+ * @brief Scan thermal and electrical limiters during the fast thermal phase.
  */
 void scan_limiters(void);
+
+/**
+ * @brief Apply the sensor-fault failsafe after an ADC acquisition failure.
+ */
+void scan_limiters_fault(void);
+
+/**
+ * @brief Check whether the last temperature acquisition is unsafe to use.
+ * @return true after a sensor rail or ADC acquisition fault until a valid
+ *         temperature sample clears it.
+ */
+bool thermal_fault_active(void);
 
 /**
  * @brief Reset limiter state to defaults.

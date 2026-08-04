@@ -15,7 +15,8 @@
 #ifndef INC_SOFT_START_H_
 #define INC_SOFT_START_H_
 
-#include "stdint.h"
+#include <stdbool.h>
+#include <stdint.h>
 
 /** @brief Absolute value macro (simple expressions only). */
 #define ABS(x)				((x>0)?(x):(-x))
@@ -57,5 +58,16 @@ void ss_init(uint16_t target, uint16_t previous, SoftStartSpeed_t speed);
  * @brief Called every 160 Hz tick — advance position toward target.
  */
 void ss_scan(void);
+
+/**
+ * @brief Check whether a soft-start transition is active.
+ * @return true while ss_scan() still has a transition to execute.
+ */
+bool ss_is_active(void);
+
+/**
+ * @brief Cancel a pending soft-start transition without changing the output.
+ */
+void ss_cancel(void);
 
 #endif /* INC_SOFT_START_H_ */

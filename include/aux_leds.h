@@ -230,6 +230,12 @@ extern const uint32_t *current_buf;
 bool is_aux_mode(IDM_Type_t mode);
 
 /**
+ * @brief Check whether any AUX command currently owns the AWU.
+ * @return true while an AUX command or command array is active.
+ */
+bool aux_is_active(void);
+
+/**
  * @brief Whether the active AUX command needs the DAC/I2C output path.
  *
  * Used after an AWU/STANDBY wake to restore the peripheral before a HBL or

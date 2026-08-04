@@ -188,6 +188,15 @@ bool is_aux_mode(IDM_Type_t mode) {
 }
 
 /**
+ * @brief Check whether any AUX command currently owns the AWU.
+ * @return true while an AUX command or command array is active.
+ */
+bool aux_is_active(void)
+{
+	return aux_ctl.enable != 0U;
+}
+
+/**
  * @brief Проверка необходимости DAC/I2C для активной AUX-команды
  *
  * Используется после пробуждения AWU/STANDBY для восстановления периферии
@@ -199,14 +208,6 @@ bool aux_needs_dac(void)
 {
 	return aux_ctl.enable && p_aux &&
 	       (((LED_Bits_t)p_aux->aux.device & HBL_LED) != 0u);
-}
-
-/**
- * @brief Проверка активности
- * @return true если обработчик активен (enable == true)
- */
-static bool is_aux_active(void) {
-	return aux_ctl.enable;
 }
 
 /**
@@ -428,7 +429,10 @@ static void handle_aux_cmd(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits) {
 		if (!aux->aux.cycle) {
 			if (ubits->work_count > 0) ubits->work_count--;
 			if (ubits->work_count == 0) {
-				ubits->enable = false;
+				/* Keep an array command logically active until the next wake can
+				 * load its next element.  A standalone command ends here. */
+				if (!EnableArrayProcessing)
+					ubits->enable = false;
 				ubits->period = PER_NEXT;
 				if (device & HBL_LED) {
 					/* A finite HBL command may end with brightness1 != 0.
@@ -521,8 +525,8 @@ static union AUX_Cmd_u *handle_aux_array(const uint32_t pArray[], AUX_Ctr_t *ctr
  * Обрабатывает ОДИН переход автомата за вызов:
  *   - Загружает команду из массива (если массив активен)
  *   - Вызывает handle_aux_cmd (один переход: PER_FIRST, PER_SECOND, или PER_END)
- *   - Если команда завершилась (PER_NEXT) — НЕ загружает следующую
- *     (следующая загрузится на следующем вызове handle_aux)
+ *   - Если команда завершилась (PER_NEXT) — для массива сразу загружает
+ *     следующую команду в том же wake, без лишней тёмной паузы
  *
  * После return main loop вызывает AWU_Sleep_Now() — MCU спит ровно столько,
  * сколько задано в текущем полупериоде.
@@ -535,7 +539,18 @@ bool handle_aux(void) {
 	if (EnableArrayProcessing) {
 		p_aux = handle_aux_array(current_buf, &aux_ctl);
 		if (p_aux == NULL) EnableArrayProcessing = false;
-		else handle_aux_cmd(p_aux, &aux_ctl);
+		else {
+			handle_aux_cmd(p_aux, &aux_ctl);
+
+			/* A finite LED element ends in PER_NEXT.  Load and start the next
+			 * array element in this same wake to avoid a dark AWU interval. */
+			if (EnableArrayProcessing && aux_ctl.enable &&
+			    (aux_ctl.period == PER_NEXT)) {
+				p_aux = handle_aux_array(current_buf, &aux_ctl);
+				if (p_aux == NULL) EnableArrayProcessing = false;
+				else handle_aux_cmd(p_aux, &aux_ctl);
+			}
+		}
 	} else if (p_aux) {
 		handle_aux_cmd(p_aux, &aux_ctl);
 	}
@@ -557,7 +572,7 @@ bool handle_aux(void) {
  */
 void start_aux_beacon(void) {
 	if (!EE.aux.beacon_on) return;
-	if (is_aux_active()) return;
+	if (aux_is_active()) return;
 
 	/* Параметры OFF-полупериода по beacon_mode:
 	 * BCON_1S: psc=2048, win=63 → (2048×63)/128000 ≈ 1.0с
@@ -613,6 +628,10 @@ void start_exaux_voltage(WARNING_Fr_t ex_mode) {
  */
 void slot_batt_ind(void) {
 #ifdef USE_BATTIND
+	/* ID+SID uses the DAC as an AUX waveform.  Do not start it over the
+	 * normal driver output; on_driver() handles the opposite transition. */
+	if ((driver_mode == MODE_ON) && EE.usr.id_plus_sid)
+		return;
 	stop_aux_if(IDM_BEACON, false);
 	uint8_t flashes = bat_get_flashes();
 	//EE_PRINTF("[AUX] slot_batt_ind flashes=%u\r\n", (unsigned)flashes);

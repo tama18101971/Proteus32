@@ -35,6 +35,7 @@ void EXTI7_0_IRQHandler(void)
         while (!(USART1->STATR & USART_STATR_TC)) {}
         #endif
 
+        need_sleep = false;
         wakeup_source = WS_BUTTON;
         
         EXTI_ClearITPendingBit(EXTI_Line3);

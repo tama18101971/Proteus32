@@ -149,6 +149,12 @@ int16_t calc_temperature(uint16_t adcValue)
  */
 uint16_t get_exact_temp_adc(void)
 {
+    /* Preserve physical ADC rails for ThermalLimiter_Update() failsafe;
+     * calibration must not turn an open/short sensor into an in-range code. */
+    if ((raw_temperature_adc == ADC_MIN_VAL) ||
+        (raw_temperature_adc >= ADC_MAX_VAL))
+        return raw_temperature_adc;
+
     int16_t v = (int16_t)raw_temperature_adc - (int16_t)ob_GetTc();
     if (v < ADC_MIN_VAL) v = ADC_MIN_VAL;
     if (v > ADC_MAX_VAL) v = ADC_MAX_VAL;
@@ -254,14 +260,19 @@ void adc_init(void)
 }
 
 /**
- * @brief Perform ADC read: NTC temperature + Vrefint -> Vbat.
+ * @brief Perform one verified ADC read: NTC temperature + Vrefint -> Vbat.
  *
  * Powers the NTC divider (PD3=0), waits for settling, starts regular+injected
  * conversion, reads results, then powers down the divider (PD3=1).
- * Updates raw_temperature_adc, vbat_mv, temperature_c.
+ * Updates raw_temperature_adc, vbat_mv, temperature_c only after both
+ * conversions complete successfully.
+ * @return true if a fresh NTC/Vrefint pair was committed, false otherwise.
  */
-void adc_read(void)
+bool adc_read(void)
 {
+    bool regular_ready;
+    bool injected_ready;
+
     // Включаем делитель напряжения: PD3 = 0 ("земля" нижнего плеча, ток через NTC течёт)
     GPIOD->BCR = (1 << 3);
 
@@ -280,36 +291,45 @@ void adc_read(void)
     uint32_t timeout = ADC_WAIT_TIMEOUT;
     while (!(ADC1->STATR & (1 << 1)) && --timeout)
         ;
+    regular_ready = (ADC1->STATR & (1 << 1)) != 0U;
 
     // Ожидаем завершения инжектированного преобразования (JEOC, бит 2), с таймаутом
     timeout = ADC_WAIT_TIMEOUT;
     while (!(ADC1->STATR & (1 << 2)) && --timeout)
         ;
-
-    // Читаем результат регулярного преобразования (NTC).
-    // Если случился таймаут выше, RDATAR/IDATAR1 могут содержать значение
-    // от предыдущего цикла измерения — это не идеально, но не зависание.
-    raw_temperature_adc = ADC1->RDATAR;
-
-    // Читаем результат инжектированного преобразования (Vrefint)
-    uint16_t vrefint_raw = ADC1->IDATAR1;
+    injected_ready = (ADC1->STATR & (1 << 2)) != 0U;
 
     // Отключаем делитель напряжения: PD3 = 1 (ток через делитель не течёт, экономия заряда)
     GPIOD->BSHR = (1 << 3);
 
-    /* A zero Vref result means that conversion did not provide a usable
-     * sample.  Keep the previous voltage rather than dividing by zero or
-     * teaching the EMA an impossible value. */
-    if (vrefint_raw == 0u)
-        return;
+    /* Never pass a previous ADC register value to the thermal or voltage
+     * controllers.  A fresh NTC rail value is valid data and is deliberately
+     * not rejected here: the thermal limiter owns that failsafe decision. */
+    if (!regular_ready || !injected_ready)
+        return false;
+
+    uint16_t new_raw_temperature_adc = ADC1->RDATAR;
+    uint16_t vrefint_raw = ADC1->IDATAR1;
+
+    /* A 1S cell should produce roughly 2.4..4.8 V in this measurement path,
+     * corresponding to Vrefint codes 256..512.  Reject implausible raw data
+     * before it can seed or contaminate the EMA or bypass undervoltage cut-off. */
+    if ((vrefint_raw < 256u) || (vrefint_raw > 512u))
+        return false;
 
     uint16_t vrefint_adc = ema_update(vrefint_raw);
 
     // Вычисляем напряжение питания (мВ): Vrefint=1.2V, 10-бит ADC
-    vbat_mv = (1200 * 1024) / vrefint_adc;
+    uint16_t new_vbat_mv = (1200 * 1024) / vrefint_adc;
 
     // Применяем калибровку vc из Option Bytes (int8_t, ±127 мВ)
-    vbat_mv += (int16_t)ob_GetVc();
+    new_vbat_mv += (int16_t)ob_GetVc();
+
+    /* Commit all values together.  get_exact_temp_adc() intentionally reads
+     * the newly committed raw value so calibration and limiter see the same
+     * sample. */
+    raw_temperature_adc = new_raw_temperature_adc;
+    vbat_mv = new_vbat_mv;
 
     // Расчет температуры по таблице (с коррекцией tc)
     temperature_c = calc_temperature(get_exact_temp_adc());
@@ -319,6 +339,8 @@ void adc_read(void)
     EE_PRINTF("%04d, %04d -> Vbat: %ld mV | Temp: %d.%d C\r\n",
               vrefint_adc, raw_temperature_adc, vbat_mv, temperature_c / 10, temperature_c % 10);
 #endif
+
+    return true;
 }
 
 /**
@@ -417,7 +439,7 @@ void reset_max_step(void)
     volt_step_ratchet = MAX_STEP;
 }
 
-extern uint8_t need_sleep;
+extern volatile uint8_t need_sleep;
 
 /**
  * @brief Необратимое выключение: обесточить нагрузку и уйти в вечный STANDBY.
@@ -488,7 +510,7 @@ void scan_voltage(void)
 
     volt_max_mode = calc_volt_max_mode(vbat_mv);
 
-    if (driver_mode < MODE_ON) return;
+    if (driver_mode != MODE_ON) return;
 
     /* Ramping UI (brightness control UI1) */
     if (ui_index == 1)

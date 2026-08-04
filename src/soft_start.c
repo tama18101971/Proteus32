@@ -25,36 +25,34 @@ ss_st ss;
 
 /**
  * @brief Initialise soft start transition.
- * @param target   Target brightness.
+ * @param target   Already thermal-limited physical target brightness.
  * @param previous Current brightness.
  * @param speed    Transition speed (SS_NO = instant).
  *
  * If target == previous, soft start is skipped (already at target).
- * This retains the pre-FSM Proteus003 profile: step_size is +/- speed and
+ * The caller resolves thermal limiting before entering this module. This
+ * retains the pre-FSM Proteus003 profile: step_size is +/- speed and
  * step_count is distance / speed.  The final scan assigns target exactly,
  * so truncation never leaves a transition one or more steps short.
  */
 void ss_init(uint16_t target, uint16_t previous, SoftStartSpeed_t speed)
 {
 	if (target == previous)
+	{
+		ss_cancel();
 		return;
+	}
 
 	int8_t s_size = (target > previous ? 1 : -1) * speed;
 
-	if (s_size > 0)
+	if (s_size != 0)
 	{
-		ss.target = get_step_tc(target);
-		uint16_t count = ABS((int16_t)(ss.target - previous));
+		/* set_current() resolves the thermal limit before entering this
+		 * low-level module, so target is already the physical safe target. */
+		ss.target = target;
+		uint16_t count = ABS((int16_t)(target - previous));
 		ss.step_count = count ? count / speed : 1;
 		ss.position = previous;
-	}
-	else if (s_size < 0)
-	{
-		ss.target = target;
-		uint16_t tc_prev = get_step_tc(previous);
-		uint16_t count = ABS((int16_t)(target - tc_prev));
-		ss.step_count = count ? count / speed : 1;
-		ss.position = tc_prev;
 	}
 
 	ss.step_size = s_size;
@@ -67,7 +65,9 @@ void ss_init(uint16_t target, uint16_t previous, SoftStartSpeed_t speed)
  * Moves position by step_size toward target. When step_count reaches 0,
  * position is set to target exactly and enable is cleared.
  * Calls out_set_stc() to apply brightness, updates step_tc.
- * Calls OFF_POWER() if brightness reaches 0.
+ * Calls OFF_POWER() only when the user request is also zero; a thermal
+ * limiter may legitimately clamp a non-zero request to physical step 0 while
+ * keeping the DAC powered for later recovery.
  */
 void ss_scan(void)
 {
@@ -91,6 +91,24 @@ void ss_scan(void)
 		out_set_stc(ss.position);
 		step_tc = ss.position;
 		
-		if((!ss.enable) && (!step_tc)) OFF_POWER();
+		if((!ss.enable) && (!step_tc) && (!step_user)) OFF_POWER();
 	}
+}
+
+/**
+ * @brief Check whether a soft-start transition is active.
+ * @return true while ss_scan() still has a transition to execute.
+ */
+bool ss_is_active(void)
+{
+	return ss.enable != 0U;
+}
+
+/**
+ * @brief Cancel a pending soft-start transition without changing the output.
+ */
+void ss_cancel(void)
+{
+	ss.enable = false;
+	ss.step_count = 0;
 }

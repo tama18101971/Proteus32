@@ -11,7 +11,7 @@
  *
  * Functions:
  *   adc_init()  — full ADC initialisation with calibration
- *   adc_read()  — single measurement (NTC + Vrefint), outputs results
+ *   adc_read()  — single verified measurement (NTC + Vrefint), outputs results
  *   adc_stop()  — fully stop ADC (clock off, GPIO Hi-Z)
  *
  * EMA filter (Exponential Moving Average):
@@ -21,18 +21,20 @@
  * Temperature table: -20..+80°C, 1°C step
  */
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #define TEMPERATURE_TABLE_START  (-200)
 #define TEMPERATURE_TABLE_STEP   (10)
 
 /**
- * @brief Perform one ADC measurement cycle (NTC + Vrefint).
+ * @brief Perform one verified ADC measurement cycle (NTC + Vrefint).
  *
- * Reads NTC temperature channel and Vrefint, updates global variables:
- * vbat_mv, temperature_c, raw_temperature_adc.
+ * Reads NTC temperature channel and Vrefint. Global values are updated only
+ * when both conversions complete and Vrefint is usable.
+ * @return true when a fresh pair was committed, false on acquisition failure.
  */
-void adc_read(void);
+bool adc_read(void);
 
 /**
  * @brief Initialise ADC1 with calibration.
@@ -112,7 +114,7 @@ uint16_t get_exact_temp_adc(void);
 /* ============ Battery protection ============ */
 
 /**
- * @brief Main battery protection loop (call at 30 Hz after adc_read()).
+ * @brief Main battery protection loop (call after a successful adc_read()).
  *
  * Implements UI1 ramping and UI2 discrete mode voltage protection.
  * Updates volt_max_mode, volt_stop_mode, down_count, volt_step_ratchet.

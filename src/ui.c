@@ -2,7 +2,7 @@
  * @file ui.c
  * @brief UI action functions + ui_process dispatcher
  *
- * Ported from Proteus84 (AVR) to Proteus003 (CH32V003).
+ * Ported from Proteus IID (AVR) to Proteus003 (CH32V003).
  * Low-level brightness/DAC functions are kept from the original Proteus003 ui.c.
  *
  * AUX LED calls and EEPROM writes are intentionally left as comments,
@@ -122,13 +122,14 @@ void ee_defaults(void)
 /**
  * @brief Clamp brightness target to thermal ceiling.
  * @param step Requested brightness step.
- * @return Min(step, MAX_STEP - limiter), minimum 1.
+ * @return max(step - limiter, 0), preserving the requested step separately.
  */
 uint16_t get_step_tc(uint16_t step)
 {
-    int16_t tc_step = (int16_t)(MAX_STEP - limiter);
-    uint16_t result = step <= tc_step ? step : (tc_step > 0 ? (uint16_t)tc_step : 1);
-    return result;
+    if (thermal_fault_active())
+        return 0u;
+
+    return (step > limiter) ? (uint16_t)(step - limiter) : 0u;
 }
 
 /**
@@ -185,6 +186,8 @@ uint8_t on_driver(void)
     if (driver_mode < MODE_ON)
     {
         EE_PRINTF("[UI] ON DRV.\r\n");
+        if (aux_needs_dac())
+            off_aux_cmd(false);
         ON_POWER();
         down_count = 5;
         vwarning = VWARNING_NONE;
@@ -210,6 +213,8 @@ void off_driver(uint8_t reset_step, SoftStartSpeed_t ss_speed)
     direction = DIR_UP;
 
     set_current(0, ss_speed);
+    if ((ss_speed != SS_NO) && !step_tc)
+        OFF_POWER();
 
     reset_limiters();
 
@@ -248,13 +253,14 @@ void off_driver(uint8_t reset_step, SoftStartSpeed_t ss_speed)
  */
 void set_current_ll(uint16_t step_target, SoftStartSpeed_t ss_speed)
 {
-    if (!step_target && step_tc)
+    if (!step_target && step_tc && !step_user)
         step_default = step_tc;
 
     if (ss_speed != SS_NO)
         ss_init(step_target, step_tc, ss_speed);
     else
     {
+        ss_cancel();
         out_set_stc(step_target);
         step_tc = step_target;
     }
@@ -268,7 +274,7 @@ void set_current_ll(uint16_t step_target, SoftStartSpeed_t ss_speed)
 void set_current(uint16_t step_target, SoftStartSpeed_t ss_speed)
 {
     step_user = step_target;
-    set_current_ll(step_target, ss_speed);
+    set_current_ll(get_step_tc(step_target), ss_speed);
     if ((!step_target) && (!ss_speed)) OFF_POWER();
 }
 
@@ -429,6 +435,7 @@ void slot_strobe(void)
     ps.pr_step = step_default;
     ps.start = start;
 
+    ss_cancel();
     start_aux_strobe(strobe_index);
     //EE_PRINTF("[UI] slot_strobe idx=%u start=%u\r\n", strobe_index, start);
 #endif
@@ -554,7 +561,7 @@ static void save_def_blink(void)
     {
         out_set_stc(0);
         Delay_Ms(30);
-        out_set_stc(step_user);
+        out_set_stc(get_step_tc(step_user));
     }
     else
         clr_indicator(IND_GRN);
@@ -1049,12 +1056,9 @@ void ui_process(void)
                  * normal low-voltage ceiling and shutdown paths. */
                 if (vbat_mv != 0U)
                 {
-                    /* Насыщающее вычитание: если термо-запас (limiter+1)
-                     * превысил крышку, uint16_t-перенос дал бы ~65000 и
-                     * молча отключил бы защиту АКБ. Предел 1 сохраняет
-                     * корректный DIR_DOWN и запрет рампы вверх. */
-                    uint16_t vcap = ratchet_max_step();
-                    max_step = (limiter + 1 >= vcap) ? 1u : (uint16_t)(vcap - (limiter + 1));
+                    /* limiter is applied once when the physical target is
+                     * written; keep the battery ceiling in user-step space. */
+                    max_step = ratchet_max_step();
                 }
                 stop_aux_if(IDM_BEACON, false);
                 if (step_tc >= max_step) direction = DIR_DOWN;

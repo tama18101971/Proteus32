@@ -3,7 +3,7 @@
  *
  * Dispatch tables + main_op[] function pointer array.
  *
- * Ported from Proteus84 (AVR / PROGMEM) to CH32V003 RAM.
+ * Ported from Proteus IID (AVR / PROGMEM) to CH32V003 RAM.
  */
 
 #include <stddef.h>

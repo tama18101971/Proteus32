@@ -35,7 +35,7 @@ typedef enum {
 } awu_tick_t;
 
 //extern volatile uint8_t awu_event; /**< AWU event flag, set in ISR */
-extern uint8_t is_sleep_mode;      /**< Non-zero when MCU is in STANDBY */
+extern volatile uint8_t is_sleep_mode; /**< Non-zero when MCU is in STANDBY */
 
 /** @brief Enable AWU peripheral. */
 #define AWU_ON()    (PWR->AWUCSR |=  PWR_AWUCSR_AWUEN)

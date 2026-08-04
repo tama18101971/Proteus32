@@ -11,10 +11,12 @@
  * - EEPROM emulation in Flash (settings)
  *
  * Main loop:
- * 1. If need_sleep -> stop ADC + TIM2, enter STANDBY
- * 2. AWU wake -> handle AUX commands
- * 3. Button wake -> restore peripherals
- * 4. Timer tasks: 160 Hz (UI + softstart), 30 Hz (ADC + limiters), 2 Hz (debug), 5 s (EEPROM)
+ * 1. Keep fast thermal supervision while the applied brightness is high or
+ *    the limiter is active.
+ * 2. Use an AWU_4S-owned standby loop for low-power thermal supervision.
+ * 3. Keep AUX/strobe AWU ownership separate from thermal supervision.
+ * 4. Timer tasks: 160 Hz (UI + softstart), 30 Hz (fast thermal scan),
+ *    2 Hz (debug), 5 s (sleep/persistence).
  */
 #include <stdint.h>
 #include <stdbool.h>
@@ -35,14 +37,79 @@
 
 volatile wakeup_source_t wakeup_source = WS_NONE; /* Источник последнего пробуждения */
 
-uint8_t need_sleep = false; /* Флаг необходимости перейти в режим сна */
+volatile uint8_t need_sleep = false; /* Флаг необходимости перейти в режим сна */
+
+/* AVR used step_tc > 255 - 120 as its high-power boundary.  Preserve that
+ * fraction of the range after moving from 8-bit to the CH32 9-bit scale. */
+#define THERMAL_FAST_STEP       271U
+
+typedef enum
+{
+    SLEEP_OWNER_NORMAL = 0,
+    SLEEP_OWNER_THERMAL
+} sleep_owner_t;
+
+static sleep_owner_t sleep_owner = SLEEP_OWNER_NORMAL;
+
+/**
+ * @brief Check whether frequent thermal supervision is required.
+ * @return true for high applied brightness or an active thermal reduction.
+ */
+static bool thermal_fast_required(void)
+{
+    if (driver_mode != MODE_ON)
+        return false;
+
+    return (step_tc > THERMAL_FAST_STEP) || (limiter != 0U);
+}
+
+/**
+ * @brief Check whether the main driver may enter the slow thermal sleep loop.
+ * @return true only when low-power sampling can safely own the AWU.
+ */
+static bool thermal_sleep_allowed(void)
+{
+    return (driver_mode == MODE_ON) &&
+           !thermal_fast_required() &&
+           !ss_is_active() &&
+           !button_sequence_active() &&
+           !aux_is_active();
+}
+
+/**
+ * @brief Acquire a fresh ADC pair and run voltage/thermal protection.
+ * @return true when a fresh pair was accepted, false on acquisition failure.
+ */
+static bool sample_and_scan(void)
+{
+    if (adc_read())
+    {
+        if (driver_mode != MODE_STROB)
+        {
+            scan_limiters();
+            scan_voltage();
+        }
+        return true;
+    }
+
+    /* A timeout is not a temperature sample.  Use the unchanged limiter's
+     * rail failsafe instead of reusing the previous global ADC value. */
+    if (driver_mode != MODE_STROB)
+    {
+        vbat_mv = 0u;
+        scan_limiters_fault();
+        scan_voltage();
+    }
+
+    return false;
+}
 
 /**
  * @brief Точка входа и главный цикл прошивки.
  *
  * Инициализирует все периферийные модули, затем циклически обслуживает:
  * - пробуждение по кнопке (восстановление периферии),
- * - пробуждение по AWU (обработка AUX-команд),
+ * - пробуждение по AWU (термоконтроль или AUX-команды),
  * - режим сна (STANDBY),
  * - таймерные задачи (160 Гц, 30 Гц, 2 Гц, 5 с).
  */
@@ -78,7 +145,7 @@ int main(void)
     dac7571_set_voltage(0);
 
     ob_Init();
-    adc_read();
+    (void)adc_read();
     if (!read_ee())
     {
         init_ee();
@@ -111,6 +178,13 @@ int main(void)
         /* 1. Пробуждение по кнопке: восстанавливаем периферию */
         if ((wakeup_source == WS_BUTTON) && is_sleep_mode)
         {
+            if (sleep_owner == SLEEP_OWNER_THERMAL)
+                AWU_OFF();
+            SystemInit();
+            SystemCoreClockUpdate();
+#ifdef WL_FLASH_DEBUG
+            uart_init(460800);
+#endif
             is_sleep_mode = false;
             need_sleep = false;
             wakeup_source = WS_NONE;
@@ -118,20 +192,49 @@ int main(void)
             i2c_init(400000);
             stop_aux_if(IDM_BEACON, false);
             adc_init();
-            adc_read();
+            if (!is_aux_mode(IDM_STROBE))
+            {
+                (void)sample_and_scan();
+            }
             tim2_start();
+            sleep_owner = SLEEP_OWNER_NORMAL;
         }
 
-        /* 2. Пробуждение по AWU: обрабатываем AUX-команды */
+        /* 2. AWU wake: thermal sleep and AUX commands have separate owners. */
         if (wakeup_source == WS_AWU)
         {
             wakeup_source = WS_NONE;
-            if (aux_needs_dac())
+            if ((sleep_owner == SLEEP_OWNER_THERMAL) && is_sleep_mode)
             {
+                AWU_OFF();
                 dac_pwrpin_restore();
                 i2c_init(400000);
+                adc_init();
+
+                bool sample_ok = sample_and_scan();
+                if (!sample_ok || !thermal_sleep_allowed())
+                {
+                    is_sleep_mode = false;
+                    need_sleep = false;
+                    sleep_owner = SLEEP_OWNER_NORMAL;
+                    tim2_start();
+                }
+                else
+                {
+                    /* Keep the request set; the common sleep block below
+                     * stops ADC/TIM2 and arms the next AWU_4S interval. */
+                    need_sleep = true;
+                }
             }
-            handle_aux();
+            else
+            {
+                if (aux_needs_dac())
+                {
+                    dac_pwrpin_restore();
+                    i2c_init(400000);
+                }
+                handle_aux();
+            }
         }
 
         /* 3. Сон: AUX wake must be processed above before returning to
@@ -149,13 +252,45 @@ int main(void)
             tick_5s_reset();
         }
 
-        if (need_sleep ||
-            (is_aux_mode(IDM_STROBE) && !button_sequence_active()))
+        bool strobe_sleep = is_aux_mode(IDM_STROBE) && !button_sequence_active();
+        bool thermal_sleep = (need_sleep &&
+                              (sleep_owner == SLEEP_OWNER_THERMAL));
+
+        if (thermal_sleep && !thermal_sleep_allowed())
+        {
+            if (driver_mode == MODE_ON)
+            {
+                need_sleep = false;
+                sleep_owner = SLEEP_OWNER_NORMAL;
+                thermal_sleep = false;
+            }
+            else
+            {
+                sleep_owner = SLEEP_OWNER_NORMAL;
+                thermal_sleep = false;
+            }
+        }
+
+        if (Pressed)
+            need_sleep = false;
+
+        if (need_sleep || strobe_sleep)
         {
             adc_stop();
             tim2_stop();
-            if (!is_aux_mode(IDM_STROBE))
+
+            if (thermal_sleep)
+            {
+                /* Thermal sleep owns AWU; beacon/AUX must not overwrite the
+                 * four-second sampling interval. */
+                AWU_OFF();
+                AWU_set_delay(AWU_4S);
+                AWU_ON();
+            }
+            else if (!is_aux_mode(IDM_STROBE))
+            {
                 start_aux_beacon();
+            }
             AWU_Sleep_Now();
         }
 
@@ -171,11 +306,12 @@ int main(void)
         {
             /* The strobe owns the DAC waveform.  Do not let ADC/limiters
              * write a regular brightness value during an input window. */
-            if (!is_aux_mode(IDM_STROBE))
+            if (!is_aux_mode(IDM_STROBE) &&
+                (thermal_fast_required() ||
+                 (driver_mode == MODE_ON && aux_is_active())) &&
+                Released && !ss_is_active())
             {
-                adc_read();
-                scan_limiters();
-                scan_voltage();
+                (void)sample_and_scan();
             }
         }
 
@@ -196,7 +332,38 @@ int main(void)
                 ob_Flush();            
                 handle_ee();
             }
-            need_sleep = true;
+            if (driver_mode == MODE_ON)
+            {
+                if (thermal_sleep_allowed())
+                {
+                    /* Low-power scans are intentionally sparse.  Take one
+                     * final fresh sample before stopping ADC/TIM2 so a stale
+                     * low-temperature value cannot authorize standby. */
+                    bool sample_ok = sample_and_scan();
+                    if (sample_ok && thermal_sleep_allowed())
+                    {
+                        sleep_owner = SLEEP_OWNER_THERMAL;
+                        need_sleep = true;
+                    }
+                    else
+                    {
+                        sleep_owner = SLEEP_OWNER_NORMAL;
+                        need_sleep = false;
+                    }
+                }
+                else
+                {
+                    /* High power, active limiting, soft-start, button
+                     * activity, or AUX ownership keeps the MCU awake. */
+                    sleep_owner = SLEEP_OWNER_NORMAL;
+                    need_sleep = false;
+                }
+            }
+            else if (!is_aux_mode(IDM_STROBE))
+            {
+                sleep_owner = SLEEP_OWNER_NORMAL;
+                need_sleep = true;
+            }
         }
     }
 }

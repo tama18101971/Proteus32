@@ -22,7 +22,7 @@
 #include "proteus_config.h"
 #include "mini_printf.h"
 
-uint8_t is_sleep_mode = false;
+volatile uint8_t is_sleep_mode = false;
 
 /* ============================================================
  * AWU TABLE
@@ -167,6 +167,10 @@ void AWU_Sleep_Now(void)
 
     PWR->CTLR |= PWR_CTLR_PDDS; /*Устанавливаем PDDS=1 в PWR_CTLR → выбираем Standby (не Sleep) */
 
+    /* CH32V003 uses PFIC->SCTLR bit 2 as SLEEPDEEP.  PDDS alone selects the
+     * standby power mode but WFE would otherwise remain in light sleep. */
+    PFIC->SCTLR |= (1 << 2);
+
     /* Барьер: убедиться, что все записи завершены */
     __NOP(); __NOP(); __NOP();
 
@@ -175,6 +179,12 @@ void AWU_Sleep_Now(void)
      *                 AWU событие              → AWU_IRQHandler
      *    Сброса не происходит (если STANDBY_RST в option bytes = 0) */
     __WFI();
+
+    /* AWU and button can become pending together.  A physically held button
+     * is the user-visible wake source and must win over the periodic wake. */
+    if (!(GPIOC->INDR & GPIO_Pin_3))
+        wakeup_source = WS_BUTTON;
+
     /*
      * Сюда выполнение попадёт ТОЛЬКО если пробуждение произошло,
      * но прерывание уже обработано. В нормальном сценарии
