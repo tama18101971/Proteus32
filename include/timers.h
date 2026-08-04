@@ -57,6 +57,14 @@ bool tick_5s(void);
  */
 void tick_5s_reset(void);
 
+/**
+ * @brief Busy-wait for ms milliseconds (approximate, SYSCLK 48 MHz).
+ * @param ms Milliseconds to wait (0..65535).
+ * Replacement for SDK Delay_Ms()/Delay_Init() — no SystemCoreClock or libgcc
+ * math dependency. Timing is approximate, not for exact measurement.
+ */
+void wait_ms(uint16_t ms);
+
 extern volatile uint32_t tim2_ms; /**< Millisecond counter, incremented by TIM2 IRQ */
 
 #endif /* TIMERS_H */

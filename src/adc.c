@@ -378,6 +378,8 @@ void adc_stop(void)
     GPIOD->CFGLR &= ~(0xF << 12);  /* PD3: 0b0000 = Analog Input (Hi-Z) */
 }
 
+#if defined(WL_FLASH_DEBUG) || defined(PRINT_ADC)
+
 /**
  * @brief Пересчёт кода Vrefint в милливольты (точно, без libgcc).
  * @param vrefint_adc Код Vrefint (валидный диапазон 256..512).
@@ -427,6 +429,8 @@ uint16_t vbat_to_mv_calibrated(void)
     return vbat_to_mv((uint16_t)effective_code);
 }
 
+#endif /* defined(WL_FLASH_DEBUG) || defined(PRINT_ADC) */
+
 /* ============ Защита по разряду батареи (в кодах Vrefint) ============
  * vbat_mv = floor(1228800/adc); Vrefint растёт при падении напряжения.
  * Все пороги переведены в коды времени компиляции (MV_LT/MV_GE):
@@ -445,12 +449,6 @@ static const uint16_t swt_cut[6] =
 {   /* vbat < mV ⟺ adc >= это значение */
     MV_LT(2700), MV_LT(2750), MV_LT(2800), MV_LT(2900), MV_LT(3000), MV_LT(3100)
 };
-/* То же, но для «vbat < mV+1» — исходная версия calc_volt_max_mode
- * сравнивала exact_v < (порог_мВ[i] + 1). */
-static const uint16_t swt_cut1[6] =
-{
-    MV_LT(2701), MV_LT(2751), MV_LT(2801), MV_LT(2901), MV_LT(3001), MV_LT(3101)
-};
 /* vbat > mV ⟺ adc <= это значение (потолок яркости UI1). */
 static const uint16_t ceil_cap[6] =
 {
@@ -466,8 +464,10 @@ static const uint16_t ceil_cap[6] =
  */
 static uint8_t calc_volt_max_mode(uint16_t vref, int16_t vc)
 {
+    /* Индексы 1..5 совпадают со swt_cut[1..5]; индекс 0 в этом цикле не
+     * используется (итерация с CMODE_MOON=1). */
     for (uint8_t i = CMODE_MOON; i < CMODE_TURBO; i++)
-        if ((int32_t)vref - vc >= (int32_t)swt_cut1[i]) return i;
+        if ((int32_t)vref - vc >= (int32_t)swt_cut[i]) return i;
     return CMODE_TURBO;
 }
 

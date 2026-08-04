@@ -575,7 +575,7 @@ static void save_def_blink(void)
     if (EE.uif.off_bckl)
     {
         out_set_stc(0);
-        Delay_Ms(30);
+        wait_ms(30);
         out_set_stc(get_step_tc(step_user));
     }
     else

@@ -112,6 +112,9 @@ extern bool voltage_ok;
  * @return Напряжение в мВ (floor(1228800/adc)). 0 при adc==0.
  * Используется только для отладочного вывода — горячий путь в кодах.
  */
+/* The implementations are compiled only for diagnostic builds.  Keep the
+ * declarations unconditional because this header may be included before
+ * proteus_config.h defines WL_FLASH_DEBUG/PRINT_ADC. */
 uint16_t vbat_to_mv(uint16_t vrefint_adc);
 
 /**

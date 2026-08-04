@@ -104,6 +104,24 @@ void tick_5s_reset(void)
 }
 
 /**
+ * @brief Busy-wait for ms milliseconds (approximate, SYSCLK 48 MHz).
+ * @param ms Milliseconds to wait (0..65535).
+ * @details Заменяет SDK Delay_Ms()/Delay_Init(): не зависит от
+ * SystemCoreClock и не тянет libgcc-арифметику. Калибровка: ~12000
+ * итераций внутреннего volatile-цикла на миллисекунду при 48 МГц.
+ * Точность приблизительная — только для пауз (boot, мигание индикатора).
+ */
+void wait_ms(uint16_t ms)
+{
+    const uint32_t loops = 12000;
+    while (ms--)
+    {
+        volatile uint32_t cnt = loops;
+        while (cnt--) ;
+    }
+}
+
+/**
  * @brief Запуск таймера 2 с периодом 1 мс
  *
  * Выполняет полную инициализацию:
