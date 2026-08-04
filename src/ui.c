@@ -174,8 +174,6 @@ void out_set_stc(uint16_t step)
  */
 uint8_t on_driver(void)
 {
-    EE_PRINTF("[UI] ON DRV.\r\n");
-
     if (EE.uif.ui_index)
         step_tactic = 0;
 
@@ -186,6 +184,7 @@ uint8_t on_driver(void)
 
     if (driver_mode < MODE_ON)
     {
+        EE_PRINTF("[UI] ON DRV.\r\n");
         ON_POWER();
         down_count = 5;
         vwarning = VWARNING_NONE;
