@@ -99,7 +99,7 @@ void OFF_POWER(void)
 /** @brief Set EEPROM defaults for all application parameters. */
 void ee_defaults(void)
 {
-    EE.uif.ui_index = 1;
+    EE.uif.ui_index = 2;
     EE.uif.use_memory = 0;
 
     EE.aux.bcklight_color = BCK_COLOR_RED;
@@ -860,10 +860,10 @@ static __attribute__((noinline)) uint8_t get_up_mode(uint8_t mode)
     return MIN(up_mode, mode);
 }
 
-/** @brief Set brightness for a UI2 mode with slow soft-start. */
+/** @brief Set brightness for a UI2 mode with fast soft-start. */
 void set_curri(uint8_t cmode)
 {
-    set_current(get_stepi(cmode), SS_SLOW);
+    set_current(get_stepi(cmode), SS_FAST);
 }
 
 /** @brief Enter given mode (internal helper). */
@@ -999,7 +999,8 @@ void ui_init(void)
  * @brief Main UI process — tick at 160 Hz.
  *
  * Handles tactical mode bypass, long-click/max-clicks per UI,
- * direction timeout, and dispatches button events via ui_table_lookup.
+ * hold timing, direction timeout, and dispatches button events via
+ * ui_table_lookup.
  */
 void ui_process(void)
 {
@@ -1012,11 +1013,25 @@ void ui_process(void)
         return;
     }
 
-    /* Long-click threshold per UI */
+    /* Long-click and HOLD timing per UI.  UI2 repeats a mode change only
+     * after the previous fast soft-start has had time to finish. */
     if (ui_idx == 1)
+    {
         button_set_long_click_ticks(BTN_LONG_CLICK_TICKS);
+        button_set_hold_ticks(BTN_HOLD_TICKS);
+    }
     else if (ui_idx == 2)
+    {
         button_set_long_click_ticks(LONG_PRESS_TIME_UI2);
+        button_set_hold_ticks(VERY_LONG_PRESS_UI2);
+        button_set_repeat_ticks(VERY_LONG_PRESS_UI2);
+    }
+    else if (ui_idx == 3)
+    {
+        button_set_long_click_ticks(VERY_LONG_PRESS_UI2);
+        button_set_hold_ticks(VERY_LONG_PRESS_UI2);
+        button_set_repeat_ticks(VERY_LONG_PRESS_UI2);
+    }
     else
         button_set_long_click_ticks(VERY_LONG_PRESS_UI2);
 
@@ -1114,6 +1129,10 @@ void ui_process(void)
 
         case BTN_EVT_CLICK_SEQ:
             tick_5s_reset();
+            /* UI2 handles long clicks on release.  Do not dispatch the same
+             * long gesture again when its click-sequence timeout expires. */
+            if ((ui_idx == 2U || ui_idx == 3U) && evt->long_mask)
+                break;
             ui_table_lookup(driver_mode, evt, true);
             break;
 
