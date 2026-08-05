@@ -92,9 +92,7 @@ typedef enum {
     MODE_ON,                /**< Driver on (normal operation). */
     MODE_STROB,             /**< Strobe mode. */
 
-    MODE_RAMP_SPEED = 10U,  /**< Config: ramp speed. */
-    MODE_MOON_LEVEL,        /**< Config: moonlight level. */
-    MODE_PID_TIME,          /**< Config: PID time. */
+    MODE_MOON_LEVEL = 10U,  /**< Config: moonlight level. */
 
     MODE_CTK_A,             /**< Config: thermal calibration A. */
     MODE_CTK_H,             /**< Config: thermal calibration H. */
@@ -148,6 +146,7 @@ extern uint8_t mode_default;
 #define RELEASE_TIMEOUT_UI1         40
 #define LONG_HOLD_UI1               100
 #define LONG_HOLD_RAMP_PAUSE_UI1    80
+#define FASTEST_RAMP_REPEAT_UI1     2
 #define DIRECTION_TIMEOUT_UI1       80
 #define COMM_MAX_LEN_UI1            7
 
@@ -429,19 +428,9 @@ void on_turbo_ui1(void);
 void calibration(void);
 
 /**
- * @brief Enter ramp speed config mode.
- */
-void enter_rs_mode(void);
-
-/**
  * @brief Enter moonlight level config mode.
  */
 void enter_ml_mode(void);
-
-/**
- * @brief Enter PID time config mode.
- */
-void enter_pt_mode(void);
 
 /**
  * @brief Save current step as UI1 default.
@@ -454,19 +443,9 @@ void save_def_ui1(void);
 void save_def_ui2(void);
 
 /**
- * @brief Handle click sequence in ramp speed menu.
- */
-void rs_clickX(void);
-
-/**
  * @brief Handle click sequence in moonlight menu.
  */
 void ml_clickX(void);
-
-/**
- * @brief Handle click sequence in PID time menu.
- */
-void pt_clickX(void);
 
 /**
  * @brief Exit current menu mode.
@@ -609,12 +588,6 @@ extern uint8_t clicks_count;
 
 /** @brief Runtime UI/menu selector (1=UI1, 2=UI2, 3=UI4, etc.). */
 extern uint8_t ui_table_idx;
-
-/** @brief Session ramp speed (replaces EE.eng.rump_speed). */
-extern uint8_t ramp_speed;
-
-/** @brief Session PID time (replaces EE.eng.pid_time). */
-extern uint8_t pid_time;
 
 /**
  * @brief Turn on driver and initialise soft-start.

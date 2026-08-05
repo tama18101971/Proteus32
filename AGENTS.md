@@ -55,7 +55,7 @@ Debounced state machine at 160 Hz. Emits events (`btn_evt_t`): PRESSED, RELEASED
 
 ### UI dispatch (`ui_table.c/h`)
 
-Table-driven: `dispatch_t` entries map `(driver_mode + btn_evt_t)` to action functions via `main_op[]` function pointer table (`MAIN_OP_COUNT = RESET2DEF + 1` = 53 entries). One dispatch table per UI type (ramping/UI1, discrete/UI2, engineering menu, user menu).
+Table-driven: `dispatch_t` entries map `(driver_mode + btn_evt_t)` to action functions via `main_op[]` function pointer table (`MAIN_OP_COUNT = RESET2DEF + 1` = 49 entries). One dispatch table per UI type (ramping/UI1, discrete/UI2, engineering menu, user menu).
 `select_slot()`/`slotN_clickX()` are shared for all 10 magic slots — slot index is derived from `driver_mode - MODE_SLOT01` (or `clicks_count - 1`).
 
 ### Soft start (`soft_start.c`)

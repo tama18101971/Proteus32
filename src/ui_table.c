@@ -144,24 +144,16 @@ static const dispatch_t ui2_table[] = {
 
 static const dispatch_t eng_table[] = {
     /* -- First level: MODE_OFF (navigate sub-menus) -- */
-    { MODE_OFF, 1,  0, false, true,  ENTER_RS_MODE,  false, 0 },
-    { MODE_OFF, 2,  0, false, true,  ENTER_ML_MODE,  false, 0 },
-    { MODE_OFF, 3,  0, false, true,  ENTER_PT_MODE,  false, 0 },
-    { MODE_OFF, 4,  0, false, true,  SAVE_DEF_UI1,   false, 0 },
-    { MODE_OFF, 5,  0, false, true,  SAVE_DEF_UI2,   false, 0 },
+    { MODE_OFF, 1,  0, false, true,  ENTER_ML_MODE,  false, 0 },
+    { MODE_OFF, 2,  0, false, true,  SAVE_DEF_UI1,   false, 0 },
+    { MODE_OFF, 3,  0, false, true,  SAVE_DEF_UI2,   false, 0 },
     { MODE_OFF, 10, 0, false, true,  CALIBRATION,    false, 0 },
     { MODE_OFF, 20, 0, false, false, RESET2DEF,      false, 0 },
     { MODE_OFF, 0,  0, true,  false, MENU_EXIT,      false, 0 },
 
     /* -- Sub-modes -- */
-    { MODE_RAMP_SPEED, 0, 0, false, true,  RS_CLICKX,  false, 0 },
-    { MODE_RAMP_SPEED, 0, 0, true,  false, MENU_EXIT,  false, 0 },
-
     { MODE_MOON_LEVEL, 0, 0, false, true,  ML_CLICKX,  false, 0 },
     { MODE_MOON_LEVEL, 0, 0, true,  false, MENU_EXIT,  false, 0 },
-
-    { MODE_PID_TIME,   0, 0, false, true,  PT_CLICKX,  false, 0 },
-    { MODE_PID_TIME,   0, 0, true,  false, MENU_EXIT,  false, 0 },
 
 };
 
@@ -363,36 +355,32 @@ void (*main_op[])(void) = {
     /*21*/ on_turbo_ui1,
     /*22*/ calibration,
 
-    /*23*/ enter_rs_mode,
-    /*24*/ enter_ml_mode,
-    /*25*/ enter_pt_mode,
-    /*26*/ save_def_ui1,
-    /*27*/ save_def_ui2,
+    /*23*/ enter_ml_mode,
+    /*24*/ save_def_ui1,
+    /*25*/ save_def_ui2,
 
-    /*28*/ rs_clickX,
-    /*29*/ ml_clickX,
-    /*30*/ pt_clickX,
+    /*26*/ ml_clickX,
 
-    /*31*/ menu_exit,
+    /*27*/ menu_exit,
 
-    /*32*/ enter_chtk_mode,
-    /*33*/ chtk_clickX,
+    /*28*/ enter_chtk_mode,
+    /*29*/ chtk_clickX,
 
-    /*34*/ enter_bm_mode,
-    /*35*/ bm_clickX,
+    /*30*/ enter_bm_mode,
+    /*31*/ bm_clickX,
 
-    /*36*/ enter_bt_mode,
-    /*37*/ bt_clickX,
+    /*32*/ enter_bt_mode,
+    /*33*/ bt_clickX,
 
-    /*38*/ enter_bl_mode,
-    /*39*/ bl_clickX,
+    /*34*/ enter_bl_mode,
+    /*35*/ bl_clickX,
 
-    /*40*/ enter_magic_mode,
+    /*36*/ enter_magic_mode,
 
-    /*41..42*/
+    /*37..38*/
     select_slot, slotN_clickX,
 
-    /*43..52*/
+    /*39..48*/
     mode_up_ui2,
     on_turbo_ui2,
     on_min_ui2,

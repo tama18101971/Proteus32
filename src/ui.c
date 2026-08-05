@@ -58,8 +58,6 @@ uint8_t need_save = false;
 
 uint8_t clicks_count = 0;
 uint8_t ui_table_idx = 1;        // runtime selector for dispatch tables
-uint8_t ramp_speed = 0;          // EE.eng.rump_speed addend; 0 = fastest UI1 repeat
-uint8_t pid_time = 3;            // replaces EE.eng.pid_time (session only)
 uint8_t ui_save = 0;
 uint8_t beacon_save = 0;
 uint8_t bcklight_type_save = 0;
@@ -605,26 +603,7 @@ void save_def_ui2(void)
  *  #ifdef USE_MENU гейтит только тело — как slot_batt_ind()/calibration().
  ******************************************************************************/
 
-/** @brief Enter ramp speed setting mode (engineering menu). */
-void enter_rs_mode(void)
-{
-#ifdef USE_MENU
-    driver_mode = MODE_RAMP_SPEED;
-    aux_count(ramp_speed + 1);
-#endif
-}
-
-/** @brief Set ramp speed from click count (engineering menu). */
-void rs_clickX(void)
-{
-#ifdef USE_MENU
-    ramp_speed = clicks_count - 1;
-    aux_count(clicks_count);
-    driver_mode = MODE_OFF;
-#endif
-}
-
-/** @brief Enter moon level setting mode (engineering menu). */
+/** @brief Enter moonlight level setting mode (engineering menu). */
 void enter_ml_mode(void)
 {
 #ifdef USE_MENU
@@ -638,25 +617,6 @@ void ml_clickX(void)
 {
 #ifdef USE_MENU
     ob_SetMl(clicks_count);
-    aux_count(clicks_count);
-    driver_mode = MODE_OFF;
-#endif
-}
-
-/** @brief Enter PID time setting mode (engineering menu). */
-void enter_pt_mode(void)
-{
-#ifdef USE_MENU
-    driver_mode = MODE_PID_TIME;
-    aux_count(pid_time);
-#endif
-}
-
-/** @brief Set PID time from click count (engineering menu). */
-void pt_clickX(void)
-{
-#ifdef USE_MENU
-    pid_time = clicks_count;
     aux_count(clicks_count);
     driver_mode = MODE_OFF;
 #endif
@@ -991,8 +951,6 @@ void ui_init(void)
     ui1_was_pressed = false;
     mode_current = CMODE_OFF;
     ui_table_idx = EE.uif.ui_index;
-    ramp_speed = 0;
-    pid_time = 3;
 }
 
 /**
@@ -1119,11 +1077,13 @@ void ui_process(void)
                 exit_magic_mode();
             }
 
-            /* UI1 hold speed: first hold from OFF -> pause; ON -> user speed */
+            /* UI1 hold speed: first hold from OFF -> pause; ON -> fastest
+             * repeat (FASTEST_RAMP_REPEAT_UI1; never 0, which would disable
+             * repetition in button.c). */
             if (ui_idx == 1 && prev_mode == MODE_OFF && evt->clicks == 0)
                 button_set_repeat_ticks(LONG_HOLD_RAMP_PAUSE_UI1);
             else if (ui_idx == 1 && prev_mode == MODE_ON)
-                button_set_repeat_ticks(ramp_speed + 2);
+                button_set_repeat_ticks(FASTEST_RAMP_REPEAT_UI1);
             break;
         }
 
