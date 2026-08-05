@@ -21,7 +21,7 @@ typedef enum {
 	SLOT_TACTICAL,       /**< Tactical momentary */
 	SLOT_BACKLIGHT,     /**< Backlight / auxiliary light */
 	SLOT_BEACON,        /**< Beacon flash */
-	SLOT_EAUXMODE,      /**< External aux mode */
+	SLOT_EAUXMODE,      /**< Extended aux mode */
 	SLOT_IPSMODE,       /**< IPS (internal power supply) mode */
 	SLOT_MEMORY,        /**< Memory recall */
 	RESERV11,           /**< Reserved */
