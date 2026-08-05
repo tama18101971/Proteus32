@@ -232,11 +232,14 @@ void off_driver(uint8_t reset_step, SoftStartSpeed_t ss_speed)
 
     stop_aux_if(IDM_VWARNING, false);
     stop_aux_if(IDM_BEACON, false);
-    //EE_PRINTF("[UI] AUX stops skipped (debug mode)\r\n");
 
-    // EEPROM write intentionally commented out per integration requirements
-    // if (need_save) write_ee();
-     //need_save = false;
+    /* Memory mode: сохранить последний шаг/режим. Реальную запись решает
+     * сравнение с тенью на 5-сек тике (main.c). */
+    if (EE.uif.use_memory)
+    {
+        EE.default_ui1 = step_default;
+        EE.default_ui2 = mode_default;
+    }
 
     off_auto_repeat();
 
@@ -435,8 +438,7 @@ void slot_strobe(void)
 
     ss_cancel();
     start_aux_strobe(strobe_index);
-    //EE_PRINTF("[UI] slot_strobe idx=%u start=%u\r\n", strobe_index, start);
-#endif
+ #endif
 }
 
 /** @brief Cycle to next strobe pattern. */
@@ -446,7 +448,6 @@ void up_strobe(void)
     stop_aux_if(IDM_STROBE, false);
     if (++strobe_index == STROBE_COUNT) strobe_index = 0;
     start_aux_strobe(strobe_index);
-    //EE_PRINTF("[UI] up_strobe idx=%u\r\n", strobe_index);
 #endif
 }
 
@@ -509,7 +510,6 @@ void unblock_drv(void)
 /** @brief Reset all settings to EEPROM defaults (engineering menu). */
 void reset2def(void)
 {
-    //init_ee();
     ee_defaults();
     ui_save = EE.uif.ui_index;
     ui_table_idx = ENG_MENU_IND;
@@ -585,7 +585,6 @@ void save_def_ui1(void)
 {
     save_def_blink();
     EE.default_ui1 = step_tc;
-    //EE_PRINTF("[UI] save_def_ui1 step=%u (save commented)\r\n", (unsigned)step_tc);
 }
 
 /** @brief Save current UI2 mode as power-on default. */
@@ -593,7 +592,6 @@ void save_def_ui2(void)
 {
     save_def_blink();
     EE.default_ui2 = mode_current;
-    //EE_PRINTF("[UI] save_def_ui2 mode=%u (save commented)\r\n", (unsigned)mode_current);
 }
 
 /*******************************************************************************
@@ -629,7 +627,6 @@ void menu_exit(void)
     EE.uif.ui_index = ui_save;
     EE.aux.beacon_on = beacon_save;
     ui_table_idx = ui_save;
-    //EE_PRINTF("[UI] menu exit -> ui=%u beacon=%u\r\n", (unsigned)ui_save, (unsigned)beacon_save);
 #endif
 }
 
@@ -951,6 +948,8 @@ void ui_init(void)
     ui1_was_pressed = false;
     mode_current = CMODE_OFF;
     ui_table_idx = EE.uif.ui_index;
+    step_default = EE.default_ui1;   // восстановить сохранённую яркость
+    mode_default = EE.default_ui2;   // восстановить сохранённый режим
 }
 
 /**

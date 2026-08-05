@@ -34,10 +34,16 @@
 #include "ob.h"
 #include "array.h"
 #include "mini_printf.h"
+#include <string.h>
 
 volatile wakeup_source_t wakeup_source = WS_NONE; /* Источник последнего пробуждения */
 
 volatile uint8_t need_sleep = false; /* Флаг необходимости перейти в режим сна */
+
+/* Тень последнего сохранённого в flash состояния EE. Запись выполняется только
+ * при реальном отличии текущих данных от тени — "чётные" переключения настроек
+ * в пределах 5-сек окна отката не приводят к лишней записи в flash. */
+static struct ee_data ee_shadow;
 
 /* getBright_CRT_9to12Bit(322) = 1018, or 24.86% of DAC_MAX_VALUE.
  * The strict '>' below therefore enters fast supervision at step 323:
@@ -151,6 +157,7 @@ int main(void)
         init_ee();
         ee_defaults();
     }
+    memcpy(&ee_shadow, &ee, EE_STRUCT_SIZE);
 
     /* Инициализация FSM кнопки и UI */
     static const btn_config_t btn_cfg = {
@@ -332,9 +339,22 @@ int main(void)
 
         if (tick_5s())
         {
-            if(need_save) {
-                ob_Flush();            
-                handle_ee();
+            /* Deferred persistence: OB flushes only when its cache is dirty
+             * (ob.c); EE writes only when the working copy differs from the
+             * last-persisted shadow — an even number of toggles within the
+             * window restores the old value and produces no flash write. */
+            ob_Flush();
+            if (memcmp(&ee_shadow, &ee, EE_STRUCT_SIZE))
+            {
+                need_save = 1;
+                handle_ee();                      /* успех → need_save = 0 */
+                if (!need_save)
+                    memcpy(&ee_shadow, &ee, EE_STRUCT_SIZE);
+                /* сбой: need_save остаётся 1 → ретрай на следующем тике */
+            }
+            else
+            {
+                need_save = 0;
             }
             if (driver_mode == MODE_ON)
             {
