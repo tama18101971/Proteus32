@@ -145,7 +145,7 @@ int main(void)
     uart_init(460800);
 #endif
 
-    EE_PRINTF("\r\n[MAIN] Boot...\r\n");
+    EE_PRINTF("\r\nBoot...\r\n");
 
     sys_init();
 
