@@ -516,6 +516,7 @@ void unblock_drv(void)
 void reset2def(void)
 {
     ee_defaults();
+    ob_ResetToDefaults();   /* also reset OB calibration (tc/vc) and slots */
     ui_save = EE.uif.ui_index;
     ui_table_idx = ENG_MENU_IND;
     beacon_save = EE.aux.beacon_on;

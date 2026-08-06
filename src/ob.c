@@ -210,11 +210,33 @@ static flash_status_t _program(void) {
 }
 
 /**
+ * @brief Заполнение кэша заводскими значениями по умолчанию.
+ *
+ * Единственный источник дефолтов Option Bytes: используется при первом
+ * запуске/повреждении (ob_Init) и при сбросе настроек (ob_ResetToDefaults).
+ */
+static void _set_defaults(void) {
+    _cache.tc = 0;
+    _cache.vc = 0;
+    _cache.ml = 0;
+    _cache.slots[0] = SLOT_DEFAULT_1CH;
+    _cache.slots[1] = SLOT_DEFAULT_2CH;
+    _cache.slots[2] = SLOT_DEFAULT_3C;
+    _cache.slots[3] = SLOT_DEFAULT_3CH;
+    _cache.slots[4] = SLOT_DEFAULT_4C;
+    _cache.slots[5] = SLOT_DEFAULT_4CH;
+    _cache.slots[6] = SLOT_DEFAULT_5C;
+    _cache.slots[7] = SLOT_DEFAULT_5CH;
+    _cache.slots[8] = SLOT_DEFAULT_6C;
+    _cache.slots[9] = SLOT_DEFAULT_6CH;
+}
+
+/**
  * @brief Инициализация модуля Option Bytes.
  *
  * Считывает данные из flash-области Option Bytes в кэш.
  * Если magic-маркер не совпадает (первый запуск или повреждение),
- * все поля кэша обнуляются.
+ * применяются значения по умолчанию.
  * @return true — данные валидны (magic == 0xA5), false — данные невалидны.
  */
 bool ob_Init(void) {
@@ -224,22 +246,21 @@ bool ob_Init(void) {
     /* Проверка маркера валидности */
     if (_cache.magic != MAGIC) {
         /* Первый запуск или повреждение — применяем значения по умолчанию */
-        _cache.tc = 0;
-        _cache.vc = 0;
-        _cache.ml = 0;
-        _cache.slots[0] = SLOT_DEFAULT_1CH;
-        _cache.slots[1] = SLOT_DEFAULT_2CH;
-        _cache.slots[2] = SLOT_DEFAULT_3C;
-        _cache.slots[3] = SLOT_DEFAULT_3CH;
-        _cache.slots[4] = SLOT_DEFAULT_4C;
-        _cache.slots[5] = SLOT_DEFAULT_4CH;
-        _cache.slots[6] = SLOT_DEFAULT_5C;
-        _cache.slots[7] = SLOT_DEFAULT_5CH;
-        _cache.slots[8] = SLOT_DEFAULT_6C;
-        _cache.slots[9] = SLOT_DEFAULT_6CH;
+        _set_defaults();
         return false;
     }
     return true;
+}
+
+/**
+ * @brief Сброс кэша Option Bytes к заводским значениям.
+ *
+ * Помечает кэш грязным; фактическая запись в flash произойдёт
+ * при ближайшем вызове ob_Flush() (5-секундный тик персистентности).
+ */
+void ob_ResetToDefaults(void) {
+    _set_defaults();
+    change = true;
 }
 
 /**

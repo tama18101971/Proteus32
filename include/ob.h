@@ -110,6 +110,14 @@ uint8_t ob_GetSlot(uint8_t index);
 void ob_SetSlot(uint8_t index, uint8_t value);
 
 /**
+ * @brief Сброс кэша Option Bytes к заводским значениям
+ *
+ * Помечает кэш грязным; запись в flash выполняется при
+ * ближайшем вызове ob_Flush() (5-секундный тик персистентности).
+ */
+void ob_ResetToDefaults(void);
+
+/**
  * @brief Сохранение кэша в flash и верификация
  *
  * Перед записью устанавливает magic-маркер (0xA5), помечая

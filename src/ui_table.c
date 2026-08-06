@@ -146,8 +146,8 @@ static const dispatch_t ui2_table[] = {
 static const dispatch_t eng_table[] = {
     /* -- First level: MODE_OFF (navigate sub-menus) -- */
     { MODE_OFF, 1,  0, false, true,  ENTER_ML_MODE,  false, 0 },
-    { MODE_OFF, 2,  0, false, true,  SAVE_DEF_UI1,   false, 0 },
-    { MODE_OFF, 3,  0, false, true,  SAVE_DEF_UI2,   false, 0 },
+//    { MODE_OFF, 2,  0, false, true,  SAVE_DEF_UI1,   false, 0 },
+//    { MODE_OFF, 3,  0, false, true,  SAVE_DEF_UI2,   false, 0 },
     { MODE_OFF, 10, 0, false, true,  CALIBRATION,    false, 0 },
     { MODE_OFF, 20, 0, false, true,  RESET2DEF,      false, 0 },
     { MODE_OFF, 0,  0, true,  false, MENU_EXIT,      false, 0 },
