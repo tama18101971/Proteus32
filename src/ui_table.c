@@ -89,10 +89,10 @@ static const dispatch_t ui1_table[] = {
 
     /* -- Mode: MODE_ON -- */
     { MODE_ON,  1, 0, false, true,  OFF_DRV_FALSE,  false, 0 },
-    { MODE_ON,  0, 0, true,  false, ON_RUMPUP_UI1,  false, 0 },
     { MODE_ON,  1, 0, true,  false, ON_RUMPDOWN_UI1, false, 0 },
-    { MODE_ON,  2, 0, false, true,  ON_TURBO_UI1,   false, 0 },
     { MODE_ON,  5, 0, true,  false, SAVE_DEF_UI1,   false, 0 },
+    { MODE_ON,  0, 0, true,  false, ON_RUMPUP_UI1,  false, 0 },
+    { MODE_ON,  2, 0, false, true,  ON_TURBO_UI1,   false, 0 },
 
     /* -- Mode: MODE_STROB -- */
     { MODE_STROB, 1, 0, false, true,  OFF_STROBE_UI1, false, 0 },
@@ -127,6 +127,7 @@ static const dispatch_t ui2_table[] = {
     { MODE_ON,  1, 1, false, false, STEP_DOWN_UI2,  false, 0 },
     { MODE_ON,  1, 0, false, true,  OFF_DRV_FALSE,  false, 0 },
     { MODE_ON,  1, 0, true,  false, MODE_DOWN_UI2,  false, 0 },
+    { MODE_ON,  5, 0, true,  false, SAVE_DEF_UI2,   false, 0 },
     { MODE_ON,  0, 0, true,  false, MODE_UP_UI2,    false, 0 },
     { MODE_ON,  2, 0, false, true,  ON_TURBO_UI2,   false, 0 },
 
