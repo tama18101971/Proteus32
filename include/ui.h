@@ -604,6 +604,13 @@ extern uint8_t ui_table_idx;
  */
 void enter_menu_at_boot(void);
 
+/** @brief Session-only mute of the AUX beacon while a menu is active.
+ *
+ * Set at menu entry, cleared on menu_exit(). RAM flag, so it resets on reset
+ * and never touches EE.aux.beacon_on — a power-cycle inside the menu cannot
+ * permanently disable the beacon. */
+extern bool menu_beacon_mute;
+
 /**
  * @brief Turn on driver and initialise soft-start.
  * @return 1 if driver was actually turned on, 0 if already on or blocked.

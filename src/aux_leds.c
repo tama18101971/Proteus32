@@ -572,6 +572,7 @@ bool handle_aux(void) {
  */
 void start_aux_beacon(void) {
 	if (!EE.aux.beacon_on) return;
+	if (menu_beacon_mute) return;   /* сессионный мьют во время меню */
 	if (aux_is_active()) return;
 
 	/* Параметры OFF-полупериода по beacon_mode:

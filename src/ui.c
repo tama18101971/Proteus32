@@ -61,6 +61,7 @@ uint8_t clicks_count = 0;
 uint8_t ui_table_idx = 1;        // runtime selector for dispatch tables
 uint8_t ui_save = 0;
 uint8_t beacon_save = 0;
+bool menu_beacon_mute = false;   // session-only AUX beacon mute while in menu
 uint8_t bcklight_type_save = 0;
 uint8_t strobe_index = 0;
 
@@ -627,6 +628,7 @@ void menu_exit(void)
     EE.uif.ui_index = ui_save;
     EE.aux.beacon_on = beacon_save;
     ui_table_idx = ui_save;
+    menu_beacon_mute = false;
 #endif
 }
 
@@ -684,7 +686,9 @@ void enter_menu_at_boot(void)
 
     ui_save = EE.uif.ui_index;
     beacon_save = EE.aux.beacon_on;
-    EE.aux.beacon_on = 0;                       /* маяк в меню не мешает */
+    /* Маяк в меню не мешает, но EE не трогаем — сессионный RAM-флаг,
+     * сбрасывается при выходе (menu_exit) и при любом питании (reset). */
+    menu_beacon_mute = true;
 
     if (voltage_ok && (vrefint_adc < MV_GE(ENG_VOLTAGE_MV)))
     {
@@ -816,12 +820,18 @@ void enter_uis_mode(void)
 #endif
 }
 
-/** @brief Set UI index from click count (user menu). */
+/** @brief Set UI index from click count (user menu). Clamped to valid 1..3. */
 void uis_clickX(void)
 {
 #ifdef USE_MENU
-    ui_save = clicks_count;
-    aux_count(clicks_count);
+    /* Диспетчеру известны только UI1=1 и UI2=2/3 (ui_table_lookup). Другие
+     * значения (4..31) привели бы к «мёртвому» ui_table_idx, а 5/6 — к
+     * автоматическому входу в меню при следующем включении. Клэмпим. */
+    uint8_t sel = clicks_count;
+    if (sel < 1u) sel = 1u;
+    if (sel > 3u) sel = 3u;
+    ui_save = sel;
+    aux_count(sel);
     driver_mode = MODE_OFF;
 #endif
 }

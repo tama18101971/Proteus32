@@ -43,8 +43,9 @@ Main loop polls tick helpers (not ISR-driven beyond `tim2_ms` increment):
 
 ### Sleep model — two flags
 
-- **`need_sleep`**: request to enter STANDBY next loop iteration. Set by 5s timer, cleared by button ISR.
+- **`need_sleep`**: request to enter STANDBY next loop iteration. Set by 5s timer (and at boot, `main.c`), cleared by button ISR/wake.
 - **`is_sleep_mode`**: `true` after `AWU_Sleep_Now()`, `false` after button wake restore.
+- **TIM2 is NOT started at boot**: `main()` never calls `tim2_start()`. Boot → `need_sleep=true` → immediate STANDBY; the first button wake restores peripherals and starts the 1 ms tick, which drives the whole 160/30/2 Hz polled loop. Blocking helpers (`wait_ms`, 3 s boot delay, boot-menu flashes) run before STANDBY and don't need timers.
 
 Before STANDBY: `adc_stop() + tim2_stop()`. On button wake: `dac_pwrpin_restore() + i2c_init(400000) + adc_init() + tim2_start()`. On AWU wake: restore DAC/I2C **only if** `aux_needs_dac()` (strobe/HBL active), then `handle_aux()`.
 `AWU_IRQHandler` calls `SystemInit()` **only** when `is_sleep_mode == true`.
@@ -109,7 +110,15 @@ AWU-sleep-driven FSM: `handle_aux()` executes **one** transition per AWU wake (m
 
 ### Engineering / user menus
 
-Gated by `#ifdef USE_MENU`. Engineering menu includes `calibration()` (tc/vc) and `chtk` (t_calibr). User menu (`enter_user_menu`) includes `save_def_ui1/2` (always compiled, not under USE_MENU).
+Actions gated by `#ifdef USE_MENU` (bodies; the dispatch tables are always compiled). **Only entry: power-up with the button held** — `enter_menu_at_boot()` (`ui.c`) is called from `main()` when `Pressed` at startup. Menu is chosen by supply voltage (like original AVR Proteus IID):
+- V > `ENG_VOLTAGE_MV` (4.5 V, bench/USB): `vrefint_adc < MV_GE(ENG_VOLTAGE_MV)` → engineering menu (`ENG_MENU_IND`=5), indicator flashes **6× red**;
+- else (battery) → user menu (`USR_MENU_IND`=6), **3× green**.
+Entry holds the button ~1 s (`MENU_ENTRY_DEBOUNCE_MS`), then flashes, then waits for release so the button FSM doesn't fire HOLD→`MENU_EXIT` on the first tick.
+
+Menus are `ui_table_idx` **5/6** (see `ui_table_lookup`) — **session-only, never persisted**: reboot returns to the normal UI; `menu_exit()` restores `ui_table_idx = ui_save`. Menu actions fire only on `CLICK_SEQ` (inter-click pause ~250 ms / `BTN_MAX_CLICKS_MENU`=31); **hold** in MODE_OFF or any sub-mode → exit (`MENU_EXIT` / `EXIT_MAGIC_MODE` / slot-hold special case in `ui_process`).
+- `eng_table`: 1=enter ML, 2/3=`save_def_ui1/2` (always compiled, not USE_MENU), 10=`calibration()` (tc/vc → Option Bytes), 20=`RESET2DEF`, hold=exit.
+- `usr_table`: 1=BM, 2=BT, 3=BL, 4=UIS (clamped to valid 1..3 in `uis_clickX`), 5=MAGIC slots, 6=CHTK, hold=exit.
+- `menu_beacon_mute` (RAM flag): suppresses the AUX beacon for the whole menu session (checked in `start_aux_beacon()`); set by `enter_menu_at_boot()`, cleared by `menu_exit()`. Never touches `EE.aux.beacon_on` — a power-cycle inside the menu can't disable the beacon permanently.
 
 ## Critical config
 
@@ -158,6 +167,7 @@ Do NOT write raw AF_OD values like `0x1C` — the `& 0x0F` mask in `GPIO_PinConf
 
 ## Gotchas
 
+- **`ui_table_idx` valid values are only 1 (UI1), 2/3 (UI2), 5/6 (menus)**: `ui_table_lookup` (ui_table.c) returns 0 for anything else → dead UI (no button action, unrecoverable without reboot). When touching UI/menu selection (e.g. `uis_clickX`), clamp to 1..3; never assign 5/6 outside the boot-menu flow.
 - **`EE_PRINTF` is a no-op when `WL_FLASH_DEBUG` is off**: arguments are never evaluated (macro `#define EE_PRINTF(...) ((void)0)`). Code inside its argument list (e.g. `T_SET`, `EE.usr.*`) won't cause compile errors when debug is off, but will break if debug is re-enabled.
 - **`adc.c` must include `ui.h`**: needed for `CMODE_*`, `driver_mode`, `mode_current`, `step_user`, `off_driver()`, `set_current()`, `get_stepi()` (used in `scan_voltage`).
 - **`calibration()` is under `#ifdef USE_MENU`**: only accessible via engineering menu. Writes to Option Bytes (not WL_FLASH).
