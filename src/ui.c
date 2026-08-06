@@ -139,7 +139,10 @@ uint16_t get_step_tc(uint16_t step)
  */
 uint16_t get_min_level(uint16_t step)
 {
-    return step ? ((ob_GetMl() << 1) + BASE_MOON_LEVEL) : 0;
+    uint16_t ret = step ? ((ob_GetMl() << 1) + BASE_MOON_LEVEL) : 0;
+    EE_PRINTF("[UI] min_level: ml=%u step=%u -> ret=%u\r\n",
+              (unsigned)ob_GetMl(), (unsigned)step, (unsigned)ret);
+    return ret;
 }
 
 /**
@@ -621,6 +624,32 @@ void ml_clickX(void)
 #endif
 }
 
+/* Верхняя граница ожидания отпускания кнопки после входа/выхода из меню.
+ * Пока кнопка держится, FSM в главном цикле ещё не тронул событие — иначе
+ * удержание превратилось бы в HOLD уже в новом UI. */
+#define MENU_ENTRY_RELEASE_MS   3000u
+
+/** @brief Мигнуть индикатором cnt раз (для подтверждения входа в меню).
+ * @param cnt     Число вспышек.
+ * @param on_ms   Длительность свечения/паузы, мс.
+ * @param is_grn  true — зелёный ИД, false — красный.
+ */
+static void menu_entry_flash(uint8_t cnt, uint16_t on_ms, bool is_grn);
+
+/** @brief Ждать отпускания кнопки (максимум MENU_ENTRY_RELEASE_MS).
+ *  Вызывается после входа/выхода из меню, пока FSM в главном цикле ещё не
+ *  тронул событие — иначе удержание попало бы в новый UI как HOLD. */
+static void menu_wait_release(void)
+{
+    uint32_t t = 0;
+    while (Pressed && (t < MENU_ENTRY_RELEASE_MS))
+    {
+        wait_ms(10);
+        t += 10;
+    }
+    (void)t;
+}
+
 /** @brief Exit engineering menu and restore saved UI index/beacon state. */
 void menu_exit(void)
 {
@@ -629,17 +658,17 @@ void menu_exit(void)
     EE.aux.beacon_on = beacon_save;
     ui_table_idx = ui_save;
     menu_beacon_mute = false;
+
+    /* Подтверждение выхода: 1 зелёная вспышка 500 мс, затем ожидание
+     * отпускания кнопки, чтобы HOLD-повторы не попали в новый UI. */
+    menu_entry_flash(1, 500, true);
+    menu_wait_release();
 #endif
 }
 
 /* Задержка дебаунс-окна входа в меню при подаче питания (как delay_4ms(255)
  * в оригинале Proteus IID: ~1 с удержания кнопки). */
 #define MENU_ENTRY_DEBOUNCE_MS  1000u
-
-/* Верхняя граница ожидания отпускания кнопки после входа в меню. Пока кнопка
- * держится, FSM в главном цикле ещё не стартовал — иначе удержание немедленно
- * превратилось бы в HOLD и мгновенный MENU_EXIT. */
-#define MENU_ENTRY_RELEASE_MS   3000u
 
 /** @brief Мигнуть индикатором cnt раз (для подтверждения входа в меню).
  * @param cnt     Число вспышек.
@@ -703,13 +732,7 @@ void enter_menu_at_boot(void)
 
     /* Ждём отпускания кнопки, чтобы FSM (button_tick) не принял удержание за
      * свежее нажатие и не выполнил HOLD -> MENU_EXIT при первом же тике. */
-    uint32_t t = 0;
-    while (Pressed && (t < MENU_ENTRY_RELEASE_MS))
-    {
-        wait_ms(10);
-        t += 10;
-    }
-    (void)t;
+    menu_wait_release();
 #endif
 }
 
