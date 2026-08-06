@@ -24,6 +24,10 @@
 #include "i2c.h"
 #include "mini_gpio.h"
 
+/* 0xFFFF is outside the 12-bit DAC range and represents an unknown register
+ * value after power loss, reset or an unsuccessful I2C transaction. */
+static uint16_t last_voltage = 0xFFFFu;
+
 /**
  * @brief Инициализация GPIO для пина питания DAC (PD0)
  *
@@ -32,6 +36,7 @@
  */
 void dac_pwrpin_init(void)
 {
+    last_voltage = 0xFFFFu;
     RCC->APB2PCENR |= (1 << 5); /* GPIOD clock enable (bit 5) */
     DAC_PWR_PORT->OUTDR &= ~DAC_PWR_PIN;
     GPIO_PinConfig(DAC_PWR_PORT, DAC_PWR_PIN, CFG_OUT_PP_2M);
@@ -74,6 +79,7 @@ void dac_pwrpin_on(void)
  */
 void dac_pwrpin_off(void)
 {
+    last_voltage = 0xFFFFu;
     DAC_PWR_PORT->BCR = DAC_PWR_PIN;
 }
 
@@ -99,6 +105,13 @@ uint8_t dac7571_set_voltage(uint16_t data_12bit)
         data_12bit = DAC_MAX_VALUE;
     }
 
+    if (data_12bit == last_voltage)
+        return I2C_OK;
+
+    /* Do not retain a value until the complete transaction, including STOP,
+     * has succeeded. Any early return therefore leaves the cache invalid. */
+    last_voltage = 0xFFFFu;
+
     // 2. Формируем два байта по спецификации TI
     // Старший байт: PD1=0, PD0=0 (Normal Mode), далее 4 старших бита данных
     uint8_t byte_msb = (uint8_t)((data_12bit >> 8) & 0x0F);
@@ -106,25 +119,14 @@ uint8_t dac7571_set_voltage(uint16_t data_12bit)
     uint8_t byte_lsb = (uint8_t)(data_12bit & 0xFF);
 
     // 3. Низкоуровневая транзакция с пошаговым контролем ошибок
-    if (i2c_start() != I2C_OK)
+    if (i2c_start() != I2C_OK ||
+        i2c_send_addr(DAC7571_I2C_ADDR, I2C_DIR_TX) != I2C_OK ||
+        i2c_write_byte(byte_msb) != I2C_OK ||
+        i2c_write_byte(byte_lsb) != I2C_OK ||
+        i2c_stop() != I2C_OK)
         return I2C_NACK;
 
-    if (i2c_send_addr(DAC7571_I2C_ADDR, I2C_DIR_TX) != I2C_OK)
-    {
-        // Если устройство отключено, i2c_send_addr сам сгенерирует STOP
-        return I2C_NACK;
-    }
-
-    // Передаем старший байт и ждем ACK
-    if (i2c_write_byte(byte_msb) != I2C_OK)
-        return I2C_NACK;
-
-    // Передаем младший байт и ждем ACK
-    if (i2c_write_byte(byte_lsb) != I2C_OK)
-        return I2C_NACK;
-
-    // Успешное завершение транзакции
-    i2c_stop();
+    last_voltage = data_12bit;
     return I2C_OK;
 }
 
@@ -139,16 +141,14 @@ uint8_t dac7571_power_down(uint8_t mode)
 
     // Сдвигаем режим в биты PD1:PD0 (6-й и 7-й биты первого байта)
     uint8_t byte_msb = (mode << 6);
+    last_voltage = 0xFFFFu;
 
-    if (i2c_start() != I2C_OK)
+    if (i2c_start() != I2C_OK ||
+        i2c_send_addr(DAC7571_I2C_ADDR, I2C_DIR_TX) != I2C_OK ||
+        i2c_write_byte(byte_msb) != I2C_OK ||
+        i2c_write_byte(0x00) != I2C_OK ||
+        i2c_stop() != I2C_OK)
         return I2C_NACK;
-    if (i2c_send_addr(DAC7571_I2C_ADDR, I2C_DIR_TX) != I2C_OK)
-        return I2C_NACK;
-    if (i2c_write_byte(byte_msb) != I2C_OK)
-        return I2C_NACK;
-    if (i2c_write_byte(0x00) != I2C_OK)
-        return I2C_NACK; // Второй байт не важен, но обязателен
-    i2c_stop();
 
     return I2C_OK;
 }

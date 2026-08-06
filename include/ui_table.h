@@ -31,12 +31,16 @@ typedef struct {
     uint8_t mode;            // driver_mode to match
     uint8_t clicks;          // click count to match (0 = wildcard)
     uint8_t long_mask;       // required long-click bits (0 = don't care)
-    bool    hold;            // true = match hold events; false = match releases
-    bool    wait_timeout;    // true = fire only on CLICK_SEQ timeout
-    uint8_t op_index;        // fixed fallback index into main_op[]
-    bool    is_slot;         // true = a slot gesture; magic build overrides op_index
-    uint8_t slot_idx;        // Option Bytes slot index (0..9)
+    uint8_t hold       : 1;  // true = match hold events; false = releases
+    uint8_t wait_timeout : 1; // true = fire only on CLICK_SEQ timeout
+    uint8_t op_index   : 6;  // fixed fallback index into main_op[] (0..48)
+    uint8_t is_slot    : 1;  // true = a slot gesture; magic overrides op_index
+    uint8_t slot_idx   : 4;  // Option Bytes slot index (0..9)
+    uint8_t reserved   : 3;
 } dispatch_t;
+
+_Static_assert(sizeof(dispatch_t) == 5,
+               "dispatch_t packing changed; update UI table size assumptions");
 
 /*******************************************************************************
  *  Lookup function

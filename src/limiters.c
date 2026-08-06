@@ -31,8 +31,6 @@ const ThermalLimiterConfig_t config = {
 /** @brief Current limiter amount subtracted from the user brightness. */
 uint16_t limiter = 0;
 
-/** @brief Limiter value used by the last physical output update. */
-static uint16_t old_limiter = 0;
 /** @brief Latched temperature acquisition fault until a valid sample arrives. */
 static bool thermal_fault;
 
@@ -84,11 +82,8 @@ static void update_limiters(uint16_t exact_adc)
     uint16_t limited_step = (step_user > limiter) ?
                             (uint16_t)(step_user - limiter) : 0u;
 
-    if (old_limiter != limiter)
-    {
+    if (step_tc != limited_step)
         apply_limiter_output();
-        old_limiter = limiter;
-    }
 
     check_turbo_thermal_limit(limited_step);
 }
@@ -108,8 +103,6 @@ void scan_limiters(void)
     if (driver_mode != MODE_ON)
     {
         thermal_fault = rail_fault;
-        if (rail_fault)
-            old_limiter = UINT16_MAX;
         return;
     }
 
@@ -134,10 +127,7 @@ void scan_limiters_fault(void)
 {
     thermal_fault = true;
     if (driver_mode != MODE_ON)
-    {
-        old_limiter = UINT16_MAX;
         return;
-    }
 
     update_limiters(THERMAL_ADC_MIN);
 }
@@ -157,5 +147,4 @@ void reset_limiters(void)
 {
     ThermalLimiter_Init(&state);
     limiter = 0;
-    old_limiter = 0;
 }

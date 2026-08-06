@@ -22,13 +22,18 @@ void uart_init(uint32_t baudrate)
 }
 
 /**
- * @brief Output a single character via USART1 (blocking).
+ * @brief Queue one character in USART1's transmit data register.
  * @param c Character to send.
+ * @details Waits for TXE rather than TC so the next character can be loaded
+ * while the previous one is still being shifted on the wire. mini_printf()
+ * waits for TC once after the complete message.
  */
 static void out_char(char c)
 {
+    while (!(USART1->STATR & USART_STATR_TXE))
+        ;
+
     USART1->DATAR = (uint8_t)c;
-    while (!(USART1->STATR & USART_STATR_TC));
 }
 
 /**
@@ -183,5 +188,11 @@ int mini_printf(const char *fmt, ...)
     va_start(ap, fmt);
     out_format(fmt, ap);
     va_end(ap);
+
+    /* Preserve the existing blocking-message contract: callers return only
+     * after the final byte has physically left USART1. */
+    while (!(USART1->STATR & USART_STATR_TC))
+        ;
+
     return 0;
 }

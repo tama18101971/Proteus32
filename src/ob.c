@@ -368,5 +368,8 @@ bool ob_Flush(void) {
         if (verify[4 + i] != _cache.slots[i])
             return false;
 
+    /* Keep the dirty flag set after any failed program/verify operation so
+     * the next 5-second persistence tick retries the unchanged cache. */
+    change = false;
     return true;
 }
