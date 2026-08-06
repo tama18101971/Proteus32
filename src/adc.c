@@ -96,58 +96,57 @@ uint16_t ema_update(uint16_t raw)
     ema_avg += diff >> EMA_SHIFT;
     return ema_avg;
 }
+#if defined(WL_FLASH_DEBUG) || defined(PRINT_ADC)
+
 /* Таблица ADC-кодов для NCP18XH103F03RB (схема D с Rpar=77.3k) */
-/* Диапазон: -20...+80°C, шаг 1°C, значения возрастают при нагреве */
-static const uint16_t termo_table[] = {
-    130, 143, 157, 170, 184, 197, 211, 224, 238, 251,
-    265, 272, 279, 286, 293, 300, 307, 314, 321, 328,
-    335, 342, 350, 357, 365, 372, 380, 387, 395, 402,
-    410, 419, 428, 436, 445, 454, 463, 471, 480, 489,
-    498, 507, 515, 524, 533, 542, 550, 559, 567, 576,
-    585, 592, 599, 606, 613, 620, 627, 634, 641, 647,
-    654, 661, 668, 674, 681, 688, 695, 702, 708, 715,
-    722, 728, 733, 739, 745, 750, 756, 762, 767, 773,
-    779, 784, 788, 793, 797, 802, 807, 811, 816, 820,
-    825, 830, 835, 840, 846, 851, 856, 861, 866, 871,
-    876};
+/* Диапазон: -20...+80°C, шаг 1°C, значения возрастают при нагреве. */
+/* Сжато до 8-битных дельт, по 2 в ниббл: соседние дельты <= 14, 100 дельт
+ * укладываются в 50 байт вместо 101 x uint16 = 202 B.  Потребитель —
+ * только отладочный вывод temperature_c; защита/термо-лимитер работают
+ * в кодах АЦП и эту таблицу не используют. */
+#define TERMO_BASE_ADC    130u  /* код АЦП на -20°C (бывший termo_table[0]) */
+#define TERMO_DELTA_COUNT 100u
 
-#define TABLE_SIZE (sizeof(termo_table) / sizeof(termo_table[0]))
+static const uint8_t termo_table[] = {
+    0xED, 0xED, 0xED, 0xED, 0xED,   /* 13,14 x5 */
+    0x77, 0x77, 0x77, 0x77, 0x77,   /*  7, 7 x5 */
+    0x87, 0x87, 0x87, 0x87, 0x87,   /*  7, 8 x5 */
+    0x99, 0x98, 0x99, 0x98, 0x99,   /* 9,9 / 8,9 чередование */
+    0x89, 0x99, 0x89, 0x89, 0x99,
+    0x77, 0x77, 0x77, 0x77, 0x76,
+    0x77, 0x76, 0x77, 0x77, 0x76,
+    0x67, 0x65, 0x56, 0x66, 0x65,
+    0x56, 0x54, 0x45, 0x55, 0x54,
+    0x55, 0x55, 0x56, 0x55, 0x55,
+};
 
-/** @brief Calculate temperature from ADC value using lookup + linear interpolation. */
+/**
+ * @brief Calculate temperature from ADC value (linear scan over deltas).
+ * @param adcValue Raw or tc-corrected 10-bit NTC ADC code (0..1023).
+ * @return Temperature in tenths of °C, -200..800 (integer °C granularity).
+ */
 int16_t calc_temperature(uint16_t adcValue)
 {
-    uint8_t l = 0;
-    uint8_t r = TABLE_SIZE - 1;
-
-    if (adcValue <= termo_table[0])
+    if (adcValue <= TERMO_BASE_ADC)
         return TEMPERATURE_TABLE_START;
 
-    if (adcValue >= termo_table[r])
-        return TEMPERATURE_TABLE_START + (TABLE_SIZE - 1) * TEMPERATURE_TABLE_STEP;
+    uint16_t v = TERMO_BASE_ADC;
+    uint16_t i = 0;
 
-    uint8_t m;
-    while ((r - l) > 1)
+    for (; i < TERMO_DELTA_COUNT; i++)
     {
-        m = (l + r) >> 1;
-        if (adcValue < termo_table[m])
-            r = m;
-        else
-            l = m;
+        uint8_t d = (uint8_t)((i & 1u) ? (termo_table[i >> 1] >> 4)
+                                         : (termo_table[i >> 1] & 0x0Fu));
+        uint16_t nv = (uint16_t)(v + d);
+        if (adcValue < nv)
+            break;
+        v = nv;
     }
 
-    uint16_t vl = termo_table[l];
-    uint16_t vr = termo_table[r];
-
-    int16_t temp = TEMPERATURE_TABLE_START + l * TEMPERATURE_TABLE_STEP;
-
-    if (vr != vl)
-    {
-        uint32_t diff_adc = adcValue - vl;
-        uint32_t diff_table = vr - vl;
-        temp += (int16_t)((diff_adc * TEMPERATURE_TABLE_STEP + (diff_table >> 1)) / diff_table);
-    }
-    return temp;
+    return TEMPERATURE_TABLE_START + (int16_t)(i * TEMPERATURE_TABLE_STEP);
 }
+
+#endif /* defined(WL_FLASH_DEBUG) || defined(PRINT_ADC) */
 
 /**
  * @brief Apply tc calibration offset to raw temperature ADC.
@@ -335,8 +334,10 @@ bool adc_read(void)
     voltage_ok = true;
     raw_temperature_adc = new_raw_temperature_adc;
 
-    // Расчет температуры по таблице (с коррекцией tc)
+#if defined(WL_FLASH_DEBUG) || defined(PRINT_ADC)
+    // Расчет температуры по таблице (с коррекцией tc) — только для отладки
     temperature_c = calc_temperature(get_exact_temp_adc());
+#endif
 
 #ifdef PRINT_ADC
     // Выводим результат
