@@ -99,7 +99,7 @@ void OFF_POWER(void)
 /** @brief Set EEPROM defaults for all application parameters. */
 void ee_defaults(void)
 {
-    EE.uif.ui_index = 2;
+    EE.uif.ui_index = 1;
     EE.uif.use_memory = 0;
 
     EE.aux.bcklight_color = BCK_COLOR_RED;

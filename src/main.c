@@ -125,7 +125,7 @@ int main(void)
     NVIC_PriorityGroupConfig(NVIC_PriorityGroup_1);
     SystemCoreClockUpdate();
 
-    wait_ms(3000);
+    wait_ms(1000);
 
 #ifdef WL_FLASH_DEBUG
     uart_init(460800);
