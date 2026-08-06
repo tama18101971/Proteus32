@@ -112,6 +112,20 @@ static bool sample_and_scan(void)
 }
 
 /**
+ * @brief Восстановление I2C/DAC после выхода из STANDBY.
+ *
+ * Standby сбрасывает тактирование периферии: для работы DAC нужен
+ * перезапуск I2C после подъёма питания PD0.  Одна noinline-функция вместо
+ * трёх инлайн-копий последовательности в main() (LTO иначе дублирует её
+ * по месту).  adc_init() не входит сюда — третья точка вызова её не имеет.
+ */
+__attribute__((noinline)) static void wake_i2c(void)
+{
+    dac_pwrpin_restore();
+    i2c_init(400000);
+}
+
+/**
  * @brief Точка входа и главный цикл прошивки.
  *
  * Инициализирует все периферийные модули, затем циклически обслуживает:
@@ -197,8 +211,7 @@ int main(void)
             is_sleep_mode = false;
             need_sleep = false;
             wakeup_source = WS_NONE;
-            dac_pwrpin_restore();
-            i2c_init(400000);
+            wake_i2c();
             stop_aux_if(IDM_BEACON, false);
             adc_init();
             if (!is_aux_mode(IDM_STROBE))
@@ -216,8 +229,7 @@ int main(void)
             if ((sleep_owner == SLEEP_OWNER_THERMAL) && is_sleep_mode)
             {
                 AWU_OFF();
-                dac_pwrpin_restore();
-                i2c_init(400000);
+                wake_i2c();
                 adc_init();
 
                 bool sample_ok = sample_and_scan();
@@ -243,8 +255,7 @@ int main(void)
             {
                 if (aux_needs_dac())
                 {
-                    dac_pwrpin_restore();
-                    i2c_init(400000);
+                    wake_i2c();
                 }
                 handle_aux();
             }
