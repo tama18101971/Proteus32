@@ -636,7 +636,7 @@ void ml_clickX(void)
  * @param on_ms   Длительность свечения/паузы, мс.
  * @param is_grn  true — зелёный ИД, false — красный.
  */
-static void menu_entry_flash(uint8_t cnt, uint16_t on_ms, bool is_grn);
+static __attribute__((noinline)) void menu_entry_flash(uint8_t cnt, uint16_t on_ms, bool is_grn);
 
 /** @brief Ждать отпускания кнопки (максимум MENU_ENTRY_RELEASE_MS).
  *  Вызывается после входа/выхода из меню, пока FSM в главном цикле ещё не
@@ -713,30 +713,19 @@ void enter_menu_at_boot(void)
     /* Выбор меню по напряжению (ADC уже готов, см. main). */
     bool is_eng = voltage_ok && (vrefint_adc < MV_GE(ENG_VOLTAGE_MV));
 
-    /* Индикация доступного меню до опроса кнопки: 1 с. */
-    if (is_eng)
-    {
-        on_red_h();
-        wait_ms(1000);
-        off_red();
-    }
-    else
-    {
-        on_grn_h();
-        wait_ms(1000);
-        off_grn();
-    }
+    /* Индикация доступного меню до опроса кнопки: 0.5 с. */
+    menu_entry_flash(1, 500, !is_eng);
 
     if (!Pressed)
         return;
 
     wait_ms(MENU_ENTRY_DEBOUNCE_MS);
+
     if (!Pressed)
         return;
 
     ui_save = EE.uif.ui_index;
     beacon_save = EE.aux.beacon_on;
-    
     /* Маяк в меню не мешает, но EE не трогаем — сессионный RAM-флаг,
      * сбрасывается при выходе (menu_exit) и при любом питании (reset). */
     menu_beacon_mute = true;
