@@ -37,7 +37,7 @@ Main loop polls tick helpers (not ISR-driven beyond `tim2_ms` increment):
 | 160Hz | 6 ms     | `button_tick() + ui_process() + ss_scan()`       |
 | 30Hz  | 33 ms    | `adc_read() + scan_limiters() + scan_voltage()`  |
 | 2Hz   | 500 ms   | debug UART log                                   |
-| 5s    | 5 s      | `handle_ee()` then `need_sleep = true`           |
+| 5s    | 5 s      | `ob_Flush()` + EE shadow-diff → `handle_ee()` if changed; then sleep decision |
 
 `tim2_stop()` resets all tick counters — must re-initialize after sleep.
 
@@ -94,6 +94,8 @@ Two-layer calibration:
 ### Data storage
 
 - **WL_FLASH**: wear-leveling EEPROM over flash. Fields accessed via `EE.fieldname` macro (`app_data.h` overlay on `ee_data`). Uses `WL_FLASH_LIGHT` variant (see platformio.ini).
+- **Deferred EE writes — shadow gate in main.c**: `ee` is the RAM working copy; `ee_shadow` (main.c:46) is the last-persisted snapshot. The 5s tick runs `ob_Flush()` (no-op if OB cache clean) then `memcmp(&ee_shadow, &ee, EE_STRUCT_SIZE)`: only on difference does it set `need_save=1`, call `handle_ee()` (whole 16-byte struct), and refresh `ee_shadow` on success; a failure keeps `need_save=1` for retry. **Do NOT set `need_save = 1` from UI code** — the tick's memcmp is the single authority. An even number of toggles inside a 5s window restores the old value and writes nothing.
+- **Session vs persisted state**: `step_default`/`mode_default` are RAM-only session values, mutated constantly (thermal dim in `set_current_ll`, turbo preview, `off_driver_false`, strobe exit). Never write transient values into `EE.*` — the 5s tick will persist them to flash; the memcmp gate filters "no change", not "don't persist". Sync points: `ui_init()` loads `EE.default_ui1/2` → `step_default`/`mode_default`; `off_driver()` copies RAM → EE **only when** `EE.uif.use_memory`.
 - **Option Bytes** (`ob.c/h`): separate from WL_FLASH. Cached in RAM, flushed explicitly via `ob_Flush()`. Contains 10 slots (`ob_GetSlot/SetSlot`) + counters (`ml`, `tc`, `vc`).
 
 ### AUX LEDs / strobes (`aux_leds.c/h`)
