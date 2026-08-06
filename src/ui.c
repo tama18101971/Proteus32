@@ -140,8 +140,8 @@ uint16_t get_step_tc(uint16_t step)
 uint16_t get_min_level(uint16_t step)
 {
     uint16_t ret = step ? ((ob_GetMl() << 1) + BASE_MOON_LEVEL) : 0;
-    EE_PRINTF("[UI] min_level: ml=%u step=%u -> ret=%u\r\n",
-              (unsigned)ob_GetMl(), (unsigned)step, (unsigned)ret);
+//    EE_PRINTF("[UI] min_level: ml=%u step=%u -> ret=%u\r\n",
+//              (unsigned)ob_GetMl(), (unsigned)step, (unsigned)ret);
     return ret;
 }
 

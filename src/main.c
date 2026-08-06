@@ -192,7 +192,7 @@ int main(void)
 
     reset_limiters();
 
-    EE_PRINTF("[LIMITER INIT] setpoint=%u kp_shift=%u ki_shift=%u ki_decim=%u offset=%u\r\n",
+    EE_PRINTF("[LIM SET] setpoint=%u kp_shift=%u ki_shift=%u ki_decim=%u offset=%u\r\n",
               BASE_TEMPERATURE + EE.usr.t_calibr, config.kp_left_shift, config.ki_left_shift,
               config.ki_decimation_shift, config.t_anticipate_offset);
 
