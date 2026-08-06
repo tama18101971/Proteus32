@@ -170,6 +170,11 @@ int main(void)
     button_init(&btn_cfg);
     ui_init();
 
+    /* Вход в меню при подаче питания с зажатой кнопкой. Выбор меню — по
+     * напряжению питания (см. enter_menu_at_boot, как в оригинале Proteus IID). */
+    if (Pressed)
+        enter_menu_at_boot();
+
     //start_aux_beacon();
 
     need_sleep = true;

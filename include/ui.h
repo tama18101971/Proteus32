@@ -153,6 +153,11 @@ extern uint8_t mode_default;
 #define ENG_MENU_IND                5
 #define USR_MENU_IND                6
 
+/* Порог выбора меню при подаче питания с нажатой кнопкой: инженерное меню
+ * доступно только при питании выше 4.5 В (стенд/USB), ниже — меню пользователя.
+ * Как в оригинале Proteus IID (ENG_VOLTAGE). */
+#define ENG_VOLTAGE_MV              4500u
+
 #define RELEASE_TIMEOUT_UI4         RELEASE_TIMEOUT_UI1
 #define VERY_LONG_PRESS_UI4         LONG_HOLD_UI1
 #define COMM_MAX_LEN_UI4            31
@@ -588,6 +593,16 @@ extern uint8_t clicks_count;
 
 /** @brief Runtime UI/menu selector (1=UI1, 2=UI2, 3=UI4, etc.). */
 extern uint8_t ui_table_idx;
+
+/**
+ * @brief Enter engineering/user menu at power-up when the button is held.
+ *
+ * Runs once during boot (main calls it only if the button is already pressed
+ * at startup). Keeps the button pressed for the debounce window, then selects
+ * the menu from the supply voltage: above ENG_VOLTAGE_MV (4.5 V) — engineering
+ * menu, otherwise — user menu. Mirrors original Proteus IID enter_menu().
+ */
+void enter_menu_at_boot(void);
 
 /**
  * @brief Turn on driver and initialise soft-start.

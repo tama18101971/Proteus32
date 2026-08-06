@@ -25,6 +25,7 @@
 #include "limiters.h"
 #include "main.h"
 #include "ob.h"
+#include "led_gpio.h"
 
 #ifndef MIN
 #define MIN(a, b)   (((a) < (b)) ? (a) : (b))
@@ -626,6 +627,85 @@ void menu_exit(void)
     EE.uif.ui_index = ui_save;
     EE.aux.beacon_on = beacon_save;
     ui_table_idx = ui_save;
+#endif
+}
+
+/* Задержка дебаунс-окна входа в меню при подаче питания (как delay_4ms(255)
+ * в оригинале Proteus IID: ~1 с удержания кнопки). */
+#define MENU_ENTRY_DEBOUNCE_MS  1000u
+
+/* Верхняя граница ожидания отпускания кнопки после входа в меню. Пока кнопка
+ * держится, FSM в главном цикле ещё не стартовал — иначе удержание немедленно
+ * превратилось бы в HOLD и мгновенный MENU_EXIT. */
+#define MENU_ENTRY_RELEASE_MS   3000u
+
+/** @brief Мигнуть индикатором cnt раз (для подтверждения входа в меню).
+ * @param cnt     Число вспышек.
+ * @param on_ms   Длительность свечения/паузы, мс.
+ * @param is_grn  true — зелёный ИД, false — красный.
+ */
+static void menu_entry_flash(uint8_t cnt, uint16_t on_ms, bool is_grn)
+{
+    for (uint8_t i = 0; i < cnt; i++)
+    {
+        if (is_grn) on_grn_h();
+        else        on_red_h();
+
+        wait_ms(on_ms);
+
+        if (is_grn) off_grn();
+        else        off_red();
+
+        wait_ms(on_ms);
+    }
+}
+
+/**
+ * @brief Войти в инженерное/пользовательское меню при подаче питания.
+ *
+ * Вызывается из main() только если кнопка уже нажата к моменту старта.
+ * Подтверждает нажатие удержанием в течение дебаунс-окна, затем выбирает меню
+ * по напряжению питания (как в оригинале Proteus IID enter_menu()):
+ *  - Vbat > ENG_VOLTAGE_MV (4.5 В, стенд/USB) -> инженерное меню, 6 красных;
+ *  - иначе (аккумулятор)                          -> меню пользователя, 3 зелёных.
+ * Меню хранится только в runtime ui_table_idx (session-only); выход/перезагрузка
+ * возвращают обычный UI. EE.uif.ui_index / EE.aux.beacon_on перед входом
+ * сохраняются в ui_save/beacon_save, чтобы menu_exit() их восстановил.
+ */
+void enter_menu_at_boot(void)
+{
+#ifdef USE_MENU
+    if (!Pressed)
+        return;
+
+    wait_ms(MENU_ENTRY_DEBOUNCE_MS);
+    if (!Pressed)
+        return;
+
+    ui_save = EE.uif.ui_index;
+    beacon_save = EE.aux.beacon_on;
+    EE.aux.beacon_on = 0;                       /* маяк в меню не мешает */
+
+    if (voltage_ok && (vrefint_adc < MV_GE(ENG_VOLTAGE_MV)))
+    {
+        ui_table_idx = ENG_MENU_IND;            /* > 4.5 В */
+        menu_entry_flash(6, 200, false);        /* 6 красных */
+    }
+    else
+    {
+        ui_table_idx = USR_MENU_IND;            /* аккумулятор */
+        menu_entry_flash(3, 100, true);         /* 3 зелёных */
+    }
+
+    /* Ждём отпускания кнопки, чтобы FSM (button_tick) не принял удержание за
+     * свежее нажатие и не выполнил HOLD -> MENU_EXIT при первом же тике. */
+    uint32_t t = 0;
+    while (Pressed && (t < MENU_ENTRY_RELEASE_MS))
+    {
+        wait_ms(10);
+        t += 10;
+    }
+    (void)t;
 #endif
 }
 
