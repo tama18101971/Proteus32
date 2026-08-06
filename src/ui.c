@@ -696,9 +696,11 @@ static void menu_entry_flash(uint8_t cnt, uint16_t on_ms, bool is_grn)
 /**
  * @brief Войти в инженерное/пользовательское меню при подаче питания.
  *
- * Вызывается из main() только если кнопка уже нажата к моменту старта.
- * Подтверждает нажатие удержанием в течение дебаунс-окна, затем выбирает меню
- * по напряжению питания (как в оригинале Proteus IID enter_menu()):
+ * Вызывается из main() при старте. Сначала на 1 с индицирует меню, доступное
+ * при текущем напряжении питания (красный — инженерное, зелёный — пользовательское),
+ * затем, если кнопка нажата, подтверждает нажатие удержанием в течение
+ * дебаунс-окна и входит в выбранное по напряжению меню (как в оригинале
+ * Proteus IID enter_menu()):
  *  - Vbat > ENG_VOLTAGE_MV (4.5 В, стенд/USB) -> инженерное меню, 6 красных;
  *  - иначе (аккумулятор)                          -> меню пользователя, 3 зелёных.
  * Меню хранится только в runtime ui_table_idx (session-only); выход/перезагрузка
@@ -708,6 +710,23 @@ static void menu_entry_flash(uint8_t cnt, uint16_t on_ms, bool is_grn)
 void enter_menu_at_boot(void)
 {
 #ifdef USE_MENU
+    /* Выбор меню по напряжению (ADC уже готов, см. main). */
+    bool is_eng = voltage_ok && (vrefint_adc < MV_GE(ENG_VOLTAGE_MV));
+
+    /* Индикация доступного меню до опроса кнопки: 1 с. */
+    if (is_eng)
+    {
+        on_red_h();
+        wait_ms(1000);
+        off_red();
+    }
+    else
+    {
+        on_grn_h();
+        wait_ms(1000);
+        off_grn();
+    }
+
     if (!Pressed)
         return;
 
@@ -717,11 +736,12 @@ void enter_menu_at_boot(void)
 
     ui_save = EE.uif.ui_index;
     beacon_save = EE.aux.beacon_on;
+    
     /* Маяк в меню не мешает, но EE не трогаем — сессионный RAM-флаг,
      * сбрасывается при выходе (menu_exit) и при любом питании (reset). */
     menu_beacon_mute = true;
 
-    if (voltage_ok && (vrefint_adc < MV_GE(ENG_VOLTAGE_MV)))
+    if (is_eng)
     {
         ui_table_idx = ENG_MENU_IND;            /* > 4.5 В */
         menu_entry_flash(6, 200, false);        /* 6 красных */
