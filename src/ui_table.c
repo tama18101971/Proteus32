@@ -146,8 +146,6 @@ static const dispatch_t ui2_table[] = {
 static const dispatch_t eng_table[] = {
     /* -- First level: MODE_OFF (navigate sub-menus) -- */
     { MODE_OFF, 1,  0, false, true,  ENTER_ML_MODE,  false, 0 },
-//    { MODE_OFF, 2,  0, false, true,  SAVE_DEF_UI1,   false, 0 },
-//    { MODE_OFF, 3,  0, false, true,  SAVE_DEF_UI2,   false, 0 },
     { MODE_OFF, 10, 0, false, true,  CALIBRATION,    false, 0 },
     { MODE_OFF, 20, 0, false, true,  RESET2DEF,      false, 0 },
     { MODE_OFF, 0,  0, true,  false, MENU_EXIT,      false, 0 },
@@ -190,30 +188,13 @@ static const dispatch_t usr_table[] = {
     { MODE_CTK_H, 0, 0, false, true,  CHTK_CLICKX, false, 0 },
     { MODE_CTK_H, 0, 0, true,  false, MENU_EXIT,   false, 0 },
 
-    /* -- Magic mode -- */
-    { MODE_MAGIC, 1,  0, false, true,  SELECT_SLOT, false, 0 },
-    { MODE_MAGIC, 2,  0, false, true,  SELECT_SLOT, false, 0 },
-    { MODE_MAGIC, 3,  0, false, true,  SELECT_SLOT, false, 0 },
-    { MODE_MAGIC, 4,  0, false, true,  SELECT_SLOT, false, 0 },
-    { MODE_MAGIC, 5,  0, false, true,  SELECT_SLOT, false, 0 },
-    { MODE_MAGIC, 6,  0, false, true,  SELECT_SLOT, false, 0 },
-    { MODE_MAGIC, 7,  0, false, true,  SELECT_SLOT, false, 0 },
-    { MODE_MAGIC, 8,  0, false, true,  SELECT_SLOT, false, 0 },
-    { MODE_MAGIC, 9,  0, false, true,  SELECT_SLOT, false, 0 },
-    { MODE_MAGIC, 10, 0, false, true,  SELECT_SLOT, false, 0 },
+    /* -- Magic mode --
+     * Clicks 1..10 are handled as a compact range in ui_table_lookup(). */
     { MODE_MAGIC, 0,  0, true,  false, EXIT_MAGIC_MODE, false, 0 },
 
-    /* -- Slot programming -- */
-    { MODE_SLOT01, 0, 0, false, true, SLOT_CLICKX, false, 0 },
-    { MODE_SLOT02, 0, 0, false, true, SLOT_CLICKX, false, 0 },
-    { MODE_SLOT03, 0, 0, false, true, SLOT_CLICKX, false, 0 },
-    { MODE_SLOT04, 0, 0, false, true, SLOT_CLICKX, false, 0 },
-    { MODE_SLOT05, 0, 0, false, true, SLOT_CLICKX, false, 0 },
-    { MODE_SLOT06, 0, 0, false, true, SLOT_CLICKX, false, 0 },
-    { MODE_SLOT07, 0, 0, false, true, SLOT_CLICKX, false, 0 },
-    { MODE_SLOT08, 0, 0, false, true, SLOT_CLICKX, false, 0 },
-    { MODE_SLOT09, 0, 0, false, true, SLOT_CLICKX, false, 0 },
-    { MODE_SLOT10, 0, 0, false, true, SLOT_CLICKX, false, 0 },
+    /* Slot-programming modes are handled as a compact mode range in
+     * ui_table_lookup().  HOLD remains intentionally unmatched here: the
+     * caller exits the mode after observing that it did not change. */
 
 };
 
@@ -285,6 +266,27 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout)
         }
 
         return 0;
+    }
+
+    /* These entries were identical except for a contiguous mode/click
+     * value.  Keep their old event contract while avoiding 20 x 5-byte rows. */
+    if (timeout && (evt->type == BTN_EVT_CLICK_SEQ))
+    {
+        if (mode == MODE_MAGIC)
+        {
+            if (evt->clicks >= 1u && evt->clicks <= SLOTS_COUNT)
+            {
+                select_slot();
+                return 1;
+            }
+            return 0;
+        }
+
+        if (mode >= MODE_SLOT01 && mode <= MODE_SLOT10)
+        {
+            slotN_clickX();
+            return 1;
+        }
     }
 
     for (uint8_t i = 0; i < size; i++)
