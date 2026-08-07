@@ -468,6 +468,11 @@ void enter_chtk_mode(void);
 void chtk_clickX(void);
 
 /**
+ * @brief Show an invalid user-menu selection without changing settings.
+ */
+void menu_invalid_selection(void);
+
+/**
  * @brief Enter beacon mode config.
  */
 void enter_bm_mode(void);

@@ -758,10 +758,44 @@ void enter_chtk_mode(void)
 #endif
 }
 
+/**
+ * @brief Check a click count against the range of one menu setting.
+ * @param min_clicks Smallest valid number of clicks.
+ * @param max_clicks Largest valid number of clicks.
+ * @return true when the current click count is valid.
+ *
+ * Invalid input is reported before any assignment is made, so the previous
+ * setting remains intact instead of being truncated by a bit-field.
+ */
+static bool menu_clicks_valid(uint8_t min_clicks, uint8_t max_clicks)
+{
+    if (clicks_count >= min_clicks && clicks_count <= max_clicks)
+        return true;
+
+    clr_indicator(IND_RED);
+    return false;
+}
+
+/**
+ * @brief Show a red indication for an invalid user-menu selection.
+ *
+ * Kept public because the dispatch table owns the magic-slot range check,
+ * while LED control belongs to this UI module.
+ */
+void menu_invalid_selection(void)
+{
+    clr_indicator(IND_RED);
+}
+
 /** @brief Set t_calibr from click count. */
 void chtk_clickX(void)
 {
 #ifdef USE_MENU
+    if (!menu_clicks_valid(1u, 15u))
+    {
+        driver_mode = MODE_OFF;
+        return;
+    }
     EE.usr.t_calibr = clicks_count;
     aux_count(clicks_count);
     driver_mode = MODE_OFF;
@@ -803,6 +837,11 @@ void enter_bm_mode(void)
 void bm_clickX(void)
 {
 #ifdef USE_MENU
+    if (!menu_clicks_valid(1u, 4u))
+    {
+        driver_mode = MODE_OFF;
+        return;
+    }
     EE.aux.beacon_mode = clicks_count - 1;
     aux_count(clicks_count);
     driver_mode = MODE_OFF;
@@ -822,6 +861,11 @@ void enter_bt_mode(void)
 void bt_clickX(void)
 {
 #ifdef USE_MENU
+    if (!menu_clicks_valid(1u, 3u))
+    {
+        driver_mode = MODE_OFF;
+        return;
+    }
     EE.aux.beacon_type = (1 << (clicks_count - 1));
     aux_count(clicks_count);
     driver_mode = MODE_OFF;
@@ -841,6 +885,11 @@ void enter_bl_mode(void)
 void bl_clickX(void)
 {
 #ifdef USE_MENU
+    if (!menu_clicks_valid(1u, 2u))
+    {
+        driver_mode = MODE_OFF;
+        return;
+    }
     EE.aux.bcklight_color = clicks_count - 1;
     aux_count(clicks_count);
     driver_mode = MODE_OFF;
@@ -856,18 +905,19 @@ void enter_uis_mode(void)
 #endif
 }
 
-/** @brief Set UI index from click count (user menu). Clamped to valid 1..3. */
+/** @brief Set UI index from click count (user menu), valid only for 1..3. */
 void uis_clickX(void)
 {
 #ifdef USE_MENU
-    /* Диспетчеру известны только UI1=1 и UI2=2/3 (ui_table_lookup). Другие
-     * значения (4..31) привели бы к «мёртвому» ui_table_idx, а 5/6 — к
-     * автоматическому входу в меню при следующем включении. Клэмпим. */
-    uint8_t sel = clicks_count;
-    if (sel < 1u) sel = 1u;
-    if (sel > 3u) sel = 3u;
-    ui_save = sel;
-    aux_count(sel);
+    /* The dispatch tables support only UI1=1 and UI2 variants=2/3.  Do not
+     * clamp a bad selection: that would silently choose a different UI. */
+    if (!menu_clicks_valid(1u, 3u))
+    {
+        driver_mode = MODE_OFF;
+        return;
+    }
+    ui_save = clicks_count;
+    aux_count(clicks_count);
     driver_mode = MODE_OFF;
 #endif
 }
@@ -915,10 +965,16 @@ void slotN_clickX(void)
 {
 #ifdef USE_MAGIC_SLOTS
     uint8_t slot = driver_mode - MODE_SLOT01;
-    uint8_t op = (clicks_count >= SLOT_OP_FIRST && clicks_count <= SLOT_OP_LAST)
-               ? clicks_count : SLOT_OP_EMPTY;
+    if (!menu_clicks_valid((uint8_t)SLOT_OP_FIRST,
+                           (uint8_t)SLOT_OP_LAST))
+    {
+        /* Keep the old assignment and return to the slot picker. */
+        driver_mode = MODE_MAGIC;
+        return;
+    }
+
     aux_count(clicks_count);
-    ob_SetSlot(slot, op);
+    ob_SetSlot(slot, clicks_count);
     driver_mode = MODE_MAGIC;
 #else
     (void)0;
