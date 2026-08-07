@@ -524,7 +524,7 @@ void reset2def(void)
 }
 
 /** @brief Measure Vbat (в кодах Vrefint) and temperature, save vc/tc to Option Bytes.
- * vc допускается только в окне ±0.19 В от REF_VOLTAGE_MV (VC_CLIP_MAX/MIN);
+ * vc допускается только в окне ±0.29 В от REF_VOLTAGE_MV (VC_CLIP_MAX/MIN);
  * вне окна калибровка отвергается целиком. */
 void calibration(void)
 {

@@ -83,8 +83,8 @@ uint16_t ema_update(uint16_t raw);
  * переводятся в коды времени компиляции и сравниваются без делений.
  *   MV_GE(mv) = floor(1228800/mv):  vbat >= mV  ⟺  adc <= MV_GE(mV)
  *   MV_LT(mv) = floor(1228800/mv)+1: vbat <  mV ⟺  adc >= MV_LT(mV)
- * Калибровочный сдвиг vc (Option Bytes, int8_t) хранит не более ±13 кодов
- * (окно ±0.19 В вокруг REF_VOLTAGE_MV, см. VC_CLIP_*) и входит в
+ * Калибровочный сдвиг vc (Option Bytes, int8_t) хранит не более ±22 кодов
+ * (окно ±0.29 В вокруг REF_VOLTAGE_MV, см. VC_CLIP_*) и входит в
  * сравнение аддитивно: эффективный код e = adc - vc.
  * ------------------------------------------------------------------------- */
 
@@ -109,7 +109,7 @@ extern bool voltage_ok;
  * @brief Пересчёт кода Vrefint в милливольты (точно, без libgcc).
  * @param vrefint_adc Код Vrefint. Сырая выборка находится в диапазоне
  *                    256..512; после калибровочного сдвига vc эффективный
- *                    код для диагностического вывода может быть 243..523.
+ *                    код для диагностического вывода может быть 234..530.
  * @return Напряжение в мВ (floor(1228800/adc)). 0 при adc==0.
  * Используется только для отладочного вывода — горячий путь в кодах.
  */
@@ -143,19 +143,19 @@ uint8_t bat_get_flashes(void);
 /* ============ Thermal calibration constants ============ */
 
 #define REF_TEMP_ADC    542    /**< Expected ADC at 25°C — termo_table[45] */
-#define REF_VOLTAGE_MV  4300   /**< Expected Vbat during calibration (mV) */
+#define REF_VOLTAGE_MV  4200   /**< Expected Vbat during calibration (mV) */
 
-/* Код Vrefint, соответствующий опорному напряжению калибровки (4300 мВ).
- * Калибровка vc = vrefint_adc - REF_VREF_CODE (коды, до +13/−11), сохранённая
+/* Код Vrefint, соответствующий опорному напряжению калибровки (4200 мВ).
+ * Калибровка vc = vrefint_adc - REF_VREF_CODE (коды, до +22/−18), сохранённая
  * в Option Bytes. */
 #define REF_VREF_CODE  (MV_GE(REF_VOLTAGE_MV))
 
-/* Допустимый диапазон коррекции vc ограничен ±0.19 В от REF_VOLTAGE_MV:
- * калибровка проходит только при стендовом напряжении 4.11..4.49 В.
+/* Допустимый диапазон коррекции vc ограничен ±0.29 В от REF_VOLTAGE_MV:
+ * калибровка проходит только при стендовом напряжении 3.91..4.49 В.
  * Границы считаются в кодах Vrefint из mV-окна (направление обратное из-за
- * зависимости vbat = 1228800/adc): VC_CLIP_MAX отвечает коду при 4300−190 мВ,
- * VC_CLIP_MIN — коду при 4300+190 мВ.  Выход за окно отвергает calibration(). */
-#define VC_VOLTAGE_WINDOW_MV  190u  /**< Допустимое отклонение стенда (mV), ±0.19 В */
+ * зависимости vbat = 1228800/adc): VC_CLIP_MAX отвечает коду при 4200−290 мВ,
+ * VC_CLIP_MIN — коду при 4200+290 мВ.  Выход за окно отвергает calibration(). */
+#define VC_VOLTAGE_WINDOW_MV  290u  /**< Допустимое отклонение стенда (mV), ±0.29 В */
 #define VC_CLIP_MAX           (int)(MV_GE(REF_VOLTAGE_MV - VC_VOLTAGE_WINDOW_MV) - REF_VREF_CODE)
 #define VC_CLIP_MIN           (int)(MV_LT(REF_VOLTAGE_MV + VC_VOLTAGE_WINDOW_MV) - REF_VREF_CODE)
 #define TC_CLIP_MAX     31     /**< Max tc value */
