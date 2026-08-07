@@ -27,7 +27,7 @@
 #define BTN_REPEAT_TICKS       4       /**< ~25 ms hold repeat interval */
 #define BTN_RELEASE_TICKS      40      /**< ~250 ms inter-click timeout */
 #define BTN_MAX_CLICKS         7       /**< Max clicks for UI1/UI2 */
-#define BTN_MAX_CLICKS_MENU    31      /**< Max clicks for engineering/user menus */
+#define BTN_MAX_CLICKS_MENU    16      /**< Max clicks for engineering/user menus */
 #define BTN_LONG_CLICK_TICKS   40      /**< ~250 ms threshold for "long" click */
 /** @} */
 
