@@ -154,12 +154,6 @@ int16_t calc_temperature(uint16_t adcValue)
  */
 uint16_t get_exact_temp_adc(void)
 {
-    /* Preserve physical ADC rails for ThermalLimiter_Update() failsafe;
-     * calibration must not turn an open/short sensor into an in-range code. */
-    if ((raw_temperature_adc == ADC_MIN_VAL) ||
-        (raw_temperature_adc >= ADC_MAX_VAL))
-        return raw_temperature_adc;
-
     int16_t v = (int16_t)raw_temperature_adc - (int16_t)ob_GetTc();
     if (v < ADC_MIN_VAL) v = ADC_MIN_VAL;
     if (v > ADC_MAX_VAL) v = ADC_MAX_VAL;
