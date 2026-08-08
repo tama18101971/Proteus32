@@ -66,7 +66,7 @@ AWU-sleep-driven FSM: `handle_aux()` runs **one** transition per AWU wake, then 
 
 | File | Purpose |
 |------|---------|
-| `include/proteus_config.h` | Feature flags (`USE_*`), debug toggles |
+| `include/proteus_config.h` | Feature flags (`USE_*`), `UART_DEBUG`/`PRINT_ADC` debug toggles |
 | `include/app_data.h` | EE overlay + `EE` macro |
 | `include/adc.h` | `REF_TEMP_ADC`, `REF_VOLTAGE_MV`, `ADC_MIN/MAX_VAL` |
 | `src/limiters.c` | `config` struct (thermal tuning) |

@@ -141,7 +141,7 @@ int main(void)
 
     wait_ms(500);
 
-#ifdef WL_FLASH_DEBUG
+#ifdef UART_DEBUG
     uart_init(460800);
 #endif
 
@@ -205,7 +205,7 @@ int main(void)
                 AWU_OFF();
             SystemInit();
             SystemCoreClockUpdate();
-#ifdef WL_FLASH_DEBUG
+#ifdef UART_DEBUG
             uart_init(460800);
 #endif
             is_sleep_mode = false;
@@ -341,7 +341,7 @@ int main(void)
 
         if (tick_2hz())
         {
-#ifdef WL_FLASH_DEBUG
+#ifdef UART_DEBUG
             uint16_t out = (step_user > limiter) ? (step_user - limiter) : 0;
 #endif
             EE_PRINTF("[NORMAL] T=%u F=%d I=%d L=%d P=%u S=%u V=%umV ramp=%u\r\n",

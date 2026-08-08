@@ -31,7 +31,7 @@ void EXTI7_0_IRQHandler(void)
 {
     if (EXTI_GetITStatus(EXTI_Line3) != RESET)
     {
-        #ifdef WL_FLASH_DEBUG
+        #ifdef UART_DEBUG
         while (!(USART1->STATR & USART_STATR_TC)) {}
         #endif
 

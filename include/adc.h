@@ -115,7 +115,7 @@ extern bool voltage_ok;
  */
 /* The implementations are compiled only for diagnostic builds.  Keep the
  * declarations unconditional because this header may be included before
- * proteus_config.h defines WL_FLASH_DEBUG/PRINT_ADC. */
+ * proteus_config.h defines UART_DEBUG/PRINT_ADC. */
 uint16_t vbat_to_mv(uint16_t vrefint_adc);
 
 /**

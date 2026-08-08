@@ -96,7 +96,7 @@ uint16_t ema_update(uint16_t raw)
     ema_avg += diff >> EMA_SHIFT;
     return ema_avg;
 }
-#if defined(WL_FLASH_DEBUG) || defined(PRINT_ADC)
+#if defined(UART_DEBUG) || defined(PRINT_ADC)
 
 /* Таблица ADC-кодов для NCP18XH103F03RB (схема D с Rpar=77.3k) */
 /* Диапазон: -20...+80°C, шаг 1°C, значения возрастают при нагреве. */
@@ -146,7 +146,7 @@ int16_t calc_temperature(uint16_t adcValue)
     return TEMPERATURE_TABLE_START + (int16_t)(i * TEMPERATURE_TABLE_STEP);
 }
 
-#endif /* defined(WL_FLASH_DEBUG) || defined(PRINT_ADC) */
+#endif /* defined(UART_DEBUG) || defined(PRINT_ADC) */
 
 /**
  * @brief Apply tc calibration offset to raw temperature ADC.
@@ -328,7 +328,7 @@ bool adc_read(void)
     voltage_ok = true;
     raw_temperature_adc = new_raw_temperature_adc;
 
-#if defined(WL_FLASH_DEBUG) || defined(PRINT_ADC)
+#if defined(UART_DEBUG) || defined(PRINT_ADC)
     // Расчет температуры по таблице (с коррекцией tc) — только для отладки
     temperature_c = calc_temperature(get_exact_temp_adc());
 #endif
@@ -373,7 +373,7 @@ void adc_stop(void)
     GPIOD->CFGLR &= ~(0xF << 12);  /* PD3: 0b0000 = Analog Input (Hi-Z) */
 }
 
-#if defined(WL_FLASH_DEBUG) || defined(PRINT_ADC)
+#if defined(UART_DEBUG) || defined(PRINT_ADC)
 
 /**
  * @brief Пересчёт кода Vrefint в милливольты (точно, без libgcc).
@@ -425,7 +425,7 @@ uint16_t vbat_to_mv_calibrated(void)
     return vbat_to_mv((uint16_t)effective_code);
 }
 
-#endif /* defined(WL_FLASH_DEBUG) || defined(PRINT_ADC) */
+#endif /* defined(UART_DEBUG) || defined(PRINT_ADC) */
 
 /* ============ Защита по разряду батареи (в кодах Vrefint) ============
  * vbat_mv = floor(1228800/adc); Vrefint растёт при падении напряжения.

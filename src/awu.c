@@ -152,12 +152,12 @@ void AWU_Sleep_Tick(awu_tick_t tick)
  * Устанавливает PDDS=1 для STANDBY, выполняет WFI.
  * Пробуждение происходит по EXTI (кнопка) или AWU-событию.
  * После пробуждения сбрасывает PDDS и SLEEPDEEP.
- * Если WL_FLASH_DEBUG включён — ждёт завершения UART перед сном
+ * Если UART_DEBUG включён — ждёт завершения UART перед сном
  * и переинициализирует UART после пробуждения.
  */
 void AWU_Sleep_Now(void)
 {
-#ifdef WL_FLASH_DEBUG
+#ifdef UART_DEBUG
     while (!(USART1->STATR & USART_STATR_TC))
         ;
 #endif
@@ -196,7 +196,7 @@ void AWU_Sleep_Now(void)
     PFIC->SCTLR &= ~(1 << 2);
     PWR->CTLR &= ~PWR_CTLR_PDDS;
 
-#ifdef WL_FLASH_DEBUG
+#ifdef UART_DEBUG
     uart_init(460800);
 #endif
 
