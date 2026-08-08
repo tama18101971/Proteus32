@@ -362,7 +362,7 @@ void on_turbo_ui1(void)
 /** @brief Force off (no ramp-down, used for mode switch). */
 void off_driver_false(void)
 {
-    EE_PRINTF("[UI] OFF DRV false\r\n");
+//    EE_PRINTF("[UI] OFF DRV false\r\n");
     driver_mode = MODE_OFF;
     mode_default = mode_current;
     mode_current = CMODE_OFF;
