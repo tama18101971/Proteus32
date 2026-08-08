@@ -83,17 +83,17 @@ static const uint16_t modes[MODES_QTY] = {0, 20, 74, 136, 220, 360, 511};
 /** @brief Power-on sequence: reset limiters, enable DAC, init I2C. */
 void ON_POWER(void)
 {
-    EE_PRINTF("[UI] ON PWR.\r\n");
+    //EE_PRINTF("[UI] ON PWR.\r\n");
     reset_limiters();
     dac_pwrpin_on();
     i2c_init(400000);
-    for (volatile uint32_t i = 0; i < 24000; i++);  // ~5 ms DAC wake-up
+    wait_ms(5);  // DAC7571 power-on reset / wake-up
 }
 
 /** @brief Power-off sequence: deinit I2C, disable DAC. */
 void OFF_POWER(void)
 {
-    EE_PRINTF("[UI] OFF PWR.\r\n");
+    //EE_PRINTF("[UI] OFF PWR.\r\n");
     i2c_deinit();
     dac_pwrpin_off();
 }
