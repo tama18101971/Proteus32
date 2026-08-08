@@ -13,18 +13,18 @@
 /** @brief Magic slot operation identifiers. */
 typedef enum {
 	EXIT_MAGIC_MODE = 0U, /**< Exit magic slot mode, return to normal UI */
-	SLOT_OP_EMPTY,       /**< Empty/unconfigured slot */
-	SLOT_BATT_IND,       /**< Battery indicator */
-	SLOT_STROBE,        /**< Tactical strobe */
-	SLOT_BLOCK_BEACON,  /**< Block beacon (block + beacon combo) */
-	SLOT_BLOCK,          /**< Block / locator beacon */
-	SLOT_TACTICAL,       /**< Tactical momentary */
-	SLOT_BACKLIGHT,     /**< Backlight / auxiliary light */
-	SLOT_BEACON,        /**< Beacon flash */
-	SLOT_EAUXMODE,      /**< Extended aux mode */
-	SLOT_IPSMODE,       /**< IPS (internal power supply) mode */
-	SLOT_MEMORY,        /**< Memory recall */
-	SLOT_UI_SELECT,     /**< Quick UI selection (1/2/3 clicks) */
+	SLOT_OP_EMPTY,        /**< Empty/unconfigured slot */
+	SLOT_BATT_IND,        /**< Battery indicator */
+	SLOT_STROBE,          /**< Tactical strobe */
+	SLOT_BLOCK_BEACON,    /**< Block beacon (block + beacon combo) */
+	SLOT_BLOCK,           /**< Block / locator beacon */
+	SLOT_TACTICAL,        /**< Tactical momentary */
+	SLOT_BACKLIGHT,       /**< Backlight / auxiliary light */
+	SLOT_BEACON,          /**< Beacon flash */
+	SLOT_EAUXMODE,        /**< Extended aux mode */
+	SLOT_IPSMODE,         /**< IPS (Red Grin + HBL) mode */
+	SLOT_MEMORY,          /**< Memory recall */
+	SLOT_UI_SELECT,       /**< Quick UI selection (1/2/3 clicks) */
 } FUN_Index_t;
 
 #define SLOT_OP_FIRST  SLOT_OP_EMPTY
