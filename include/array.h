@@ -24,11 +24,11 @@ typedef enum {
 	SLOT_EAUXMODE,      /**< Extended aux mode */
 	SLOT_IPSMODE,       /**< IPS (internal power supply) mode */
 	SLOT_MEMORY,        /**< Memory recall */
-	RESERV11,           /**< Reserved */
+	SLOT_UI_SELECT,     /**< Quick UI selection (1/2/3 clicks) */
 } FUN_Index_t;
 
 #define SLOT_OP_FIRST  SLOT_OP_EMPTY
-#define SLOT_OP_LAST   SLOT_MEMORY
+#define SLOT_OP_LAST   SLOT_UI_SELECT
 
 /*
  * Fixed commands for the ten OFF-state slot gestures.  These are also the

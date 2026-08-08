@@ -379,6 +379,14 @@ void slot_ipsmode(void);
 void slot_memory(void);
 
 /**
+ * @brief Enter quick UI selection from a magic slot.
+ *
+ * The following 1/2/3-click sequence selects UI1/UI2/UI3 directly,
+ * without entering the user settings menu.
+ */
+void slot_ui_select(void);
+
+/**
  * @brief Cycle to next strobe pattern.
  */
 void up_strobe(void);

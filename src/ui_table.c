@@ -344,8 +344,7 @@ void (*main_op[])(void) = {
     /*10*/ slot_ipsmode,
     /*11*/ slot_memory,
 
-    /*12 reserved */
-    0,
+    /*12*/ slot_ui_select,
 
     /*13*/ up_strobe,
     /*14*/ back_strobe,

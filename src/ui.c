@@ -67,6 +67,8 @@ uint8_t strobe_index = 0;
 
 static uint8_t bt_r_time = 0;    // direction timeout counter
 static bool ui1_was_pressed;
+static bool ui_select_from_slot;
+static bool ui_select_hold_guard;
 
 /*******************************************************************************
  *  UI2 discrete brightness table -- scaled to Proteus003 9-bit range (0..511)
@@ -658,6 +660,7 @@ static void menu_wait_release(void)
 void menu_exit(void)
 {
 #ifdef USE_MENU
+    ui_select_from_slot = false;
     EE.uif.ui_index = ui_save;
     EE.aux.beacon_on = beacon_save;
     ui_table_idx = ui_save;
@@ -914,10 +917,25 @@ void uis_clickX(void)
     if (!menu_clicks_valid(1u, 3u))
     {
         driver_mode = MODE_OFF;
+        if (ui_select_from_slot)
+        {
+            ui_table_idx = ui_save;
+            ui_select_from_slot = false;
+        }
         return;
     }
     ui_save = clicks_count;
     aux_count(clicks_count);
+
+    if (ui_select_from_slot)
+    {
+        /* A slot selection is not inside the user menu, so apply the choice
+         * immediately instead of waiting for menu_exit().  The normal
+         * 5-second persistence path will save the EE shadow diff. */
+        EE.uif.ui_index = clicks_count;
+        ui_table_idx = clicks_count;
+        ui_select_from_slot = false;
+    }
     driver_mode = MODE_OFF;
 #endif
 }
@@ -976,6 +994,28 @@ void slotN_clickX(void)
     aux_count(clicks_count);
     ob_SetSlot(slot, clicks_count);
     driver_mode = MODE_MAGIC;
+#else
+    (void)0;
+#endif
+}
+
+/**
+ * @brief Enter quick UI selection from a magic slot.
+ *
+ * The slot action reuses MODE_UIS/uis_clickX, but switches the dispatcher to
+ * the user-settings table for the duration of the 1/2/3-click selection.
+ */
+void slot_ui_select(void)
+{
+#ifdef USE_MAGIC_SLOTS
+    ui_save = ui_table_idx;
+    ui_select_from_slot = true;
+    /* A slot may be assigned to a HOLD gesture.  Suppress the first HOLD
+     * repeat in MODE_UIS until that original physical hold is released. */
+    ui_select_hold_guard = Pressed;
+    ui_table_idx = USR_MENU_IND;
+    driver_mode = MODE_UIS;
+    aux_count(ui_save);
 #else
     (void)0;
 #endif
@@ -1127,6 +1167,8 @@ void ui_init(void)
     need_save = 0;
     direction = DIR_UP;
     ui1_was_pressed = false;
+    ui_select_from_slot = false;
+    ui_select_hold_guard = false;
     mode_current = CMODE_OFF;
     ui_table_idx = EE.uif.ui_index;
     step_default = EE.default_ui1;   // восстановить сохранённую яркость
@@ -1142,6 +1184,9 @@ void ui_init(void)
  */
 void ui_process(void)
 {
+    if (ui_select_from_slot && ui_select_hold_guard && !Pressed)
+        ui_select_hold_guard = false;
+
     uint8_t ui_idx = ui_table_idx;
 
     /* Tactical mode bypasses FSM events entirely */
@@ -1247,6 +1292,9 @@ void ui_process(void)
         {
             tick_5s_reset();
             uint8_t prev_mode = driver_mode;
+
+            if (ui_select_from_slot && ui_select_hold_guard)
+                break;
 
             ui_table_lookup(driver_mode, evt, false);
 
