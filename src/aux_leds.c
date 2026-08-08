@@ -303,10 +303,6 @@ static uint32_t set_aux_count(uint8_t count) {
  * Таймер AWU настраивается в handle_aux_cmd при обработке PER_FIRST.
  */
 static void start_aux_cmd(uint32_t command, bool enable, IDM_Type_t idm_mode, awu_tick_t delay) {
-	#ifdef AUX_DEBUG
-	debug_cmd(command);
-	#endif
-
 	off_aux_cmd(false);
 
 	aux_cmd.aux_cmd = command;
@@ -394,8 +390,6 @@ static void handle_aux_cmd(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits) {
 
 	LED_Bits_t device = (LED_Bits_t)aux->aux.device;
 
-	//EE_PRINTF("[AUX] cmd dev=%d per=%d cnt=%d\r\n", device, ubits->period, ubits->work_count);
-
 	/* Инициализация: загружаем количество повторов */
 	if (ubits->period == PER_INIT) {
 		ubits->work_count = aux->aux.count;
@@ -408,7 +402,6 @@ static void handle_aux_cmd(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits) {
 			SetBrightness(device, aux->aux.brightness0);
 			ubits->current_brightness = aux->aux.brightness0;
 		}
-		//EE_PRINTF("[AUX] P0 psc=%d win=%d br=%d\r\n", aux->aux.psc0, aux->aux.win0, aux->aux.brightness0);
 		AWU_set_raw(aux->aux.psc0, aux->aux.win0);
 		ubits->period = PER_SECOND;
 	}
@@ -418,7 +411,6 @@ static void handle_aux_cmd(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits) {
 			SetBrightness(device, aux->aux.brightness1);
 			ubits->current_brightness = aux->aux.brightness1;
 		}
-		//EE_PRINTF("[AUX] P1 psc=%d win=%d br=%d\r\n", aux->aux.psc1, aux->aux.win1, aux->aux.brightness1);
 		AWU_set_raw(aux->aux.psc1, aux->aux.win1);
 		ubits->period = PER_END;
 	}
@@ -635,7 +627,6 @@ void slot_batt_ind(void) {
 		return;
 	stop_aux_if(IDM_BEACON, false);
 	uint8_t flashes = bat_get_flashes();
-	//EE_PRINTF("[AUX] slot_batt_ind flashes=%u\r\n", (unsigned)flashes);
 	uint32_t cmd = set_aux_count(flashes);
 	/* The HBL battery indication can be requested immediately after the
 	 * flashlight was switched off, before STANDBY restores the DAC path. */
@@ -649,7 +640,6 @@ void slot_batt_ind(void) {
  * @brief Включение (одна зелёная вспышка)
  */
 void aux_on(void) {
-	//EE_PRINTF("[AUX] info green\r\n");
 	start_aux_cmd(INFO_GRN, true, IDM_OTHER, AWU_120MS);
 }
 
@@ -657,7 +647,6 @@ void aux_on(void) {
  * @brief Выключение (одна красная вспышка)
  */
 void aux_off(void) {
-	//EE_PRINTF("[AUX] info red\r\n");
 	start_aux_cmd(INFO_RED, true, IDM_OTHER, AWU_120MS);
 }
 
@@ -666,8 +655,6 @@ void aux_off(void) {
  * @param count — количество (0 = одна красная, иначе count зелёных)
  */
 void aux_count(uint8_t count) {
-	//EE_PRINTF("[AUX] count=%u\r\n", (unsigned)count);
-
 	uint32_t cmd;
 	uint8_t flashes;
 
@@ -686,29 +673,3 @@ void aux_count(uint8_t count) {
 
 	start_aux_cmd(cmd, true, IDM_OTHER, AWU_120MS);
 }
-
-/**********************************************************************************************/
-#ifdef AUX_DEBUG
-/**
- * @brief Отладочный вывод полей команды через UART
- * @param cmd — 32-битная команда
- *
- * Разбивает команду на поля и выводит их значения.
- * Время в миллисекундах = (psc_значение × win) / 128.
- */
-void debug_cmd(uint32_t cmd) {
-    union AUX_Cmd_u u;
-    u.aux_cmd = cmd;
-
-    EE_PRINTF("[AUX] CMD: 0x%08lX\n", cmd);
-    EE_PRINTF("  device    = %d\n", u.aux.device);
-    EE_PRINTF("  cycle     = %d\n", u.aux.cycle);
-    EE_PRINTF("  count     = %d\n", u.aux.count);
-    EE_PRINTF("  psc0/win0 = %d/%d (%ld ms)\n", u.aux.psc0, u.aux.win0,
-              (long)AWU_PERIOD_MS(u.aux.psc0, u.aux.win0));
-    EE_PRINTF("  psc1/win1 = %d/%d (%ld ms)\n", u.aux.psc1, u.aux.win1,
-              (long)AWU_PERIOD_MS(u.aux.psc1, u.aux.win1));
-    EE_PRINTF("  bright0   = %d\n", u.aux.brightness0);
-    EE_PRINTF("  bright1   = %d\n", u.aux.brightness1);
-}
-#endif /* AUX_DEBUG */
