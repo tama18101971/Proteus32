@@ -74,7 +74,7 @@ AWU-sleep-driven FSM: `handle_aux()` runs **one** transition per AWU wake, then 
 ## Style
 
 - C99, `stdint.h` fixed-width — never bare int/short/long. snake_case locals/fields, PascalCase API (`ThermalLimiter_*`).
-- `#ifndef` guards, timeouts on all `while` loops. Comments explain **why**, not what. Russian in `main.c`, English in thermal limiter.
+- `#ifndef` guards, timeouts on all `while` loops.
 - **Bare metal > SDK**: direct register writes (`port->CFGLR`, `USART1->DATAR`). `mini_gpio.h` OK for new GPIO; don't rewrite existing bare-metal inline funcs.
 - **Doxygen headers** (`/** @brief ... */`) above every function — update when signature/behavior changes.
 
