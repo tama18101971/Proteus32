@@ -327,10 +327,10 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout)
 }
 
 /*******************************************************************************
- *  main_op[] -- action function table
+ *  main_op[] -- action function table (const → flash, не занимает RAM)
  ******************************************************************************/
 
-void (*main_op[])(void) = {
+void (* const main_op[])(void) = {
     /*00*/ exit_magic_mode,
     /*01*/ slot_empty,
     /*02*/ slot_batt_ind,

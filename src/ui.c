@@ -24,7 +24,6 @@
 #include "timers.h"
 #include "limiters.h"
 #include "main.h"
-#include "ob.h"
 #include "led_gpio.h"
 
 #ifndef MIN
@@ -41,12 +40,10 @@
 uint8_t mode_default = DEFAULT_MODE;
 uint8_t mode_current = CMODE_OFF;
 
-uint8_t VLPT = LONG_HOLD_UI1;
 DRIVER_Mode_t driver_mode = MODE_OFF;
 bool stop_bit = false;
 
 uint16_t step_tc;
-uint16_t step_tactic;
 uint16_t step_user;
 uint16_t max_step = MAX_STEP;
 uint16_t step_default = DEFAULT_STEP;
@@ -68,7 +65,8 @@ uint8_t strobe_index = 0;
 static uint8_t bt_r_time = 0;    // direction timeout counter
 static bool ui1_was_pressed;
 static bool ui_select_from_slot;
-static bool ui_select_hold_guard;
+static bool hold_guard;          // suppress HOLD repeats until the button is released
+static uint8_t ui_cfg_idx = 0xFF; // last ui_table_idx the button timing was applied for
 
 /*******************************************************************************
  *  UI2 discrete brightness table -- scaled to Proteus003 9-bit range (0..511)
@@ -180,9 +178,6 @@ void out_set_stc(uint16_t step)
  */
 uint8_t on_driver(void)
 {
-    if (EE.uif.ui_index)
-        step_tactic = 0;
-
     if (driver_mode < MODE_BLOCK_C)
     {
         return 0;
@@ -234,7 +229,6 @@ void off_driver(uint8_t reset_step, SoftStartSpeed_t ss_speed)
             else
                 mode_default = ps.pr_step;
         }
-        step_tactic = MAX_STEP;
     }
 
     stop_aux_if(IDM_VWARNING, false);
@@ -526,8 +520,8 @@ void reset2def(void)
 }
 
 /** @brief Measure Vbat (в кодах Vrefint) and temperature, save vc/tc to Option Bytes.
- * vc допускается только в окне ±0.29 В от REF_VOLTAGE_MV (VC_CLIP_MAX/MIN);
- * вне окна калибровка отвергается целиком. */
+ * vc/tc допускаются только в окне ±0.29 В (VC_CLIP_MAX/MIN); вне окна
+ * калибровка отвергается целиком и прежние значения OB сохраняются. */
 void calibration(void)
 {
 #ifdef USE_MENU
@@ -545,18 +539,16 @@ void calibration(void)
 
     uint8_t ok = 1;
     if (vc_delta > VC_CLIP_MAX || vc_delta < VC_CLIP_MIN)
-    {
         ok = 0;
-        vc_delta = 0;
-    }
     if (tc_delta > TC_CLIP_MAX || tc_delta < TC_CLIP_MIN)
-    {
         ok = 0;
-        tc_delta = 0;
-    }
 
-    ob_SetVc((int8_t)vc_delta);
-    ob_SetTc((int8_t)tc_delta);
+    /* Отказ не трогает OB: предыдущая калибровка остаётся в силе. */
+    if (ok)
+    {
+        ob_SetVc((int8_t)vc_delta);
+        ob_SetTc((int8_t)tc_delta);
+    }
     clr_indicator((ind_clr_t)ok);
 #endif
 }
@@ -590,11 +582,15 @@ static void save_def_blink(void)
         clr_indicator(IND_GRN);
 }
 
-/** @brief Save current UI1 step as power-on default. */
+/** @brief Save current UI1 step as power-on default.
+ *
+ * Сохраняется запрошенный пользователем шаг (step_user), а не
+ * термоограниченный step_tc — иначе при активном лимитере дефолтом
+ * стала бы заниженная яркость (симметрично save_def_ui2). */
 void save_def_ui1(void)
 {
     save_def_blink();
-    EE.default_ui1 = step_tc;
+    EE.default_ui1 = step_user;
 }
 
 /** @brief Save current UI2 mode as power-on default. */
@@ -656,15 +652,34 @@ static void menu_wait_release(void)
     (void)t;
 }
 
-/** @brief Exit engineering menu and restore saved UI index/beacon state. */
+/** @brief Clamp a UI index from EE to a valid dispatch table (1..3).
+ *
+ * A corrupted/uninitialised EE byte must never select the tactical bypass
+ * (0) or a value ui_table_lookup rejects (dead UI, reboot only).
+ */
+static uint8_t ui_index_clamp(uint8_t idx)
+{
+    if (idx < 1u || idx > 3u)
+        return 1u;
+    return idx;
+}
+
+/** @brief Exit engineering menu and restore saved UI index/beacon state.
+ *
+ * Обязательно возвращает driver_mode в MODE_OFF: выход удержанием из
+ * подменю (MODE_MOON_LEVEL/BM/BT/BL/UIS/CTK_H) иначе оставил бы режим,
+ * для которого в таблицах UI1/UI2 нет записей (мёртвый UI до сброса). */
 void menu_exit(void)
 {
 #ifdef USE_MENU
     ui_select_from_slot = false;
+    ui_save = ui_index_clamp(ui_save);
     EE.uif.ui_index = ui_save;
     EE.aux.beacon_on = beacon_save;
     ui_table_idx = ui_save;
     menu_beacon_mute = false;
+    driver_mode = MODE_OFF;
+    hold_guard = Pressed;
 
     /* Подтверждение выхода: 1 зелёная вспышка 500 мс, затем ожидание
      * отпускания кнопки, чтобы HOLD-повторы не попали в новый UI. */
@@ -747,8 +762,11 @@ void enter_menu_at_boot(void)
     }
 
     /* Ждём отпускания кнопки, чтобы FSM (button_tick) не принял удержание за
-     * свежее нажатие и не выполнил HOLD -> MENU_EXIT при первом же тике. */
+     * свежее нажатие и не выполнил HOLD -> MENU_EXIT при первом же тике.
+     * Если кнопка всё ещё зажата (таймаут ожидания), hold_guard подавит
+     * первый HOLD-реплей catch-up последовательности. */
     menu_wait_release();
+    hold_guard = Pressed;
 #endif
 }
 
@@ -1012,7 +1030,7 @@ void slot_ui_select(void)
     ui_select_from_slot = true;
     /* A slot may be assigned to a HOLD gesture.  Suppress the first HOLD
      * repeat in MODE_UIS until that original physical hold is released. */
-    ui_select_hold_guard = Pressed;
+    hold_guard = Pressed;
     ui_table_idx = USR_MENU_IND;
     driver_mode = MODE_UIS;
     aux_count(ui_save);
@@ -1145,15 +1163,22 @@ void on_turbo_ui2(void)
  *  Tactical mode
  ******************************************************************************/
 
-/** @brief Handle tactical momentary mode (press = on, release = off). */
+/** @brief Handle tactical momentary mode (press = on, release = off).
+ *
+ * Грань-триггерный режим: DAC/I2C пишутся только при смене состояния
+ * кнопки, а не каждый 6 мс тик (ранее set_current/OFF_POWER вызывались
+ * непрерывно, в т.ч. по выключенному питанию драйвера). */
 static void handle_tactical(void)
 {
     if (Pressed)
     {
-        on_driver();
-        set_current(step_tactic ? step_tactic : step_default, SS_NO);
+        if (driver_mode != MODE_ON)
+        {
+            on_driver();
+            set_current(step_default, SS_NO);
+        }
     }
-    else
+    else if (driver_mode != MODE_OFF)
     {
         off_driver(false, SS_NO);
     }
@@ -1168,9 +1193,9 @@ void ui_init(void)
     direction = DIR_UP;
     ui1_was_pressed = false;
     ui_select_from_slot = false;
-    ui_select_hold_guard = false;
+    hold_guard = false;
     mode_current = CMODE_OFF;
-    ui_table_idx = EE.uif.ui_index;
+    ui_table_idx = ui_index_clamp(EE.uif.ui_index);
     step_default = EE.default_ui1;   // восстановить сохранённую яркость
     mode_default = EE.default_ui2;   // восстановить сохранённый режим
 }
@@ -1184,8 +1209,8 @@ void ui_init(void)
  */
 void ui_process(void)
 {
-    if (ui_select_from_slot && ui_select_hold_guard && !Pressed)
-        ui_select_hold_guard = false;
+    if (hold_guard && !Pressed)
+        hold_guard = false;
 
     uint8_t ui_idx = ui_table_idx;
 
@@ -1196,33 +1221,39 @@ void ui_process(void)
         return;
     }
 
-    /* Long-click and HOLD timing per UI.  UI2 repeats a mode change only
+    /* Long-click and HOLD timing per UI.  Применяются один раз при смене
+     * ui_table_idx, а не каждый тик.  UI2 repeats a mode change only
      * after the previous fast soft-start has had time to finish. */
-    if (ui_idx == 1)
+    if (ui_idx != ui_cfg_idx)
     {
-        button_set_long_click_ticks(BTN_LONG_CLICK_TICKS);
-        button_set_hold_ticks(BTN_HOLD_TICKS);
-    }
-    else if (ui_idx == 2)
-    {
-        button_set_long_click_ticks(LONG_PRESS_TIME_UI2);
-        button_set_hold_ticks(VERY_LONG_PRESS_UI2);
-        button_set_repeat_ticks(VERY_LONG_PRESS_UI2);
-    }
-    else if (ui_idx == 3)
-    {
-        button_set_long_click_ticks(VERY_LONG_PRESS_UI2);
-        button_set_hold_ticks(VERY_LONG_PRESS_UI2);
-        button_set_repeat_ticks(VERY_LONG_PRESS_UI2);
-    }
-    else
-        button_set_long_click_ticks(VERY_LONG_PRESS_UI2);
+        ui_cfg_idx = ui_idx;
 
-    /* Max clicks per UI */
-    if (ui_idx == 5 || ui_idx == 6)
-        button_set_max_clicks(BTN_MAX_CLICKS_MENU);
-    else
-        button_set_max_clicks(BTN_MAX_CLICKS);
+        if (ui_idx == 1)
+        {
+            button_set_long_click_ticks(BTN_LONG_CLICK_TICKS);
+            button_set_hold_ticks(BTN_HOLD_TICKS);
+        }
+        else if (ui_idx == 2)
+        {
+            button_set_long_click_ticks(LONG_PRESS_TIME_UI2);
+            button_set_hold_ticks(VERY_LONG_PRESS_UI2);
+            button_set_repeat_ticks(VERY_LONG_PRESS_UI2);
+        }
+        else if (ui_idx == 3)
+        {
+            button_set_long_click_ticks(VERY_LONG_PRESS_UI2);
+            button_set_hold_ticks(VERY_LONG_PRESS_UI2);
+            button_set_repeat_ticks(VERY_LONG_PRESS_UI2);
+        }
+        else
+            button_set_long_click_ticks(VERY_LONG_PRESS_UI2);
+
+        /* Max clicks per UI */
+        if (ui_idx == 5 || ui_idx == 6)
+            button_set_max_clicks(BTN_MAX_CLICKS_MENU);
+        else
+            button_set_max_clicks(BTN_MAX_CLICKS);
+    }
 
     /* The AVR scanner flipped direction on every physical release, including
      * a release after HOLD.  BTN_EVT_RELEASED deliberately excludes held
@@ -1293,7 +1324,9 @@ void ui_process(void)
             tick_5s_reset();
             uint8_t prev_mode = driver_mode;
 
-            if (ui_select_from_slot && ui_select_hold_guard)
+            /* Удержание, которым был вызван slot/меню (или вход в меню при
+             * старте), не должно попадать в новый UI как HOLD-repeat. */
+            if (hold_guard)
                 break;
 
             ui_table_lookup(driver_mode, evt, false);

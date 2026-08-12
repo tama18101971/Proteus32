@@ -143,12 +143,9 @@ extern uint8_t mode_default;
  *  UI timing constants (recalculated for 160 Hz)
  ******************************************************************************/
 
-#define RELEASE_TIMEOUT_UI1         40
-#define LONG_HOLD_UI1               100
 #define LONG_HOLD_RAMP_PAUSE_UI1    80
 #define FASTEST_RAMP_REPEAT_UI1     2
 #define DIRECTION_TIMEOUT_UI1       80
-#define COMM_MAX_LEN_UI1            7
 
 #define ENG_MENU_IND                5
 #define USR_MENU_IND                6
@@ -158,18 +155,11 @@ extern uint8_t mode_default;
  * Как в оригинале Proteus IID (ENG_VOLTAGE). */
 #define ENG_VOLTAGE_MV              4500u
 
-#define RELEASE_TIMEOUT_UI4         RELEASE_TIMEOUT_UI1
-#define VERY_LONG_PRESS_UI4         LONG_HOLD_UI1
-#define COMM_MAX_LEN_UI4            31
-
-#define RELEASE_TIMEOUT_UI2         RELEASE_TIMEOUT_UI1
 #define LONG_PRESS_TIME_UI2         40
 #define VERY_LONG_PRESS_UI2         93
-#define COMM_MAX_LEN_UI2            COMM_MAX_LEN_UI1
 
 #define MODES_QTY                   7
 #define SLEEP_DELAY                 108     // kept for compatibility; real sleep via tick_5s
-#define SLEEP_DELAY_BAT             2500
 
 /*******************************************************************************
  *  Ramp direction
@@ -406,34 +396,9 @@ void off_strobe(void);
  */
 void unblock_drv(void);
 
-/**
- * @brief Duplicate of off_driver_false for dispatch table.
- */
-void off_driver_false(void);
-
 /*******************************************************************************
  *  UI1 / menu action functions
  ******************************************************************************/
-
-/**
- * @brief Toggle between UI1/UI2 or enter config (duplicate for dispatch).
- */
-void on_xmode_ui1(void);
-
-/**
- * @brief Start ramp-up (duplicate for dispatch).
- */
-void on_rumpup_ui1(void);
-
-/**
- * @brief Start ramp-down (duplicate for dispatch).
- */
-void on_rumpdown_ui1(void);
-
-/**
- * @brief Enter turbo mode (duplicate for dispatch).
- */
-void on_turbo_ui1(void);
 
 /**
  * @brief Run voltage/temperature calibration (engineering menu).
@@ -583,17 +548,8 @@ void reset2def(void);
  *  Shared state variables
  ******************************************************************************/
 
-/** @brief Very long press timeout (ticks). */
-extern uint8_t VLPT;
-
 /** @brief Current ramp direction. */
 extern RUMP_Dir_t direction;
-
-/** @brief Tactical mode step storage. */
-extern uint16_t step_tactic;
-
-/** @brief EEPROM save pending flag. */
-extern uint8_t need_save;
 
 /** @brief Stop flag for auto-repeat. */
 extern bool stop_bit;

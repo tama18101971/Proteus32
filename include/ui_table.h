@@ -130,6 +130,6 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout);
  *  Main action function table
  ******************************************************************************/
 
-extern void (*main_op[])(void);
+extern void (* const main_op[])(void);
 
 #endif /* UI_TABLE_H_ */

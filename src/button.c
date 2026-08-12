@@ -174,12 +174,13 @@ void button_tick(void)
             {
                 stop_bit = false;
                 deb_cnt = 0;
-                emit_event(BTN_EVT_PRESSED);
                 state = ST_DEBOUNCE;
             }
             break;
 
-        /* -- ST_DEBOUNCE: filter contact bounce -- */
+        /* -- ST_DEBOUNCE: filter contact bounce.  PRESSED is emitted only
+         * after a clean debounce, so a bounce glitch cannot run the PRESSED
+         * handlers and then vanish without a matching release. -- */
         case ST_DEBOUNCE:
             if (falling)
             {
@@ -193,6 +194,7 @@ void button_tick(void)
             {
                 d_time = 0;
                 state = ST_PRESSED;
+                emit_event(BTN_EVT_PRESSED);
             }
             break;
 
@@ -204,7 +206,10 @@ void button_tick(void)
                 clicks++;
                 if (cfg.long_click_ticks && d_time >= cfg.long_click_ticks)
                 {
-                    long_mask |= (1 << (clicks - 1));
+                    /* long_mask is 8 bits: clicks 9..16 (menus) are not
+                     * tracked instead of silently truncating the shift. */
+                    if (clicks <= 8u)
+                        long_mask |= (uint8_t)(1u << (clicks - 1u));
                 }
                 if (!hold_active)
                 {
@@ -288,7 +293,10 @@ void button_tick(void)
             u_time++;
             if (u_time >= cfg.release_ticks || clicks >= cfg.max_clicks)
             {
-                emit_event(BTN_EVT_CLICK_SEQ);
+                /* A release after HOLD resets clicks to 0; emitting an empty
+                 * CLICK_SEQ would dispatch clicks=0 into wildcard entries. */
+                if (clicks)
+                    emit_event(BTN_EVT_CLICK_SEQ);
                 clicks = 0;
                 long_mask = 0;
                 hold_active = false;
