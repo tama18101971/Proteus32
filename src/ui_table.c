@@ -164,13 +164,13 @@ static const dispatch_t eng_table[] = {
 
 static const dispatch_t usr_table[] = {
     /* -- First level: MODE_OFF -- */
-    { MODE_OFF, 1, 0, false, true,  ENTER_BM_MODE,   false, 0 },
-    { MODE_OFF, 2, 0, false, true,  ENTER_BT_MODE,   false, 0 },
-    { MODE_OFF, 3, 0, false, true,  ENTER_BL_MODE,   false, 0 },
-    { MODE_OFF, 4, 0, false, true,  ENTER_UIS_MODE,  false, 0 },
-    { MODE_OFF, 5, 0, false, true,  ENTER_MAGIC_MODE, false, 0 },
-    { MODE_OFF, 6, 0, false, true,  ENTER_CHTK_MODE, false, 0 },
-    { MODE_OFF, 0, 0, true,  false, MENU_EXIT,       false, 0 },
+    { MODE_OFF, 1, 0, false, true,  ENTER_BM_MODE,   false, 0 },  // 1 click, release+timeout → enter beacon mode config (MODE_BM): select beacon operating pattern
+    { MODE_OFF, 2, 0, false, true,  ENTER_BT_MODE,   false, 0 },  // 2 clicks, release+timeout → enter beacon type config (MODE_BT): select beacon type bitmask
+    { MODE_OFF, 3, 0, false, true,  ENTER_BL_MODE,   false, 0 },  // 3 clicks, release+timeout → enter backlight color selection (MODE_BL)
+    { MODE_OFF, 4, 0, false, true,  ENTER_UIS_MODE,  false, 0 },  // 4 clicks, release+timeout → enter UI interface selection (MODE_UIS): pick UI1 or UI2
+    { MODE_OFF, 5, 0, false, true,  ENTER_MAGIC_MODE, false, 0 },  // 5 clicks, release+timeout → enter magic slot programming mode (MODE_MAGIC): select/programming slot 1-10
+    { MODE_OFF, 6, 0, false, true,  ENTER_CHTK_MODE, false, 0 },  // 6 clicks, release+timeout → enter temperature calibration mode (MODE_CTK_H): set t_calibr offset
+    { MODE_OFF, 0, 0, true,  false, MENU_EXIT,       false, 0 },  // hold → exit user menu, restore saved UI index and beacon state, return to MODE_OFF
 
     /* -- Sub-modes -- */
     { MODE_BM,  0, 0, false, true,  BM_CLICKX,  false, 0 },
