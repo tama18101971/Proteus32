@@ -332,8 +332,7 @@ int main(void)
              * write a regular brightness value during an input window. */
             if (!is_aux_mode(IDM_STROBE) &&
                 (thermal_fast_required() ||
-                 (driver_mode == MODE_ON && aux_is_active())) &&
-                Released && !ss_is_active())
+                 (driver_mode == MODE_ON && aux_is_active())))
             {
                 (void)sample_and_scan();
             }

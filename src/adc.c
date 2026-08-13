@@ -583,7 +583,14 @@ void scan_voltage(void)
 {
     static uint8_t voff_count = 0;
     static uint8_t voff_count_off = 0;
-    uint8_t ui_index = EE.uif.ui_index;
+    /* Battery protection must follow the runtime-active UI dispatch table,
+     * not the persisted EE setting: during menus/slots ui_table_idx is what
+     * actually drives the UI, and a mismatch here would branch the wrong
+     * protection path.  0 (tactical) and 5/6 (menus) collapse to UI1-like
+     * behavior via the clamp below. */
+    uint8_t ui_index = ui_table_idx;
+    if (ui_index < 1u || ui_index > 3u)
+        ui_index = 1u;
     int16_t vc = ob_GetVc();
     uint16_t vcode = voltage_ok ? vrefint_adc : VREF_SENTINEL;
 

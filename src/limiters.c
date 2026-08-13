@@ -31,6 +31,9 @@ const ThermalLimiterConfig_t config = {
 /** @brief Current limiter amount subtracted from the user brightness. */
 uint16_t limiter = 0;
 
+/** @brief Last applied limiter amount (gate: re-target only on change). */
+static uint16_t last_limiter = 0;
+
 /** @brief Latched temperature acquisition fault until a valid sample arrives. */
 static bool thermal_fault;
 
@@ -40,8 +43,13 @@ static bool thermal_fault;
  * The requested brightness remains in step_user.  Only the physical step is
  * reduced, so a later fresh temperature sample can recover brightness without
  * losing the user's requested level.
+ *
+ * @param immediate  true for a genuine sensor fault (drive off instantly);
+ *                   false for a normal limiting correction, which re-targets
+ *                   the existing soft-start smoothly so an active ramp does
+ *                   not visibly flicker.
  */
-static void apply_limiter_output(void)
+static void apply_limiter_output(bool immediate)
 {
     uint16_t limited_step = (step_user > limiter) ?
                             (uint16_t)(step_user - limiter) : 0u;
@@ -49,7 +57,7 @@ static void apply_limiter_output(void)
     /* Thermal output is authoritative.  A pending user soft-start must not
      * write its old, unrestricted target after this update. */
     ss_cancel();
-    set_current_ll(limited_step, SS_NO);
+    set_current_ll(limited_step, immediate ? SS_NO : SS_SLOW);
 }
 
 /**
@@ -73,17 +81,28 @@ static void check_turbo_thermal_limit(uint16_t limited_step)
 
 /**
  * @brief Run the thermal controller for one temperature sample.
- * @param exact_adc Corrected temperature ADC value, or zero for failsafe.
+ * @param exact_adc Corrected temperature ADC value (THERMAL_ADC_MIN when
+ *                  the sensor acquisition failed — a genuine fault).
+ * @param fault     true for a sensor fault (apply the shutdown instantly,
+ *                  SS_NO); false for normal limiting (re-target smoothly,
+ *                  SS_SLOW, so an active ramp does not flicker).
  */
-static void update_limiters(uint16_t exact_adc)
+static void update_limiters(uint16_t exact_adc, bool fault)
 {
     uint16_t t_set = BASE_TEMPERATURE + (uint16_t)EE.usr.t_calibr;
     limiter = ThermalLimiter_Update(&config, &state, exact_adc, t_set, step_user);
     uint16_t limited_step = (step_user > limiter) ?
                             (uint16_t)(step_user - limiter) : 0u;
 
-    if (step_tc != limited_step)
-        apply_limiter_output();
+    /* Re-target only when the limiter actually changed.  Triggering on
+     * `step_tc != limited_step` instead would fight a user ramp every tick
+     * (step_tc is always trailing the target while soft-start is active),
+     * cancelling the ramp and producing visible flicker. */
+    if (limiter != last_limiter)
+    {
+        last_limiter = limiter;
+        apply_limiter_output(fault);
+    }
 
     check_turbo_thermal_limit(limited_step);
 }
@@ -109,11 +128,11 @@ void scan_limiters(void)
     thermal_fault = rail_fault;
     if (rail_fault)
     {
-        update_limiters(THERMAL_ADC_MIN);
+        update_limiters(THERMAL_ADC_MIN, true);
         return;
     }
 
-    update_limiters(get_exact_temp_adc());
+    update_limiters(get_exact_temp_adc(), false);
 }
 
 /**
@@ -129,7 +148,7 @@ void scan_limiters_fault(void)
     if (driver_mode != MODE_ON)
         return;
 
-    update_limiters(THERMAL_ADC_MIN);
+    update_limiters(THERMAL_ADC_MIN, true);
 }
 
 /**
@@ -147,4 +166,5 @@ void reset_limiters(void)
 {
     ThermalLimiter_Init(&state);
     limiter = 0;
+    last_limiter = 0;
 }
