@@ -63,8 +63,8 @@ static const dispatch_t ui1_table[] = {
     { MODE_ON,  2, 0, false, true,  ON_TURBO_UI1 },
 
     /* -- Mode: MODE_STROB -- */
-    { MODE_STROB, 1, 0, false, true,  OFF_STROBE_UI1 },
-    { MODE_STROB, 2, 0, false, true,  UP_STROBE_UI1 },
+    { MODE_STROB, 1, 0, false, true,  UP_STROBE_UI1 },
+    { MODE_STROB, 0, 0, true,  false, OFF_STROBE_UI1 },
 };
 
 #define UI1_TABLE_SIZE (sizeof(ui1_table) / sizeof(ui1_table[0]))
@@ -89,8 +89,8 @@ static const dispatch_t ui2_table[] = {
     { MODE_ON,  2, 0, false, true,  ON_TURBO_UI2 },
 
     /* -- Mode: MODE_STROB -- */
-    { MODE_STROB, 1, 0, false, true,  OFF_STROBE_UI1 },
-    { MODE_STROB, 2, 0, false, true,  UP_STROBE_UI1 },
+    { MODE_STROB, 1, 0, false, true,  UP_STROBE_UI1 },
+    { MODE_STROB, 0, 0, true,  false, OFF_STROBE_UI1 },
 };
 
 #define UI2_TABLE_SIZE (sizeof(ui2_table) / sizeof(ui2_table[0]))
