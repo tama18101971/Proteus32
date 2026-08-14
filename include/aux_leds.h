@@ -296,6 +296,11 @@ void aux_on(void);
 void aux_off(void);
 
 /**
+ * @brief Three short red flashes (error indication).
+ */
+void aux_err(void);
+
+/**
  * @brief Main AUX processing loop (called on each AWU wake).
  * @return true if commands still active (AWU will be restarted), false if all done.
  */

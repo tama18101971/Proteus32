@@ -36,6 +36,7 @@ typedef struct
 } awu_cfg_t;
 
 static const awu_cfg_t awu_lut[] = {
+    {PWR_AWUPSC_128, 1},    /* AWU_1MS   = (128 * 1) / 128000 = 0.001s */
     {PWR_AWUPSC_128, 15},   /* AWU_15MS  = (128  * 15) / 128000 = 0.015s  */
     {PWR_AWUPSC_128, 30},   /* AWU_30MS  = (128  * 30) / 128000 = 0.030s  */
     {PWR_AWUPSC_256, 30},   /* AWU_60MS  = (256  * 30) / 128000 = 0.060s  */

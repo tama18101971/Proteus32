@@ -621,6 +621,13 @@ void aux_off(void) {
 }
 
 /**
+ * @brief Индикация ошибки (три короткие красные вспышки)
+ */
+void aux_err(void) {
+	start_aux_cmd(ERRO_RED, true, IDM_OTHER, AWU_1MS);
+}
+
+/**
  * @brief Индикация числа (зелёные вспышки или одна красная)
  * @param count — количество (0 = одна красная, иначе count зелёных)
  */

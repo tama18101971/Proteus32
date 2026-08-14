@@ -21,7 +21,8 @@
 
 /** @brief Preset AWU delay intervals. */
 typedef enum {
-	AWU_15MS = 0, /**< 15 ms */
+	AWU_1MS = 0,  /**< 1 ms */
+	AWU_15MS,     /**< 15 ms */
 	AWU_30MS,     /**< 30 ms */
 	AWU_60MS,     /**< 60 ms */
 	AWU_120MS,    /**< 120 ms */
