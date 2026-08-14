@@ -292,8 +292,9 @@ static uint32_t set_aux_count(uint8_t count) {
  * @param enable    — true = начать обработку немедленно
  * @param idm_mode  — режим индикации (IDM_BEACON, IDM_VWARNING, IDM_STROBE, IDM_OTHER)
  * @param delay     — начальная задержка перед первым полупериодом (awu_tick_t:
- *                    AWU_15MS, AWU_120MS, AWU_250MS, AWU_500MS, AWU_1S и т.д.)
- *                    После первого пробуждения AWU переключается на psc0/win0 команды.
+ *                    AWU_15MS, AWU_250MS, AWU_500MS, AWU_1S и т.д.) или
+ *                    AWU_IMMEDIATELY для немедленного запуска первого шага.
+ *                    После первого шага AWU переключается на psc0/win0 команды.
  *
  * Таймер AWU настраивается в handle_aux_cmd при обработке PER_FIRST.
  */
@@ -310,8 +311,16 @@ static void start_aux_cmd(uint32_t command, bool enable, IDM_Type_t idm_mode, aw
 
 	p_aux = &aux_cmd;
 
-	AWU_set_delay(delay);
-	AWU_ON();
+	if (delay == AWU_IMMEDIATELY) {
+		/* Skip the initial PER_INIT wake.  Initialise the fields that PER_INIT
+		 * normally loads, then execute the first (ON) half-period immediately. */
+		aux_ctl.work_count = aux_cmd.aux.count;
+		aux_ctl.period = PER_FIRST;
+		(void)handle_aux();
+	} else {
+		AWU_set_delay(delay);
+		AWU_ON();
+	}
 }
 
 /**
@@ -622,9 +631,10 @@ void aux_off(void) {
 
 /**
  * @brief Индикация ошибки (три короткие красные вспышки)
+ * @param delay начальная задержка перед первой вспышкой или AWU_IMMEDIATELY
  */
-void aux_err(void) {
-	start_aux_cmd(ERRO_RED, true, IDM_OTHER, AWU_1MS);
+void aux_err(awu_tick_t delay) {
+	start_aux_cmd(ERRO_RED, true, IDM_OTHER, delay);
 }
 
 /**

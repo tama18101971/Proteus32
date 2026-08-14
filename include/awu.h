@@ -35,6 +35,14 @@ typedef enum {
 	AWU_16S       /**< 16 seconds */
 } awu_tick_t;
 
+/**
+ * @brief Start an AUX command immediately, without an initial AWU delay.
+ *
+ * This is a sentinel value for start_aux_cmd(); it must not be passed to
+ * AWU_set_delay() because it is not a hardware AWU interval.
+ */
+#define AWU_IMMEDIATELY ((awu_tick_t)0xFFU)
+
 //extern volatile uint8_t awu_event; /**< AWU event flag, set in ISR */
 extern volatile uint8_t is_sleep_mode; /**< Non-zero when MCU is in STANDBY */
 

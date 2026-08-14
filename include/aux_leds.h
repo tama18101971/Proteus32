@@ -297,8 +297,9 @@ void aux_off(void);
 
 /**
  * @brief Three short red flashes (error indication).
+ * @param delay Initial delay, or AWU_IMMEDIATELY to start without waiting.
  */
-void aux_err(void);
+void aux_err(awu_tick_t delay);
 
 /**
  * @brief Main AUX processing loop (called on each AWU wake).

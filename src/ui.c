@@ -544,7 +544,7 @@ void calibration(void)
         /* Do not save offsets derived from a stale or failed ADC pair. */
         EE_PRINTF("[CAL] rejected: invalid voltage sample\r\n");
         off_auto_repeat();
-        aux_err();
+        aux_err(AWU_15MS);
         return;
     }
 
@@ -585,7 +585,7 @@ void calibration(void)
     else
     {
         off_auto_repeat();
-        aux_err();
+        aux_err(AWU_15MS);
     }
 #endif
 }
@@ -819,7 +819,7 @@ static bool menu_clicks_valid(uint8_t min_clicks, uint8_t max_clicks)
         return true;
 
     off_auto_repeat();
-    aux_err();
+    aux_err(AWU_15MS);
     return false;
 }
 
@@ -832,7 +832,7 @@ static bool menu_clicks_valid(uint8_t min_clicks, uint8_t max_clicks)
 void menu_invalid_selection(void)
 {
     off_auto_repeat();
-    aux_err();
+    aux_err(AWU_15MS);
 }
 
 /** @brief Set t_calibr from click count. */
