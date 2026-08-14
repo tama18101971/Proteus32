@@ -43,11 +43,11 @@ Same register names, different behavior. AWU exists, only USART1, I2C CKCFGR dif
 
 ### Thermal limiter (`thermal_limiter.c/h`, config in `src/limiters.c`)
 
-PI controller, `max(P, I)` arbitration, integer shift-only (no mul/div). 3 zones around `t_threshold = BASE_TEMPERATURE + t_calibr - t_anticipate_offset`. Config `const` flash-resident, state RAM.
+PI controller, `max(P, I)` arbitration, integer shift-only (no mul/div). 3 zones around `t_threshold = t_set - t_anticipate_offset`. Config `const` flash-resident, state RAM.
 
 ### Temperature calibration
 
-Two layers: **`tc`** (Option Bytes, `ob_GetTc/SetTc`, int8_t HW ADC correction, `get_exact_temp_adc = raw - tc`) and **`t_calibr`** (`EE.usr.t_calibr`, 0–15, `t_set = BASE_TEMPERATURE + t_calibr`). `calibration()` in `ui.c` (eng menu) → Option Bytes.
+Two layers: **`tc`** (Option Bytes, `ob_GetTc/SetTc`, int8_t HW ADC correction, `get_exact_temp_adc = raw - tc`) and **`t_calibr`** (`EE.usr.t_calibr`, 1–15 clicks = 46–60 °C, default 5 = 50 °C, `t_set = get_thermal_setpoint()`). `calibration()` in `ui.c` (eng menu) → Option Bytes.
 
 ### Data storage
 

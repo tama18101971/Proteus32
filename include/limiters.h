@@ -14,17 +14,16 @@
 
 /** @brief ADC value in termo_table at 50 °C (table index 70). */
 #define TERMO_50C_ADC    722u
-/** @brief Default t_calibr value stored in EE.usr.t_calibr. */
-#define TCALIBR_DEFAULT  6u
-/**
- * @brief Base temperature ADC threshold for thermal limiting.
- *
- * Computed as TERMO_50C_ADC minus default t_calibr offset.
- * Used in thermal limiter calculations.
- */
-#define BASE_TEMPERATURE  (TERMO_50C_ADC - TCALIBR_DEFAULT)
+/** @brief Default t_calibr value stored in EE.usr.t_calibr (5 clicks = 50 °C). */
+#define TCALIBR_DEFAULT  5u
 
 /* ===== Public API ===== */
+
+/**
+ * @brief Get the thermal limiter setpoint (t_set) in ADC codes from EE.usr.t_calibr.
+ * @return Target ADC code for thermal limiter.
+ */
+uint16_t get_thermal_setpoint(void);
 
 /**
  * @brief System initialisation (clock, GPIO, peripherals).

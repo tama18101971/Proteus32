@@ -110,7 +110,7 @@ void ee_defaults(void)
 
     EE.usr.eaux_onoff = false;
     EE.usr.id_plus_sid = false;
-    EE.usr.t_calibr = 6;
+    EE.usr.t_calibr = TCALIBR_DEFAULT;
 
     EE.default_ui1 = DEFAULT_STEP;
     EE.default_ui2 = DEFAULT_MODE;

@@ -57,6 +57,43 @@ static void apply_limiter_output(void)
         set_current_ll(get_step_tc(step_user), SS_NO);
 }
 
+/** @brief Base ADC code at 45 °C (t_calibr = 0 fallback). */
+#define TCALIBR_BASE_ADC  688u
+
+/**
+ * @brief Table of thermal limiter setpoint offsets from TCALIBR_BASE_ADC (45..60 °C).
+ *
+ * Index corresponds to EE.usr.t_calibr (1..15 clicks, 0 is fallback to 45 °C).
+ * Default is index 5 (50 °C = 688 + 34 = 722 ADC).
+ */
+static const uint8_t t_calibr_offsets[16] = {
+    0u,  /* [0]  fallback: 45 °C (688 + 0  = 688) */
+    7u,  /* [1]  46 °C          (688 + 7  = 695) */
+    14u, /* [2]  47 °C          (688 + 14 = 702) */
+    21u, /* [3]  48 °C          (688 + 21 = 709) */
+    27u, /* [4]  49 °C          (688 + 27 = 715) */
+    34u, /* [5]  50 °C (default)(688 + 34 = 722) */
+    41u, /* [6]  51 °C          (688 + 41 = 729) */
+    47u, /* [7]  52 °C          (688 + 47 = 735) */
+    52u, /* [8]  53 °C          (688 + 52 = 740) */
+    58u, /* [9]  54 °C          (688 + 58 = 746) */
+    64u, /* [10] 55 °C          (688 + 64 = 752) */
+    69u, /* [11] 56 °C          (688 + 69 = 757) */
+    75u, /* [12] 57 °C          (688 + 75 = 763) */
+    81u, /* [13] 58 °C          (688 + 81 = 769) */
+    86u, /* [14] 59 °C          (688 + 86 = 774) */
+    92u, /* [15] 60 °C          (688 + 92 = 780) */
+};
+
+/**
+ * @brief Get the thermal limiter setpoint (t_set) in ADC codes from EE.usr.t_calibr.
+ * @return Target ADC code for thermal limiter.
+ */
+uint16_t get_thermal_setpoint(void)
+{
+    return TCALIBR_BASE_ADC + (uint16_t)t_calibr_offsets[EE.usr.t_calibr];
+}
+
 /**
  * @brief Run the thermal controller for one temperature sample.
  * @param exact_adc Corrected temperature ADC value (THERMAL_ADC_MIN when
@@ -65,7 +102,7 @@ static void apply_limiter_output(void)
  */
 static void update_limiters(uint16_t exact_adc)
 {
-    uint16_t t_set = BASE_TEMPERATURE + (uint16_t)EE.usr.t_calibr;
+    uint16_t t_set = get_thermal_setpoint();
     limiter = ThermalLimiter_Update(&config, &state, exact_adc, t_set, step_user);
 
     if (limiter != last_limiter)
