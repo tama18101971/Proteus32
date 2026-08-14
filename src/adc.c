@@ -556,14 +556,7 @@ void scan_voltage(void)
 {
     static uint8_t voff_count = 0;
     static uint8_t voff_count_off = 0;
-    /* Battery protection must follow the runtime-active UI dispatch table,
-     * not the persisted EE setting: during menus/slots ui_table_idx is what
-     * actually drives the UI, and a mismatch here would branch the wrong
-     * protection path.  0 (tactical) and 5/6 (menus) collapse to UI1-like
-     * behavior via the clamp below. */
-    uint8_t ui_index = ui_table_idx;
-    if (ui_index < 1u || ui_index > 3u)
-        ui_index = 1u;
+
     int16_t vc = ob_GetVc();
     uint16_t vcode = voltage_ok ? vrefint_adc : VREF_SENTINEL;
     int32_t eff_vcode = (int32_t)vcode - vc;
@@ -572,71 +565,64 @@ void scan_voltage(void)
 
     if (!driver_is_active()) return;
 
-    /* Ramping UI (brightness control UI1) */
-    if (ui_index == 1)
+    /* 1. Общая защита от глубокого разряда (< 2.70 В) для всех UI */
+    if (eff_vcode >= (int32_t)swt_cut[0])
     {
-        /* Critical undervoltage: vbat < 2700 ⟺ adc >= swt_cut[0] */
-        if (eff_vcode >= (int32_t)swt_cut[0])
+        if (++voff_count_off > 3)
         {
-            if (++voff_count_off > 3)
+            voff_count_off = 0;
+            down_forever();
+            return;
+        }
+        return;
+    }
+    voff_count_off = 0;
+
+    /* 2. Ступенчатое снижение яркости (UI1 / UI2) */
+    uint8_t ui_index = ui_table_idx;
+
+    /* Ramping UI (UI1, тактический, меню) */
+    if (ui_index <= 1u || ui_index > 3u)
+    {
+        /* Step-down brightness on voltage sag */
+        if (eff_vcode >= (int32_t)swt_cut[down_count])
+        {
+            if (++voff_count > 3)
             {
-                voff_count_off = 0;
-                down_forever();
-                return;
+                voff_count = 0;
+                if (down_count)
+                {
+                    down_count--;
+                    step_user = step_user - (step_user >> 2);
+                    set_current(step_user, SS_SLOW);
+                    aux_err(AWU_IMMEDIATELY);       // сигнализируем о сбросе
+                }
             }
         }
         else
         {
-            voff_count_off = 0;
+            voff_count = 0;
 
-            /* Step-down brightness on voltage sag */
-            if (eff_vcode >= (int32_t)swt_cut[down_count])
-            {
-                if (++voff_count > 3)
-                {
-                    voff_count = 0;
-                    if (down_count)
-                    {
-                        down_count--;
-                        step_user = step_user - (step_user >> 2);
-                        set_current(step_user, SS_SLOW);
-                        aux_err(AWU_IMMEDIATELY);       // сигнализируем о сбросе
-                    }
-                }
-            }
-            else
-            {
-                voff_count = 0;
-
-                /* Recovery: voltage above top threshold (vbat > 3100) */
-                if (eff_vcode <= (int32_t)MV_GE(CUT_RECOVERY_MV))
-                    down_count = 5;
-            }
+            /* Recovery: voltage above top threshold (vbat > 3100) */
+            if (eff_vcode <= (int32_t)MV_GE(CUT_RECOVERY_MV))
+                down_count = 5;
         }
     }
-
-    /* Discrete UI (mode-based UI2) */
-    if ((ui_index > 1) && (ui_index < 4))
+    /* Discrete UI (mode-based UI2: ui_index 2 или 3) */
+    else
     {
         if (mode_current && (eff_vcode >= (int32_t)swt_cut[mode_current - 1]))
         {
             if (++voff_count > 3)
             {
                 voff_count = 0;
-                if (volt_stop_mode > (--mode_current))
+                --mode_current;
+                if (volt_stop_mode > mode_current)
                     volt_stop_mode = mode_current;
                 if (mode_current)
                 {
-                    if (driver_mode != MODE_STROB)
-                    {
-                        set_current(get_stepi(mode_current), SS_SLOW);
-                        aux_err(AWU_IMMEDIATELY);       // сигнализируем о сбросе
-                    }
-                }
-                else
-                {
-                    down_forever();
-                    return;
+                    set_current(get_stepi(mode_current), SS_SLOW);
+                    aux_err(AWU_IMMEDIATELY);       // сигнализируем о сбросе
                 }
             }
         }
