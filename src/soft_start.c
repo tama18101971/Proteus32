@@ -74,8 +74,8 @@ void ss_scan(void)
 {
 	if (ss.enable)
 	{
-		uint16_t ceil = (step_user > limiter) ?
-		                (uint16_t)(step_user - limiter) : 0u;
+		uint16_t ceil = get_step_tc(step_user);
+
 		if (ss.target > ceil)
 			ss.target = ceil;
 		if (ss.step_size > 0 && ss.position > ceil)

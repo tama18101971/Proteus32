@@ -53,26 +53,8 @@ static uint8_t fault_streak;
  */
 static void apply_limiter_output(void)
 {
-    uint16_t limited_step = (step_user > limiter) ?
-                            (uint16_t)(step_user - limiter) : 0u;
-
     if (!ss.enable)
-        set_current_ll(limited_step, SS_NO);
-}
-
-/**
- * @brief Leave UI2 turbo when thermal limiting is below the max-mode level.
- * @param limited_step Current physical brightness after thermal reduction.
- */
-static void check_turbo_thermal_limit(uint16_t limited_step)
-{
-    if ((ui_table_idx == 2U || ui_table_idx == 3U) &&
-        (mode_current == CMODE_TURBO) &&
-        (limited_step < get_stepi(CMODE_MAX)))
-    {
-        mode_current = CMODE_MAX;
-        ps.use_prev = false;
-    }
+        set_current_ll(get_step_tc(step_user), SS_NO);
 }
 
 /**
@@ -85,16 +67,12 @@ static void update_limiters(uint16_t exact_adc)
 {
     uint16_t t_set = BASE_TEMPERATURE + (uint16_t)EE.usr.t_calibr;
     limiter = ThermalLimiter_Update(&config, &state, exact_adc, t_set, step_user);
-    uint16_t limited_step = (step_user > limiter) ?
-                            (uint16_t)(step_user - limiter) : 0u;
 
     if (limiter != last_limiter)
     {
         last_limiter = limiter;
         apply_limiter_output();
     }
-
-    check_turbo_thermal_limit(limited_step);
 }
 
 /** @brief Initialise thermal limiter state. */

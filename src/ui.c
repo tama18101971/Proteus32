@@ -129,6 +129,9 @@ uint16_t get_step_tc(uint16_t step)
     if (thermal_fault_active() || !step)
         return 0u;
 
+    if ((ui_table_idx == 2U || ui_table_idx == 3U) && (step <= modes[CMODE_MID]))
+        return step;
+
     return (step > limiter) ? (uint16_t)(step - limiter) : 1u;
 }
 
@@ -1106,13 +1109,31 @@ void mode_up_ui2(void)
     set_curri(mode_current);
 }
 
+/** @brief Find next mode down, dynamically accounting for thermal limiter. */
+static uint8_t get_mode_down_ui2(void)
+{
+    if (mode_current > CMODE_MID && limiter > 0)
+    {
+        uint16_t cur = get_step_tc(step_user);
+        for (uint8_t m = mode_current - 1; m > CMODE_MIN; m--)
+        {
+            if (modes[m] < cur)
+                return m;
+        }
+        return CMODE_MIN;
+    }
+
+    return mode_current - 1;
+}
+
 /** @brief Cycle down to previous mode (UI2). */
 void mode_down_ui2(void)
 {
     if (mode_current > CMODE_MIN)
     {
         ps.use_prev = false;
-        set_curri(--mode_current);
+        mode_current = get_mode_down_ui2();
+        set_curri(mode_current);
     }
 }
 
@@ -1123,7 +1144,7 @@ void step_down_ui2(void)
     {
         ps.use_prev = false;
         if (mode_current > CMODE_MIN)
-            mode_current--;
+            mode_current = get_mode_down_ui2();
         else
             mode_current = get_up_mode(CMODE_MAX);
         set_curri(mode_current);
