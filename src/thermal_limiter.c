@@ -149,8 +149,9 @@ void ThermalLimiter_Init(ThermalLimiterState_t *state)
  * @param state     Persistent controller state (RAM).
  * @param t_raw     Raw 10-bit ADC reading from the NTC divider (0..1023).
  *                  Higher value == higher temperature (NTC in upper arm).
- *                  A value of exactly 0 or >= 1023 triggers the failsafe
- *                  (sensor open/short) and immediately shuts down the LED.
+ *                  A value of exactly 0 or >= 1023 sets THERMAL_FLAG_ERROR
+ *                  and holds the previous limiter (the coordinator confirms
+ *                  a sustained fault before forcing the LED off).
  * @param t_set     10-bit ADC target set-point (0..1023).
  * @param user_pwm  9-bit user-requested brightness (0..512). The controller
  *                  output can only reduce this value, never exceed it.
@@ -170,25 +171,17 @@ uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
      *    happen if the NTC divider wire has broken open or shorted - a
      *    healthy divider never produces a rail-to-rail code. Bypass the
      *    entire loop (do NOT touch filtered_temp/integral with a garbage
-     *    reading) and report the fault on the debug UART. This tick's
-     *    Limiter is forced to user_pwm (therefore the applied PWM is 0)
-     *    regardless, but
-     *    `prev_limiter` itself is deliberately left untouched: forcing it
-     *    to user_pwm here would make the slew filter treat every glitch -
-     *    even a single noisy ADC sample - as if the LED had just been
-     *    fully shut down, imposing a slow max_recovery_rate-limited ramp
-     *    back to full brightness once the reading recovers, even though
-     *    nothing was thermally wrong. Leaving it alone lets a transient,
-     *    single-tick glitch resolve with zero extra recovery lag next
-     *    tick, while a genuine, sustained fault still forces PWM=0 on
-     *    every single affected tick (safety is never weakened - only the
-     *    post-recovery smoothing behavior improves).
+     *    reading). OR the error flag so INITIALIZED / zone latches survive
+     *    a single glitch; the coordinator in limiters.c confirms a
+     *    sustained rail/timeout before forcing PWM = 0. Hold the previous
+     *    slew output so one bad sample cannot flash the LED off.
      * ------------------------------------------------------------------ */
     if (t_raw == THERMAL_ADC_MIN || t_raw >= THERMAL_ADC_MAX) {
-        state->flags = THERMAL_FLAG_ERROR;
-        /* This API returns the limiter amount, not the applied PWM. */
-        return user_pwm;
+        state->flags |= THERMAL_FLAG_ERROR;
+        return (uint16_t)state->prev_limiter;
     }
+
+    state->flags &= (uint8_t)~THERMAL_FLAG_ERROR;
 
     /* Seed the filter on the very first call so the EMA does not "ramp up"
      * from 0 -> t_raw, which would otherwise look like a huge fake

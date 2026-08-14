@@ -48,9 +48,12 @@
  *  Failsafe:
  *  ------------------------------------------------------------------------
  *  A `t_raw` reading of exactly 0 or >= 1023 (10-bit rail-to-rail) can only
- *  happen if the NTC divider has failed open or shorted. In that case the
- *  entire control loop is bypassed for that tick and the returned Limiter is
- *  forced to `user_pwm` (therefore output PWM = 0, LED fully OFF).
+ *  happen if the NTC divider has failed open or shorted. The control loop
+ *  is bypassed for that tick (filter/integral/`prev_limiter` stay put) and
+ *  `THERMAL_FLAG_ERROR` is OR-ed in — other latches are not wiped. The
+ *  returned Limiter is the previous slew output so a single noisy sample
+ *  cannot flash the LED off. The coordinator in limiters.c confirms a
+ *  sustained rail/timeout before forcing PWM = 0.
  *
  *  Register/type footprint:
  *  ------------------------------------------------------------------------
@@ -136,11 +139,11 @@ extern "C" {
  * entirely (the controller stays in Zone 3 even if EMA/ADC noise
  * temporarily dips t_cur one code below t_set).
  *
- * Value of 2 codes ≈ 1.0-1.4°C in the 43-50°C operating range, which
- * is well within the EMA noise band and invisible to the end-user, but
- * sufficient to stop P and OVERHEAT_LATCH from toggling every tick.
+ * Value of 4 codes ≈ 2.0-2.8°C in the 43-50°C operating range. Wide
+ * enough to cover residual EMA/ADC bounce around t_set after the
+ * filter, without a visible brightness step when Zone 3 is left.
  */
-#define THERMAL_ZONE3_HYSTERESIS 2
+#define THERMAL_ZONE3_HYSTERESIS 4
 
 /** Bits packed into ::ThermalLimiterState_t::flags. Kept as a single
  *  uint8_t bitfield (instead of two separate bool fields) so the extra
@@ -367,8 +370,9 @@ void ThermalLimiter_Init(ThermalLimiterState_t *state);
  * @param state     Persistent controller state (RAM).
  * @param t_raw     Raw 10-bit ADC reading from the NTC divider (0..1023).
  *                  Higher value == higher temperature (NTC in upper arm).
- *                  A value of exactly 0 or >= 1023 triggers the failsafe
- *                  (sensor open/short) and immediately shuts down the LED.
+ *                  A value of exactly 0 or >= 1023 sets THERMAL_FLAG_ERROR
+ *                  and holds the previous limiter (the coordinator confirms
+ *                  a sustained fault before forcing the LED off).
  * @param t_set     10-bit ADC target set-point (0..1023).
  * @param user_pwm  9-bit user-requested brightness (0..512). The controller
  *                  output can only reduce this value, never exceed it.

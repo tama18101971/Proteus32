@@ -59,11 +59,14 @@ void ss_init(uint16_t target, uint16_t previous, SoftStartSpeed_t speed);
  */
 void ss_scan(void);
 
+/** @brief Global soft-start state (written by ss_init/ss_scan). */
+extern ss_st ss;
+
 /**
  * @brief Check whether a soft-start transition is active.
  * @return true while ss_scan() still has a transition to execute.
  */
-bool ss_is_active(void);
+#define ss_is_active()  (ss.enable != 0U)
 
 /**
  * @brief Cancel a pending soft-start transition without changing the output.

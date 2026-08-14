@@ -18,6 +18,7 @@
 #include <stdbool.h>
 #include "soft_start.h"
 #include "ui.h"
+#include "limiters.h"
 #include "proteus_config.h"
 
 /** @brief Global soft start state. */
@@ -73,6 +74,13 @@ void ss_scan(void)
 {
 	if (ss.enable)
 	{
+		uint16_t ceil = (step_user > limiter) ?
+		                (uint16_t)(step_user - limiter) : 0u;
+		if (ss.target > ceil)
+			ss.target = ceil;
+		if (ss.position > ceil)
+			ss.position = ceil;
+
 		if (ss.step_count)
 		{
 			if (ss.step_size > 0 && ss.position + ss.step_size <= ss.target)
@@ -93,15 +101,6 @@ void ss_scan(void)
 		
 		if((!ss.enable) && (!step_tc) && (!step_user)) OFF_POWER();
 	}
-}
-
-/**
- * @brief Check whether a soft-start transition is active.
- * @return true while ss_scan() still has a transition to execute.
- */
-bool ss_is_active(void)
-{
-	return ss.enable != 0U;
 }
 
 /**

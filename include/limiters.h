@@ -41,12 +41,14 @@ void scan_limiters(void);
  */
 void scan_limiters_fault(void);
 
+/** @brief Latched after THERMAL_FAULT_CONFIRM consecutive rail/timeouts. */
+extern bool thermal_fault;
+
 /**
  * @brief Check whether the last temperature acquisition is unsafe to use.
- * @return true after a sensor rail or ADC acquisition fault until a valid
- *         temperature sample clears it.
+ * @return true after a confirmed sensor rail or ADC acquisition fault.
  */
-bool thermal_fault_active(void);
+#define thermal_fault_active()  (thermal_fault)
 
 /**
  * @brief Reset limiter state to defaults.
