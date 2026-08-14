@@ -24,28 +24,6 @@ extern uint8_t ui_table_idx;
  * the same gesture can unlock after a button wake without a flash write. */
 static uint8_t block_slot_idx = SLOTS_COUNT;
 
-/*******************************************************************************
- *  Slot indices
- ******************************************************************************/
-
-enum {
-    SLOT_1CH = 0,
-    SLOT_2CH = 1,
-    SLOT_3C  = 2,
-    SLOT_3CH = 3,
-    SLOT_4C  = 4,
-    SLOT_4CH = 5,
-    SLOT_5C  = 6,
-    SLOT_5CH = 7,
-    SLOT_6C  = 8,
-    SLOT_6CH = 9,
-};
-
-/* In the fixed build default_op is used.  In the magic build lookup replaces
- * it with Option Bytes slot_idx.  is_slot remains true in both builds so a
- * hold gesture stays a one-shot command. */
-#define SLOT_ACTION(default_op, slot_idx)  (default_op), true, (slot_idx)
-
 /**
  * @brief Check whether a dispatch table entry matches the current event.
  * @param entry  Table entry to test.
@@ -73,31 +51,20 @@ static bool dispatch_matches(const dispatch_t *entry, uint8_t mode,
 
 static const dispatch_t ui1_table[] = {
     /* -- Mode: MODE_OFF -- */
-    { MODE_OFF, 1, 0, false, true,  ON_XMODE_UI1,  false, 0 },
-    { MODE_OFF, 1, 0, true,  false, SLOT_ACTION(SLOT_DEFAULT_1CH, SLOT_1CH) },
-    { MODE_OFF, 2, 0, false, true,  ON_TURBO_UI1,   false, 0 },
-    { MODE_OFF, 2, 0, true,  false, SLOT_ACTION(SLOT_DEFAULT_2CH, SLOT_2CH) },
-    { MODE_OFF, 3, 0, false, true,  SLOT_ACTION(SLOT_DEFAULT_3C, SLOT_3C) },
-    { MODE_OFF, 3, 0, true,  false, SLOT_ACTION(SLOT_DEFAULT_3CH, SLOT_3CH) },
-    { MODE_OFF, 4, 0, false, true,  SLOT_ACTION(SLOT_DEFAULT_4C, SLOT_4C) },
-    { MODE_OFF, 4, 0, true,  false, SLOT_ACTION(SLOT_DEFAULT_4CH, SLOT_4CH) },
-    { MODE_OFF, 5, 0, false, true,  SLOT_ACTION(SLOT_DEFAULT_5C, SLOT_5C) },
-    { MODE_OFF, 5, 0, true,  false, SLOT_ACTION(SLOT_DEFAULT_5CH, SLOT_5CH) },
-    { MODE_OFF, 6, 0, false, true,  SLOT_ACTION(SLOT_DEFAULT_6C, SLOT_6C) },
-    { MODE_OFF, 6, 0, true,  false, SLOT_ACTION(SLOT_DEFAULT_6CH, SLOT_6CH) },
-    { MODE_OFF, 0, 0, true,  false, ON_RUMPUP_UI1,  false, 0 },
+    { MODE_OFF, 1, 0, false, true,  ON_XMODE_UI1 },
+    { MODE_OFF, 2, 0, false, true,  ON_TURBO_UI1 },
+    { MODE_OFF, 0, 0, true,  false, ON_RUMPUP_UI1 },
 
     /* -- Mode: MODE_ON -- */
-    { MODE_ON,  1, 0, false, true,  OFF_DRV_FALSE,  false, 0 },
-    { MODE_ON,  1, 0, true,  false, ON_RUMPDOWN_UI1, false, 0 },
-    { MODE_ON,  5, 0, true,  false, SAVE_DEF_UI1,   false, 0 },
-    { MODE_ON,  0, 0, true,  false, ON_RUMPUP_UI1,  false, 0 },
-    { MODE_ON,  2, 0, false, true,  ON_TURBO_UI1,   false, 0 },
+    { MODE_ON,  1, 0, false, true,  OFF_DRV_FALSE },
+    { MODE_ON,  1, 0, true,  false, ON_RUMPDOWN_UI1 },
+    { MODE_ON,  5, 0, true,  false, SAVE_DEF_UI1 },
+    { MODE_ON,  0, 0, true,  false, ON_RUMPUP_UI1 },
+    { MODE_ON,  2, 0, false, true,  ON_TURBO_UI1 },
 
     /* -- Mode: MODE_STROB -- */
-    { MODE_STROB, 1, 0, false, true,  OFF_STROBE_UI1, false, 0 },
-    { MODE_STROB, 2, 0, false, true,  UP_STROBE_UI1,  false, 0 },
-
+    { MODE_STROB, 1, 0, false, true,  OFF_STROBE_UI1 },
+    { MODE_STROB, 2, 0, false, true,  UP_STROBE_UI1 },
 };
 
 #define UI1_TABLE_SIZE (sizeof(ui1_table) / sizeof(ui1_table[0]))
@@ -108,33 +75,22 @@ static const dispatch_t ui1_table[] = {
 
 static const dispatch_t ui2_table[] = {
     /* -- Mode: MODE_OFF -- */
-    { MODE_OFF, 1, 1, false, false, ON_MIN_UI2,     false, 0 },
-    { MODE_OFF, 1, 0, false, true,  ON_XMODE_UI2,   false, 0 },
-    { MODE_OFF, 1, 0, true,  false, SLOT_ACTION(SLOT_DEFAULT_1CH, SLOT_1CH) },
-    { MODE_OFF, 2, 0, false, true,  ON_TURBO_UI2,   false, 0 },
-    { MODE_OFF, 2, 0, true,  false, SLOT_ACTION(SLOT_DEFAULT_2CH, SLOT_2CH) },
-    { MODE_OFF, 3, 0, false, true,  SLOT_ACTION(SLOT_DEFAULT_3C, SLOT_3C) },
-    { MODE_OFF, 3, 0, true,  false, SLOT_ACTION(SLOT_DEFAULT_3CH, SLOT_3CH) },
-    { MODE_OFF, 4, 0, false, true,  SLOT_ACTION(SLOT_DEFAULT_4C, SLOT_4C) },
-    { MODE_OFF, 4, 0, true,  false, SLOT_ACTION(SLOT_DEFAULT_4CH, SLOT_4CH) },
-    { MODE_OFF, 5, 0, false, true,  SLOT_ACTION(SLOT_DEFAULT_5C, SLOT_5C) },
-    { MODE_OFF, 5, 0, true,  false, SLOT_ACTION(SLOT_DEFAULT_5CH, SLOT_5CH) },
-    { MODE_OFF, 6, 0, false, true,  SLOT_ACTION(SLOT_DEFAULT_6C, SLOT_6C) },
-    { MODE_OFF, 6, 0, true,  false, SLOT_ACTION(SLOT_DEFAULT_6CH, SLOT_6CH) },
-    { MODE_OFF, 0, 0, true,  false, ON_MOON_UI2,    false, 0 },
+    { MODE_OFF, 1, 1, false, false, ON_MIN_UI2 },
+    { MODE_OFF, 1, 0, false, true,  ON_XMODE_UI2 },
+    { MODE_OFF, 2, 0, false, true,  ON_TURBO_UI2 },
+    { MODE_OFF, 0, 0, true,  false, ON_MOON_UI2 },
 
     /* -- Mode: MODE_ON -- */
-    { MODE_ON,  1, 1, false, false, STEP_DOWN_UI2,  false, 0 },
-    { MODE_ON,  1, 0, false, true,  OFF_DRV_FALSE,  false, 0 },
-    { MODE_ON,  1, 0, true,  false, MODE_DOWN_UI2,  false, 0 },
-    { MODE_ON,  5, 0, true,  false, SAVE_DEF_UI2,   false, 0 },
-    { MODE_ON,  0, 0, true,  false, MODE_UP_UI2,    false, 0 },
-    { MODE_ON,  2, 0, false, true,  ON_TURBO_UI2,   false, 0 },
+    { MODE_ON,  1, 1, false, false, STEP_DOWN_UI2 },
+    { MODE_ON,  1, 0, false, true,  OFF_DRV_FALSE },
+    { MODE_ON,  1, 0, true,  false, MODE_DOWN_UI2 },
+    { MODE_ON,  5, 0, true,  false, SAVE_DEF_UI2 },
+    { MODE_ON,  0, 0, true,  false, MODE_UP_UI2 },
+    { MODE_ON,  2, 0, false, true,  ON_TURBO_UI2 },
 
     /* -- Mode: MODE_STROB -- */
-    { MODE_STROB, 1, 0, false, true,  OFF_STROBE_UI1, false, 0 },
-    { MODE_STROB, 2, 0, false, true,  UP_STROBE_UI1,  false, 0 },
-
+    { MODE_STROB, 1, 0, false, true,  OFF_STROBE_UI1 },
+    { MODE_STROB, 2, 0, false, true,  UP_STROBE_UI1 },
 };
 
 #define UI2_TABLE_SIZE (sizeof(ui2_table) / sizeof(ui2_table[0]))
@@ -145,15 +101,13 @@ static const dispatch_t ui2_table[] = {
 
 static const dispatch_t eng_table[] = {
     /* -- First level: MODE_OFF (navigate sub-menus) -- */
-    { MODE_OFF, 1,  0, false, true,  ENTER_ML_MODE,  false, 0 },
-    { MODE_OFF, 5,  0, false, true,  CALIBRATION,    false, 0 },
-    { MODE_OFF, 15, 0, false, true,  RESET2DEF,      false, 0 },
-    { MODE_OFF, 0,  0, true,  false, MENU_EXIT,      false, 0 },
+    { MODE_OFF, 1,  0, false, true,  ENTER_ML_MODE },
+    { MODE_OFF, 5,  0, false, true,  CALIBRATION },
+    { MODE_OFF, 15, 0, false, true,  RESET2DEF },
+    { MODE_OFF, 0,  0, true,  false, MENU_EXIT },
 
     /* -- Sub-modes -- */
-    { MODE_MOON_LEVEL, 0, 0, false, true,  ML_CLICKX,  false, 0 },
-    { MODE_MOON_LEVEL, 0, 0, true,  false, MENU_EXIT,  false, 0 },
-
+    { MODE_MOON_LEVEL, 0, 0, false, true,  ML_CLICKX },
 };
 
 #define ENG_TABLE_SIZE (sizeof(eng_table) / sizeof(eng_table[0]))
@@ -164,38 +118,23 @@ static const dispatch_t eng_table[] = {
 
 static const dispatch_t usr_table[] = {
     /* -- First level: MODE_OFF -- */
-    { MODE_OFF, 1, 0, false, true,  ENTER_BM_MODE,   false, 0 },  // 1 click, release+timeout → enter beacon mode config (MODE_BM): select beacon operating pattern
-    { MODE_OFF, 2, 0, false, true,  ENTER_BT_MODE,   false, 0 },  // 2 clicks, release+timeout → enter beacon type config (MODE_BT): select beacon type bitmask
-    { MODE_OFF, 3, 0, false, true,  ENTER_BL_MODE,   false, 0 },  // 3 clicks, release+timeout → enter backlight color selection (MODE_BL)
-    { MODE_OFF, 4, 0, false, true,  ENTER_UIS_MODE,  false, 0 },  // 4 clicks, release+timeout → enter UI interface selection (MODE_UIS): pick UI1 or UI2
-    { MODE_OFF, 5, 0, false, true,  ENTER_MAGIC_MODE, false, 0 },  // 5 clicks, release+timeout → enter magic slot programming mode (MODE_MAGIC): select/programming slot 1-10
-    { MODE_OFF, 6, 0, false, true,  ENTER_CHTK_MODE, false, 0 },  // 6 clicks, release+timeout → enter temperature calibration mode (MODE_CTK_H): set t_calibr offset
-    { MODE_OFF, 0, 0, true,  false, MENU_EXIT,       false, 0 },  // hold → exit user menu, restore saved UI index and beacon state, return to MODE_OFF
+    { MODE_OFF, 1, 0, false, true,  ENTER_BM_MODE },
+    { MODE_OFF, 2, 0, false, true,  ENTER_BT_MODE },
+    { MODE_OFF, 3, 0, false, true,  ENTER_BL_MODE },
+    { MODE_OFF, 4, 0, false, true,  ENTER_UIS_MODE },
+    { MODE_OFF, 5, 0, false, true,  ENTER_MAGIC_MODE },
+    { MODE_OFF, 6, 0, false, true,  ENTER_CHTK_MODE },
+    { MODE_OFF, 0, 0, true,  false, MENU_EXIT },
 
     /* -- Sub-modes -- */
-    { MODE_BM,  0, 0, false, true,  BM_CLICKX,  false, 0 },
-    { MODE_BM,  0, 0, true,  false, MENU_EXIT,  false, 0 },
+    { MODE_BM,  0, 0, false, true,  BM_CLICKX },
+    { MODE_BT,  0, 0, false, true,  BT_CLICKX },
+    { MODE_BL,  0, 0, false, true,  BL_CLICKX },
+    { MODE_UIS, 0, 0, false, true,  UIS_CLICKX },
+    { MODE_CTK_H, 0, 0, false, true,  CHTK_CLICKX },
 
-    { MODE_BT,  0, 0, false, true,  BT_CLICKX,  false, 0 },
-    { MODE_BT,  0, 0, true,  false, MENU_EXIT,  false, 0 },
-
-    { MODE_BL,  0, 0, false, true,  BL_CLICKX,  false, 0 },
-    { MODE_BL,  0, 0, true,  false, MENU_EXIT,  false, 0 },
-
-    { MODE_UIS, 0, 0, false, true,  UIS_CLICKX, false, 0 },
-    { MODE_UIS, 0, 0, true,  false, MENU_EXIT,  false, 0 },
-
-    { MODE_CTK_H, 0, 0, false, true,  CHTK_CLICKX, false, 0 },
-    { MODE_CTK_H, 0, 0, true,  false, MENU_EXIT,   false, 0 },
-
-    /* -- Magic mode --
-     * Clicks 1..10 are handled as a compact range in ui_table_lookup(). */
-    { MODE_MAGIC, 0,  0, true,  false, EXIT_MAGIC_MODE, false, 0 },
-
-    /* Slot-programming modes are handled as a compact mode range in
-     * ui_table_lookup().  HOLD remains intentionally unmatched here: the
-     * caller exits the mode after observing that it did not change. */
-
+    /* -- Magic mode -- */
+    { MODE_MAGIC, 0,  0, true,  false, EXIT_MAGIC_MODE },
 };
 
 #define USR_TABLE_SIZE (sizeof(usr_table) / sizeof(usr_table[0]))
@@ -203,6 +142,25 @@ static const dispatch_t usr_table[] = {
 /*******************************************************************************
  *  UI dispatch lookup
  ******************************************************************************/
+
+static uint8_t execute_slot(uint8_t slot)
+{
+    uint8_t op_idx = SLOT_OP_EMPTY;
+#ifdef USE_MAGIC_SLOTS
+    op_idx = ob_GetSlot(slot);
+    if (op_idx < SLOT_OP_FIRST || op_idx > SLOT_OP_LAST)
+        op_idx = SLOT_OP_EMPTY;
+#endif
+    if (op_idx < MAIN_OP_COUNT && main_op[op_idx])
+    {
+        off_auto_repeat();
+        main_op[op_idx]();
+        if (driver_mode == MODE_BLOCK || driver_mode == MODE_BLOCK0)
+            block_slot_idx = slot;
+        return 1;
+    }
+    return 0;
+}
 
 /**
  * @brief Look up and dispatch a button event in the active UI table.
@@ -213,10 +171,76 @@ static const dispatch_t usr_table[] = {
  */
 uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout)
 {
+    uint8_t idx = ui_table_idx;
+
+    if (mode == MODE_BLOCK || mode == MODE_BLOCK0)
+    {
+        if (block_slot_idx < SLOTS_COUNT)
+        {
+            bool is_hold_slot = (block_slot_idx & 1) != 0 || (block_slot_idx == 0);
+            uint8_t req_clicks = (block_slot_idx <= 1) ? (block_slot_idx + 1) : ((block_slot_idx >> 1) + 2);
+            bool matched = is_hold_slot ? (evt->type == BTN_EVT_HOLD && evt->clicks == req_clicks)
+                                        : (timeout && evt->type == BTN_EVT_CLICK_SEQ && evt->clicks == req_clicks);
+            if (matched)
+            {
+                off_auto_repeat();
+                unblock_drv();
+                block_slot_idx = SLOTS_COUNT;
+                return 1;
+            }
+        }
+        return 0;
+    }
+
+    /* Common slot dispatch in UI1 / UI2 (MODE_OFF) */
+    if (mode == MODE_OFF && (idx >= 1u && idx <= 3u))
+    {
+        int8_t slot = -1;
+        if (evt->type == BTN_EVT_HOLD)
+        {
+            if (evt->clicks == 1) slot = 0;
+            else if (evt->clicks == 2) slot = 1;
+            else if (evt->clicks >= 3 && evt->clicks <= 6) slot = (int8_t)((evt->clicks - 2) * 2 + 1);
+        }
+        else if (timeout && (evt->type == BTN_EVT_CLICK_SEQ))
+        {
+            if (evt->clicks >= 3 && evt->clicks <= 6) slot = (int8_t)((evt->clicks - 2) * 2);
+        }
+
+        if (slot >= 0)
+            return execute_slot((uint8_t)slot);
+    }
+
+    /* Sub-modes HOLD -> MENU_EXIT */
+    if (evt->type == BTN_EVT_HOLD && ((mode >= MODE_BM && mode <= MODE_UIS) || mode == MODE_CTK_H || mode == MODE_MOON_LEVEL))
+    {
+        menu_exit();
+        return 1;
+    }
+
+    /* Magic slot range handling */
+    if (timeout && (evt->type == BTN_EVT_CLICK_SEQ))
+    {
+        if (mode == MODE_MAGIC)
+        {
+            if (evt->clicks >= 1u && evt->clicks <= SLOTS_COUNT)
+            {
+                select_slot();
+                return 1;
+            }
+            menu_invalid_selection();
+            return 0;
+        }
+
+        if (mode >= MODE_SLOT01 && mode <= MODE_SLOT10)
+        {
+            slotN_clickX();
+            return 1;
+        }
+    }
+
     const dispatch_t *table;
     uint8_t size;
-
-    uint8_t idx = ui_table_idx;
 
     if (idx == 1)
     {
@@ -243,81 +267,15 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout)
         return 0;
     }
 
-    if (mode == MODE_BLOCK || mode == MODE_BLOCK0)
-    {
-        if (block_slot_idx >= SLOTS_COUNT)
-            return 0;
-
-        for (uint8_t i = 0; i < size; i++)
-        {
-            const dispatch_t *entry = &table[i];
-
-            /* The OFF-state slot definition is the canonical gesture.  It
-             * retains both the click count and whether the action fires on
-             * hold or only after the click-sequence timeout. */
-            if (entry->mode != MODE_OFF || !entry->is_slot
-                || entry->slot_idx != block_slot_idx) continue;
-            if (!dispatch_matches(entry, MODE_OFF, evt, timeout)) continue;
-
-            off_auto_repeat();
-            unblock_drv();
-            block_slot_idx = SLOTS_COUNT;
-            return 1;
-        }
-
-        return 0;
-    }
-
-    /* These entries were identical except for a contiguous mode/click
-     * value.  Keep their old event contract while avoiding 20 x 5-byte rows. */
-    if (timeout && (evt->type == BTN_EVT_CLICK_SEQ))
-    {
-        if (mode == MODE_MAGIC)
-        {
-            if (evt->clicks >= 1u && evt->clicks <= SLOTS_COUNT)
-            {
-                select_slot();
-                return 1;
-            }
-            menu_invalid_selection();
-            return 0;
-        }
-
-        if (mode >= MODE_SLOT01 && mode <= MODE_SLOT10)
-        {
-            slotN_clickX();
-            return 1;
-        }
-    }
-
     for (uint8_t i = 0; i < size; i++)
     {
         const dispatch_t *entry = &table[i];
-        uint8_t f_slot = entry->is_slot;
-        uint8_t f_op = entry->op_index;
-
         if (!dispatch_matches(entry, mode, evt, timeout)) continue;
 
-        uint8_t op_idx = f_op;
-#ifdef USE_MAGIC_SLOTS
-        if (f_slot)
-        {
-            op_idx = ob_GetSlot(entry->slot_idx);
-            if (op_idx < SLOT_OP_FIRST || op_idx > SLOT_OP_LAST)
-                op_idx = SLOT_OP_EMPTY;
-        }
-#endif
-
+        uint8_t op_idx = entry->op_index;
         if (op_idx < MAIN_OP_COUNT && main_op[op_idx])
         {
-            /* Slots are one-shot commands during a hold.  The button FSM
-             * observes this existing AVR-compatible flag before emitting
-             * further HOLD repeats. */
-            if (f_slot)
-                off_auto_repeat();
             main_op[op_idx]();
-            if (f_slot && (driver_mode == MODE_BLOCK || driver_mode == MODE_BLOCK0))
-                block_slot_idx = entry->slot_idx;
             return 1;
         }
         return 0;

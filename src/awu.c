@@ -219,7 +219,6 @@ void AWU_IRQHandler(void)
     {
         if (is_sleep_mode) {
             SystemInit();            /* Восстанавливаем системные часы после пробуждения */
-            SystemCoreClockUpdate(); /* Обновляем переменную SystemCoreClock */
         }
         wakeup_source = WS_AWU;
 

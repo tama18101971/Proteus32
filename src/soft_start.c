@@ -52,7 +52,8 @@ void ss_init(uint16_t target, uint16_t previous, SoftStartSpeed_t speed)
 		 * low-level module, so target is already the physical safe target. */
 		ss.target = target;
 		uint16_t count = ABS((int16_t)(target - previous));
-		ss.step_count = count ? count / speed : 1;
+		uint16_t sc = (speed == SS_FAST) ? (uint16_t)(((uint32_t)count * 4681u) >> 15) : count;
+		ss.step_count = sc ? sc : 1;
 		ss.position = previous;
 	}
 

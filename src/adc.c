@@ -188,19 +188,17 @@ void adc_init(void)
 
     // 4. PD3 — выход Push-Pull 50MHz (искусственная "земля" нижнего плеча делителя)
     GPIOD->CFGLR = (GPIOD->CFGLR & ~(0xF << 12)) | (0x3 << 12);
-    // Делитель: Vdd -> NTC -> PD2 -> R -> PD3. Состояние по умолчанию — PD3=1,
-    // ток через делитель не течёт (экономия заряда между измерениями).
     GPIOD->BSHR = (1 << 3);  // PD3 = 1, делитель обесточен
 
     // 5. Сброс ADC1 через RCC (как делает SDK)
     RCC->APB2PRSTR |= (1 << 9);  // ADC1RST = 1
     RCC->APB2PRSTR &= ~(1 << 9); // ADC1RST = 0
 
-    // 6. CTLR1: Independent mode, без сканирования, без continuous, без external trigger
-    ADC1->CTLR1 = 0;
+    // 6. CTLR1: Independent mode, CALVOLSELECT=50% (бит 25), JAUTO (бит 10)
+    ADC1->CTLR1 = (1 << 25) | (1 << 10);
 
-    // 7. CTLR2: DataAlign=Right, EXTSEL=7 (software trigger only), ContinuousConv=OFF
-    ADC1->CTLR2 = 0x000E0000; // ADC_ExternalTrigConv_None = EXTSEL[2:0]=111
+    // 7. CTLR2: EXTSEL=7 (0x000E0000), EXTTRIG (бит 20), ADON (бит 0)
+    ADC1->CTLR2 = 0x001E0001;
 
     // 8. RSQR1: L[3:0]=0 (1 канал в регулярной последовательности)
     ADC1->RSQR1 = 0;
@@ -209,52 +207,28 @@ void adc_init(void)
     ADC1->RSQR3 = 3;
 
     // 10. SAMPTR2: время семплирования регулярного канала SQ1=CH3(NTC)
-    //     Коды SMP[2:0] -> циклы АЦП: 0=3, 1=9, 2=15, 3=30, 4=43, 5=57, 6=73, 7=241
-    //     SMP3 [11:9]   = 5 -> 57 циклов для NTC (внешний источник, нужна большая ёмкость заряда)
-    //     SMP8 [26:24]  = 3 -> 30 циклов для Vrefint (внутренний источник, заряд быстрый)
     ADC1->SAMPTR2 = (5 << 9) | (3 << 24);
 
     // 11. ISQR: JL=0 (1 инжектированный канал), JSQ4 = 8 (Vrefint на CH32V003)
     ADC1->ISQR = 8 << 15;
 
     // 12. SAMPTR1: время семплирования инжектированного канала (Rank1 = JSQ4)
-    //     SDK пишет код времени семплирования сюда независимо от номера канала
     ADC1->SAMPTR1 = 3; // код 3 -> 30 циклов АЦП для Vrefint
 
-    // 13. Калибровка ADC: CALVOLSELECT=50% (бит 25 в CTLR1)
-    ADC1->CTLR1 |= (1 << 25);
-
-    // 14. JAUTO: автоматическая инъекция после регулярного (бит 10 в CTLR1)
-    ADC1->CTLR1 |= (1 << 10);
-
-    // 15. EXTTRIG: software trigger (бит 20 в CTLR2)
-    ADC1->CTLR2 |= (1 << 20);
-
-    // 16. Включаем ADC (ADON = бит 0 в CTLR2)
-    ADC1->CTLR2 |= (1 << 0);
-
-    // 17. Задержка после включения ADC
+    // 13. Задержка после включения ADC
     for (volatile int i = 0; i < 1000; i++)
         ;
 
-    // 18. Сброс калибровки (RSTCAL = бит 3 в CTLR2)
+    // 14. Сброс калибровки (RSTCAL = бит 3 в CTLR2)
     ADC1->CTLR2 |= (1 << 3);
-    {
-        uint32_t timeout = ADC_WAIT_TIMEOUT;
-        while ((ADC1->CTLR2 & (1 << 3)) && --timeout)
-            ;
-    }
+    while (ADC1->CTLR2 & (1 << 3))
+        ;
 
-    // 19. Калибровка ADC (CAL = бит 2 в CTLR2)
+    // 15. Калибровка ADC (CAL = бит 2 в CTLR2)
     ADC1->CTLR2 |= (1 << 2);
-    {
-        uint32_t timeout = ADC_WAIT_TIMEOUT;
-        while ((ADC1->CTLR2 & (1 << 2)) && --timeout)
-            ;
-    }
+    while (ADC1->CTLR2 & (1 << 2))
+        ;
 
-    /* First valid Vrefint conversion seeds EMA exactly; a guessed nominal
-     * voltage could briefly conceal a flat cell after wake. */
     ema_init(0);
 }
 
@@ -454,16 +428,15 @@ static const uint16_t ceil_cap[6] =
 
 /**
  * @brief Вычисляет максимально допустимый режим UI2 по текущему напряжению.
- * @param vref Сырой отфильтрованный код Vrefint.
- * @param vc Калибровочный сдвиг кода из Option Bytes.
+ * @param eff_vcode Эффективный код Vrefint (с учётом калибровки vc).
  * @return Индекс максимального режима (CMODE_MOON..CMODE_TURBO).
  */
-static uint8_t calc_volt_max_mode(uint16_t vref, int16_t vc)
+static uint8_t calc_volt_max_mode(int32_t eff_vcode)
 {
     /* Индексы 1..5 совпадают со swt_cut[1..5]; индекс 0 в этом цикле не
      * используется (итерация с CMODE_MOON=1). */
     for (uint8_t i = CMODE_MOON; i < CMODE_TURBO; i++)
-        if ((int32_t)vref - vc >= (int32_t)swt_cut[i]) return i;
+        if (eff_vcode >= (int32_t)swt_cut[i]) return i;
     return CMODE_TURBO;
 }
 
@@ -593,8 +566,9 @@ void scan_voltage(void)
         ui_index = 1u;
     int16_t vc = ob_GetVc();
     uint16_t vcode = voltage_ok ? vrefint_adc : VREF_SENTINEL;
+    int32_t eff_vcode = (int32_t)vcode - vc;
 
-    volt_max_mode = calc_volt_max_mode(vcode, vc);
+    volt_max_mode = calc_volt_max_mode(eff_vcode);
 
     if (driver_mode != MODE_ON) return;
 
@@ -602,7 +576,7 @@ void scan_voltage(void)
     if (ui_index == 1)
     {
         /* Critical undervoltage: vbat < 2700 ⟺ adc >= swt_cut[0] */
-        if ((int32_t)vcode - vc >= (int32_t)swt_cut[0])
+        if (eff_vcode >= (int32_t)swt_cut[0])
         {
             if (++voff_count_off > 3)
             {
@@ -616,7 +590,7 @@ void scan_voltage(void)
             voff_count_off = 0;
 
             /* Step-down brightness on voltage sag */
-            if ((int32_t)vcode - vc >= (int32_t)swt_cut[down_count])
+            if (eff_vcode >= (int32_t)swt_cut[down_count])
             {
                 if (++voff_count > 3)
                 {
@@ -634,7 +608,7 @@ void scan_voltage(void)
                 voff_count = 0;
 
                 /* Recovery: voltage above top threshold (vbat > 3100) */
-                if ((int32_t)vcode - vc <= (int32_t)MV_GE(CUT_RECOVERY_MV))
+                if (eff_vcode <= (int32_t)MV_GE(CUT_RECOVERY_MV))
                     down_count = 5;
             }
         }
@@ -643,7 +617,7 @@ void scan_voltage(void)
     /* Discrete UI (mode-based UI2) */
     if ((ui_index > 1) && (ui_index < 4))
     {
-        if (mode_current && ((int32_t)vcode - vc >= (int32_t)swt_cut[mode_current - 1]))
+        if (mode_current && (eff_vcode >= (int32_t)swt_cut[mode_current - 1]))
         {
             if (++voff_count > 3)
             {
@@ -673,10 +647,9 @@ void scan_voltage(void)
 uint8_t bat_get_flashes(void) {
 	static const uint16_t thresholds[] = {MV_LT(3000), MV_LT(3200), MV_LT(3400),
 	                                      MV_LT(3600), MV_LT(3800), MV_LT(4000)};
-	int16_t vc = ob_GetVc();
-	uint16_t vcode = voltage_ok ? vrefint_adc : VREF_SENTINEL;
+	int32_t eff_vcode = (int32_t)(voltage_ok ? vrefint_adc : VREF_SENTINEL) - ob_GetVc();
 	for (uint8_t i = 0; i < sizeof(thresholds) / sizeof(thresholds[0]); i++) {
-		if ((int32_t)vcode - vc >= (int32_t)thresholds[i]) return i;
+		if (eff_vcode >= (int32_t)thresholds[i]) return i;
 	}
 	return 6;
 }

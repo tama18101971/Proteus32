@@ -29,7 +29,7 @@ void EXTI7_0_IRQHandler(void)
 
 void EXTI7_0_IRQHandler(void)
 {
-    if (EXTI_GetITStatus(EXTI_Line3) != RESET)
+    if (EXTI->INTFR & (1U << 3))
     {
         #ifdef UART_DEBUG
         while (!(USART1->STATR & USART_STATR_TC)) {}
@@ -38,7 +38,7 @@ void EXTI7_0_IRQHandler(void)
         need_sleep = false;
         wakeup_source = WS_BUTTON;
         
-        EXTI_ClearITPendingBit(EXTI_Line3);
+        EXTI->INTFR = (1U << 3);
     }
 }
 

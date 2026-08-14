@@ -33,13 +33,10 @@ typedef struct {
     uint8_t long_mask;       // required long-click bits (0 = don't care)
     uint8_t hold       : 1;  // true = match hold events; false = releases
     uint8_t wait_timeout : 1; // true = fire only on CLICK_SEQ timeout
-    uint8_t op_index   : 6;  // fixed fallback index into main_op[] (0..48)
-    uint8_t is_slot    : 1;  // true = a slot gesture; magic overrides op_index
-    uint8_t slot_idx   : 4;  // Option Bytes slot index (0..9)
-    uint8_t reserved   : 3;
+    uint8_t op_index   : 6;  // action function index in main_op[]
 } dispatch_t;
 
-_Static_assert(sizeof(dispatch_t) == 5,
+_Static_assert(sizeof(dispatch_t) == 4,
                "dispatch_t packing changed; update UI table size assumptions");
 
 /*******************************************************************************

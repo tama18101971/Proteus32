@@ -164,17 +164,12 @@ static void start_aux_array(const uint32_t *pArray, awu_tick_t delay) {
  * Если подсветка выключена — полное выключение.
  */
 static void smart_off_leds(LED_Bits_t channel) {
-	if (EE.aux.bcklight_type != BCK_TYPE_ON) {
-		if (channel & RED_LED) off_red();
-		if (channel & GRN_LED) off_grn();
-		return;
-	}
-
+	uint8_t bck_on = (EE.aux.bcklight_type == BCK_TYPE_ON);
 	if (channel & RED_LED) {
-		(EE.aux.bcklight_color == BCK_COLOR_RED) ? on_red_l() : off_red();
+		(bck_on && EE.aux.bcklight_color == BCK_COLOR_RED) ? on_red_l() : off_red();
 	}
 	if (channel & GRN_LED) {
-		(EE.aux.bcklight_color == BCK_COLOR_GRN) ? on_grn_l() : off_grn();
+		(bck_on && EE.aux.bcklight_color == BCK_COLOR_GRN) ? on_grn_l() : off_grn();
 	}
 }
 
@@ -371,32 +366,31 @@ void start_aux_strobe(uint8_t index)
 }
 #endif
 
-/**
- * @brief Пошаговая обработка одной AUX-команды (AWU-режим)
- * @param aux   — указатель на команду
- * @param ubits — указатель на структуру состояния
- *
- * Каждый вызов обрабатывает ОДИН переход автомата:
- *   PER_INIT    → загрузка count → PER_FIRST
- *   PER_FIRST   → яркость0, AWU per0 → PER_SECOND (MCU спит per0)
- *   PER_SECOND  → яркость1, AWU per1 → PER_END (MCU спит per1)
- *   PER_END     → счётчик, яркость0, AWU per0 → PER_SECOND (без паузы)
- *
- * Вызывается из handle_aux() после пробуждения MCU.
- * AWU таймер задаёт длительность сна между вызовами.
- */
 static void handle_aux_cmd(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits) {
 	if (!ubits->enable) return;
 
 	LED_Bits_t device = (LED_Bits_t)aux->aux.device;
 
-	/* Инициализация: загружаем количество повторов */
 	if (ubits->period == PER_INIT) {
 		ubits->work_count = aux->aux.count;
 		ubits->period = PER_FIRST;
+	} else if (ubits->period == PER_END) {
+		if (!aux->aux.cycle) {
+			if (ubits->work_count > 0) ubits->work_count--;
+			if (ubits->work_count == 0) {
+				if (!EnableArrayProcessing)
+					ubits->enable = false;
+				ubits->period = PER_NEXT;
+				if (device & HBL_LED) {
+					SetBrightness(HBL_LED, 0u);
+				}
+				smart_off_leds(device);
+				return;
+			}
+		}
+		ubits->period = PER_FIRST;
 	}
 
-	/* Первый полупериод: яркость0, AWU per0 */
 	if (ubits->period == PER_FIRST) {
 		if (aux->aux.brightness0 != ubits->current_brightness) {
 			SetBrightness(device, aux->aux.brightness0);
@@ -404,45 +398,13 @@ static void handle_aux_cmd(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits) {
 		}
 		AWU_set_raw(aux->aux.psc0, aux->aux.win0);
 		ubits->period = PER_SECOND;
-	}
-	/* Второй полупериод: яркость1, AWU per1 */
-	else if (ubits->period == PER_SECOND) {
+	} else if (ubits->period == PER_SECOND) {
 		if (aux->aux.brightness1 != ubits->current_brightness) {
 			SetBrightness(device, aux->aux.brightness1);
 			ubits->current_brightness = aux->aux.brightness1;
 		}
 		AWU_set_raw(aux->aux.psc1, aux->aux.win1);
 		ubits->period = PER_END;
-	}
-	/* Конец полного цикла: обработка счётчика + запуск следующего цикла */
-	else if (ubits->period == PER_END) {
-
-		/* Обработка зацикливания и счётчика повторов */
-		if (!aux->aux.cycle) {
-			if (ubits->work_count > 0) ubits->work_count--;
-			if (ubits->work_count == 0) {
-				/* Keep an array command logically active until the next wake can
-				 * load its next element.  A standalone command ends here. */
-				if (!EnableArrayProcessing)
-					ubits->enable = false;
-				ubits->period = PER_NEXT;
-				if (device & HBL_LED) {
-					/* A finite HBL command may end with brightness1 != 0.
-					 * Its terminal state must still be dark. */
-					SetBrightness(HBL_LED, 0u);
-				}
-				smart_off_leds(device);
-				return;
-			}
-		}
-
-		/* Запуск следующего цикла: яркость0 + AWU per0 (без паузы) */
-		if (aux->aux.brightness0 != ubits->current_brightness) {
-			SetBrightness(device, aux->aux.brightness0);
-			ubits->current_brightness = aux->aux.brightness0;
-		}
-		AWU_set_raw(aux->aux.psc0, aux->aux.win0);
-		ubits->period = PER_SECOND;
 	}
 }
 
@@ -655,21 +617,12 @@ void aux_off(void) {
  * @param count — количество (0 = одна красная, иначе count зелёных)
  */
 void aux_count(uint8_t count) {
-	uint32_t cmd;
-	uint8_t flashes;
-
-	if (count) {
-		flashes = count > 15 ? 15 : count;
-		cmd = MAKE_CMD(GRN_LED, 0, flashes,
-		               AWU_PSC_256, 38,
-		               AWU_PSC_1024, 28,
-		               1, 0);
-	} else {
-		cmd = MAKE_CMD(RED_LED, 0, 1,
-		               AWU_PSC_256, 38,
-		               AWU_PSC_1024, 28,
-		               1, 0);
-	}
+	LED_Bits_t dev = count ? GRN_LED : RED_LED;
+	uint8_t flashes = count ? (count > 15 ? 15 : count) : 1;
+	uint32_t cmd = MAKE_CMD(dev, 0, flashes,
+	                        AWU_PSC_256, 38,
+	                        AWU_PSC_1024, 28,
+	                        1, 0);
 
 	start_aux_cmd(cmd, true, IDM_OTHER, AWU_120MS);
 }

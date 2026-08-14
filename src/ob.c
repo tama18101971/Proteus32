@@ -83,12 +83,9 @@ static struct {
  * компилятором (чтение напрямую из аппаратного регистра).
  */
 static void _refresh(void) {
-    _cache.magic = *(volatile uint8_t*)(OB_ADDR);
-    _cache.tc    = *(volatile int8_t*)(OB_ADDR + 2);
-    _cache.vc    = *(volatile int8_t*)(OB_ADDR + 4);
-    _cache.ml    = *(volatile uint8_t*)(OB_ADDR + 6);
-    for (uint8_t i = 0; i < SLOTS_COUNT; i++)
-        _cache.slots[i] = *(volatile uint8_t*)(OB_ADDR + 8 + i * 2);
+    uint8_t *p = (uint8_t *)&_cache;
+    for (uint8_t i = 0; i < sizeof(_cache); i++)
+        p[i] = *(volatile uint8_t*)(OB_ADDR + i * 2);
 }
 
 /**
@@ -185,18 +182,8 @@ static flash_status_t _program(void) {
             /* Шаг 6: Запись стандартных 6 регистров */
             status = _write_option_bytes(OB_BASE, ob, sizeof(ob));
             if (status == FLASH_OK) {
-                /* Шаг 7: Запись пользовательских данных
-                 * Порядок: magic, tc, vc, ml, slots[0..9]
-                 * Итого 4 + SLOTS_COUNT = 14 байт
-                 */
-                uint8_t payload[4 + SLOTS_COUNT];
-                payload[0] = _cache.magic;
-                payload[1] = (uint8_t)_cache.tc;
-                payload[2] = (uint8_t)_cache.vc;
-                payload[3] = _cache.ml;
-                for (uint8_t i = 0; i < SLOTS_COUNT; i++)
-                    payload[4 + i] = _cache.slots[i];
-                status = _write_option_bytes(OB_ADDR, payload, sizeof(payload));
+                /* Шаг 7: Запись пользовательских данных */
+                status = _write_option_bytes(OB_ADDR, (const uint8_t *)&_cache, sizeof(_cache));
             }
         }
         /* Очистка флага программирования (если не было таймаута) */
@@ -219,16 +206,13 @@ static void _set_defaults(void) {
     _cache.tc = 0;
     _cache.vc = 0;
     _cache.ml = 0;
-    _cache.slots[0] = SLOT_DEFAULT_1CH;
-    _cache.slots[1] = SLOT_DEFAULT_2CH;
-    _cache.slots[2] = SLOT_DEFAULT_3C;
-    _cache.slots[3] = SLOT_DEFAULT_3CH;
-    _cache.slots[4] = SLOT_DEFAULT_4C;
-    _cache.slots[5] = SLOT_DEFAULT_4CH;
-    _cache.slots[6] = SLOT_DEFAULT_5C;
-    _cache.slots[7] = SLOT_DEFAULT_5CH;
-    _cache.slots[8] = SLOT_DEFAULT_6C;
-    _cache.slots[9] = SLOT_DEFAULT_6CH;
+    static const uint8_t def_slots[SLOTS_COUNT] = {
+        SLOT_DEFAULT_1CH, SLOT_DEFAULT_2CH, SLOT_DEFAULT_3C, SLOT_DEFAULT_3CH,
+        SLOT_DEFAULT_4C,  SLOT_DEFAULT_4CH, SLOT_DEFAULT_5C, SLOT_DEFAULT_5CH,
+        SLOT_DEFAULT_6C,  SLOT_DEFAULT_6CH
+    };
+    for (uint8_t i = 0; i < SLOTS_COUNT; i++)
+        _cache.slots[i] = def_slots[i];
 }
 
 /**
@@ -369,25 +353,12 @@ bool ob_Flush(void) {
         return false;
 
     /* Верификация: чтение обратно из flash и сравнение с кэшем */
-    uint8_t verify[4 + SLOTS_COUNT];
-    verify[0] = *(volatile uint8_t*)(OB_ADDR);
-    verify[1] = *(volatile uint8_t*)(OB_ADDR + 2);
-    verify[2] = *(volatile uint8_t*)(OB_ADDR + 4);
-    verify[3] = *(volatile uint8_t*)(OB_ADDR + 6);
-    for (uint8_t i = 0; i < SLOTS_COUNT; i++)
-        verify[4 + i] = *(volatile uint8_t*)(OB_ADDR + 8 + i * 2);
-
-    /* Сравнение основных полей */
-    if (verify[0] != _cache.magic ||
-        verify[1] != (uint8_t)_cache.tc ||
-        verify[2] != (uint8_t)_cache.vc ||
-        verify[3] != _cache.ml)
-        return false;
-
-    /* Сравнение массива slots */
-    for (uint8_t i = 0; i < SLOTS_COUNT; i++)
-        if (verify[4 + i] != _cache.slots[i])
+    const uint8_t *p = (const uint8_t *)&_cache;
+    for (uint8_t i = 0; i < sizeof(_cache); i++)
+    {
+        if (*(volatile uint8_t *)(OB_ADDR + i * 2) != p[i])
             return false;
+    }
 
     /* Keep the dirty flag set after any failed program/verify operation so
      * the next 5-second persistence tick retries the unchanged cache. */

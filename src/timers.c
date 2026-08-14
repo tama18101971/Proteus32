@@ -33,64 +33,20 @@ static uint32_t last_tick_30hz = 0;
 static uint32_t last_tick_2hz = 0;
 static uint32_t last_tick_5s = 0;
 
-/**
- * @brief Проверка: прошло ли TICK_160HZ_MS (6 мс) с последнего вызова
- * @return true если интервал истёк (счётчик автоматически сдвигается)
- *
- * Использование:
- *   if (tick_160hz()) { ... }
- */
-bool tick_160hz(void)
+static inline bool check_interval(uint32_t *last, uint32_t interval)
 {
-    if (tim2_ms - last_tick_160hz >= TICK_160HZ_MS)
+    if (tim2_ms - *last >= interval)
     {
-        last_tick_160hz += TICK_160HZ_MS;
+        *last += interval;
         return true;
     }
     return false;
 }
 
-/**
- * @brief Проверка: прошло ли TICK_50HZ_MS (20 мс) с последнего вызова
- * @return true если интервал истёк (счётчик автоматически сдвигается)
- */
-bool tick_30hz(void)
-{
-    if (tim2_ms - last_tick_30hz >= TICK_30HZ_MS)
-    {
-        last_tick_30hz += TICK_30HZ_MS;
-        return true;
-    }
-    return false;
-}
-
-/**
- * @brief Проверка: прошло ли TICK_2HZ_MS (500 мс) с последнего вызова
- * @return true если интервал истёк (счётчик автоматически сдвигается)
- */
-bool tick_2hz(void)
-{
-    if (tim2_ms - last_tick_2hz >= TICK_2HZ_MS)
-    {
-        last_tick_2hz += TICK_2HZ_MS;
-        return true;
-    }
-    return false;
-}
-
-/**
- * @brief Проверка: прошло ли TICK_5S_MS (5000 мс) с последнего вызова
- * @return true если интервал истёк (счётчик автоматически сдвигается)
- */
-bool tick_5s(void)
-{
-    if (tim2_ms - last_tick_5s >= TICK_5S_MS)
-    {
-        last_tick_5s += TICK_5S_MS;
-        return true;
-    }
-    return false;
-}
+bool tick_160hz(void) { return check_interval(&last_tick_160hz, TICK_160HZ_MS); }
+bool tick_30hz(void)  { return check_interval(&last_tick_30hz, TICK_30HZ_MS); }
+bool tick_2hz(void)   { return check_interval(&last_tick_2hz, TICK_2HZ_MS); }
+bool tick_5s(void)    { return check_interval(&last_tick_5s, TICK_5S_MS); }
 
 /**
  * @brief Сброс 5-секундного таймера.

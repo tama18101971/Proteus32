@@ -36,6 +36,8 @@
 #include "mini_printf.h"
 #include <string.h>
 
+void __libc_init_array(void) {}
+
 volatile wakeup_source_t wakeup_source = WS_NONE; /* Источник последнего пробуждения */
 
 volatile uint8_t need_sleep = false; /* Флаг необходимости перейти в режим сна */
@@ -44,6 +46,13 @@ volatile uint8_t need_sleep = false; /* Флаг необходимости пе
  * при реальном отличии текущих данных от тени — "чётные" переключения настроек
  * в пределах 5-сек окна отката не приводят к лишней записи в flash. */
 static struct ee_data ee_shadow;
+
+static inline bool ee_changed(const struct ee_data *a, const struct ee_data *b)
+{
+    const uint32_t *p1 = (const uint32_t *)a;
+    const uint32_t *p2 = (const uint32_t *)b;
+    return (p1[0] != p2[0]) || (p1[1] != p2[1]) || (p1[2] != p2[2]) || (p1[3] != p2[3]);
+}
 
 /* getBright_CRT_9to12Bit(322) = 1018, or 24.86% of DAC_MAX_VALUE.
  * The strict '>' below therefore enters fast supervision at step 323:
@@ -136,9 +145,6 @@ __attribute__((noinline)) static void wake_i2c(void)
  */
 int main(void)
 {
-    NVIC_PriorityGroupConfig(NVIC_PriorityGroup_1);
-    SystemCoreClockUpdate();
-
     wait_ms(500);
 
 #ifdef UART_DEBUG
@@ -171,7 +177,7 @@ int main(void)
         init_ee();
         ee_defaults();
     }
-    memcpy(&ee_shadow, &ee, EE_STRUCT_SIZE);
+    ee_shadow = ee;
 
     /* Инициализация FSM кнопки и UI */
     static const btn_config_t btn_cfg = {
@@ -204,7 +210,6 @@ int main(void)
             if (sleep_owner == SLEEP_OWNER_THERMAL)
                 AWU_OFF();
             SystemInit();
-            SystemCoreClockUpdate();
 #ifdef UART_DEBUG
             uart_init(460800);
 #endif
@@ -356,12 +361,12 @@ int main(void)
              * last-persisted shadow — an even number of toggles within the
              * window restores the old value and produces no flash write. */
             ob_Flush();
-            if (memcmp(&ee_shadow, &ee, EE_STRUCT_SIZE))
+            if (ee_changed(&ee_shadow, &ee))
             {
                 need_save = 1;
                 handle_ee();                      /* успех → need_save = 0 */
                 if (!need_save)
-                    memcpy(&ee_shadow, &ee, EE_STRUCT_SIZE);
+                    ee_shadow = ee;
                 /* сбой: need_save остаётся 1 → ретрай на следующем тике */
             }
             else

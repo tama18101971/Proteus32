@@ -160,7 +160,7 @@ uint16_t getBright_CRT_9to12Bit(uint16_t val)
     if (val >= MAX_STEP) return DAC_MAX_VALUE;
 
     uint32_t x = val;
-    uint32_t result = (x * x * x * 16) >> 19;
+    uint32_t result = (x * x * x) >> 15;
 
     if (result == 0) result = 1;
 
@@ -646,13 +646,9 @@ static __attribute__((noinline)) void menu_entry_flash(uint8_t cnt, uint16_t on_
  *  тронул событие — иначе удержание попало бы в новый UI как HOLD. */
 static void menu_wait_release(void)
 {
-    uint32_t t = 0;
-    while (Pressed && (t < MENU_ENTRY_RELEASE_MS))
-    {
+    uint16_t count = (uint16_t)(MENU_ENTRY_RELEASE_MS / 10u);
+    while (Pressed && count--)
         wait_ms(10);
-        t += 10;
-    }
-    (void)t;
 }
 
 /** @brief Clamp a UI index from EE to a valid dispatch table (1..3).
@@ -700,7 +696,7 @@ void menu_exit(void)
  * @param on_ms   Длительность свечения/паузы, мс.
  * @param is_grn  true — зелёный ИД, false — красный.
  */
-static void menu_entry_flash(uint8_t cnt, uint16_t on_ms, bool is_grn)
+static __attribute__((noinline)) void menu_entry_flash(uint8_t cnt, uint16_t on_ms, bool is_grn)
 {
     for (uint8_t i = 0; i < cnt; i++)
     {
@@ -753,16 +749,8 @@ void enter_menu_at_boot(void)
      * сбрасывается при выходе (menu_exit) и при любом питании (reset). */
     menu_beacon_mute = true;
 
-    if (is_eng)
-    {
-        ui_table_idx = ENG_MENU_IND;            /* > 4.5 В */
-        menu_entry_flash(6, 200, false);        /* 6 красных */
-    }
-    else
-    {
-        ui_table_idx = USR_MENU_IND;            /* аккумулятор */
-        menu_entry_flash(3, 100, true);         /* 3 зелёных */
-    }
+    ui_table_idx = is_eng ? ENG_MENU_IND : USR_MENU_IND;
+    menu_entry_flash(is_eng ? 6 : 3, is_eng ? 200 : 100, !is_eng);
 
     /* Ждём отпускания кнопки, чтобы FSM (button_tick) не принял удержание за
      * свежее нажатие и не выполнил HOLD -> MENU_EXIT при первом же тике.

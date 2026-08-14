@@ -16,7 +16,7 @@ void uart_init(uint32_t baudrate)
     GPIOD->CFGLR = (GPIOD->CFGLR & ~(0xF << 20)) | (0xE << 20); // PD5 AF-PP 50MHz
 
     uint32_t div = (48000000u + (baudrate >> 1)) / baudrate;
-    USART1->BRR = (uint16_t)(((div / 16) << 4) | (div % 16));
+    USART1->BRR = (uint16_t)div;
 
     USART1->CTLR1 = USART_CTLR1_UE | USART_CTLR1_TE;
 }
@@ -46,25 +46,31 @@ static void out_string(const char *s)
 }
 
 /**
- * @brief Output an unsigned integer in the given base.
+ * @brief Output an unsigned integer in base 10 or 16.
  * @param val      Value to print.
  * @param base     Numeric base (10 or 16).
  * @param width    Minimum field width (padded with @p pad).
  * @param pad      Padding character.
- * @param uppercase Use uppercase hex digits if non-zero.
  */
-static void out_unsigned(uint32_t val, uint8_t base, uint8_t width, char pad, uint8_t uppercase)
+static void out_unsigned(uint32_t val, uint8_t base, uint8_t width, char pad)
 {
     char buf[11];
     int i = 0;
-    const char *digits = uppercase ? "0123456789ABCDEF" : "0123456789abcdef";
 
     if (val == 0) {
         buf[i++] = '0';
+    } else if (base == 16) {
+        while (val) {
+            uint8_t d = (uint8_t)(val & 0x0F);
+            buf[i++] = (char)(d < 10 ? '0' + d : 'a' + d - 10);
+            val >>= 4;
+        }
     } else {
         while (val) {
-            buf[i++] = digits[val % base];
-            val /= base;
+            uint32_t q = (val * 52429u) >> 19;
+            uint8_t rem = (uint8_t)(val - q * 10u);
+            buf[i++] = (char)('0' + rem);
+            val = q;
         }
     }
 
@@ -88,7 +94,7 @@ static void out_signed(int32_t val)
         out_char('-');
         val = -val;
     }
-    out_unsigned((uint32_t)val, 10, 0, '0', 0);
+    out_unsigned((uint32_t)val, 10, 0, '0');
 }
 
 /**
@@ -118,40 +124,23 @@ static void out_format(const char *fmt, va_list ap)
             fmt++;
         }
 
-        uint8_t long_flag = 0;
         if (*fmt == 'l') {
-            long_flag = 1;
             fmt++;
         }
 
         switch (*fmt) {
         case 'd':
         case 'i':
-            if (long_flag)
-                out_signed((int32_t)va_arg(ap, long));
-            else
-                out_signed(va_arg(ap, int));
+            out_signed(va_arg(ap, int32_t));
             break;
 
         case 'u':
-            if (long_flag)
-                out_unsigned(va_arg(ap, unsigned long), 10, width, pad, 0);
-            else
-                out_unsigned(va_arg(ap, unsigned int), 10, width, pad, 0);
+            out_unsigned(va_arg(ap, uint32_t), 10, width, pad);
             break;
 
         case 'x':
-            if (long_flag)
-                out_unsigned(va_arg(ap, unsigned long), 16, width, pad, 0);
-            else
-                out_unsigned(va_arg(ap, unsigned int), 16, width, pad, 0);
-            break;
-
         case 'X':
-            if (long_flag)
-                out_unsigned(va_arg(ap, unsigned long), 16, width, pad, 1);
-            else
-                out_unsigned(va_arg(ap, unsigned int), 16, width, pad, 1);
+            out_unsigned(va_arg(ap, uint32_t), 16, width, pad);
             break;
 
         case 's':
