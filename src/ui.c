@@ -122,14 +122,14 @@ void ee_defaults(void)
 /**
  * @brief Clamp brightness target to thermal ceiling.
  * @param step Requested brightness step.
- * @return max(step - limiter, 0), preserving the requested step separately.
+ * @return max(step - limiter, 1) when step > 0, or 0 when off/fault.
  */
 uint16_t get_step_tc(uint16_t step)
 {
-    if (thermal_fault_active())
+    if (thermal_fault_active() || !step)
         return 0u;
 
-    return (step > limiter) ? (uint16_t)(step - limiter) : 0u;
+    return (step > limiter) ? (uint16_t)(step - limiter) : 1u;
 }
 
 /**
@@ -1309,7 +1309,7 @@ void ui_process(void)
                     max_step = ratchet_max_step();
                 }
                 stop_aux_if(IDM_BEACON, false);
-                if (step_tc >= max_step) direction = DIR_DOWN;
+                if (step_tc >= max_step || limiter) direction = DIR_DOWN;
             }
             break;
 
