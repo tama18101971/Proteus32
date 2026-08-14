@@ -643,9 +643,9 @@ void ml_clickX(void)
 /** @brief Мигнуть индикатором cnt раз (для подтверждения входа в меню).
  * @param cnt     Число вспышек.
  * @param on_ms   Длительность свечения/паузы, мс.
- * @param is_grn  true — зелёный ИД, false — красный.
+ * @param device  Битовая маска LED (RED_LED и/или GRN_LED).
  */
-static __attribute__((noinline)) void menu_entry_flash(uint8_t cnt, uint16_t on_ms, bool is_grn);
+static __attribute__((noinline)) void menu_entry_flash(uint8_t cnt, uint16_t on_ms, LED_Bits_t device);
 
 /** @brief Ждать отпускания кнопки (максимум MENU_ENTRY_RELEASE_MS).
  *  Вызывается после входа/выхода из меню, пока FSM в главном цикле ещё не
@@ -687,7 +687,7 @@ void menu_exit(void)
 
     /* Подтверждение выхода: 1 зелёная вспышка 500 мс, затем ожидание
      * отпускания кнопки, чтобы HOLD-повторы не попали в новый UI. */
-    menu_entry_flash(1, 500, true);
+    menu_entry_flash(1, 500, GRN_LED | RED_LED);
     menu_wait_release();
 
     /* Применить цвет и состояние подсветки сразу при выходе из меню */
@@ -699,22 +699,22 @@ void menu_exit(void)
  * в оригинале Proteus IID: ~1 с удержания кнопки). */
 #define MENU_ENTRY_DEBOUNCE_MS  1000u
 
-/** @brief Мигнуть индикатором cnt раз (для подтверждения входа в меню).
- * @param cnt     Число вспышек.
- * @param on_ms   Длительность свечения/паузы, мс.
- * @param is_grn  true — зелёный ИД, false — красный.
+/** @brief Flash one or more menu indicator LEDs.
+ * @param cnt Number of flashes.
+ * @param on_ms LED on/off duration in milliseconds.
+ * @param device LED bitmask (RED_LED and/or GRN_LED).
  */
-static __attribute__((noinline)) void menu_entry_flash(uint8_t cnt, uint16_t on_ms, bool is_grn)
+static __attribute__((noinline)) void menu_entry_flash(uint8_t cnt, uint16_t on_ms, LED_Bits_t device)
 {
     for (uint8_t i = 0; i < cnt; i++)
     {
-        if (is_grn) on_grn_h();
-        else        on_red_h();
+        if (device & RED_LED) on_red_h();
+        if (device & GRN_LED) on_grn_h();
 
         wait_ms(on_ms);
 
-        if (is_grn) off_grn();
-        else        off_red();
+        if (device & RED_LED) off_red();
+        if (device & GRN_LED) off_grn();
 
         wait_ms(on_ms);
     }
@@ -740,7 +740,7 @@ void enter_menu_at_boot(void)
     bool is_eng = voltage_ok && (vrefint_adc < MV_GE(ENG_VOLTAGE_MV));
 
     /* Индикация доступного меню до опроса кнопки: 0.5 с. */
-    menu_entry_flash(1, 500, !is_eng);
+    menu_entry_flash(1, 500, is_eng ? RED_LED : GRN_LED);
 
     if (!Pressed)
         return;
@@ -755,7 +755,8 @@ void enter_menu_at_boot(void)
     stop_aux_if(IDM_BEACON, true);
 
     ui_table_idx = is_eng ? ENG_MENU_IND : USR_MENU_IND;
-    menu_entry_flash(is_eng ? 6 : 3, is_eng ? 200 : 100, !is_eng);
+    menu_entry_flash(is_eng ? 6 : 3, is_eng ? 200 : 100,
+                     is_eng ? RED_LED : GRN_LED);
 
     /* Ждём отпускания кнопки, чтобы FSM (button_tick) не принял удержание за
      * свежее нажатие и не выполнил HOLD -> MENU_EXIT при первом же тике.
