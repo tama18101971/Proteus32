@@ -600,6 +600,7 @@ void scan_voltage(void)
                         down_count--;
                         step_user = step_user - (step_user >> 2);
                         set_current(step_user, SS_SLOW);
+                        aux_err(AWU_IMMEDIATELY);       // сигнализируем о сбросе
                     }
                 }
             }
@@ -627,7 +628,10 @@ void scan_voltage(void)
                 if (mode_current)
                 {
                     if (driver_mode != MODE_STROB)
+                    {
                         set_current(get_stepi(mode_current), SS_SLOW);
+                        aux_err(AWU_IMMEDIATELY);       // сигнализируем о сбросе
+                    }
                 }
                 else
                 {
