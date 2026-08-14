@@ -38,7 +38,7 @@
 typedef enum {
 	RED_LED = 0b001,   /**< Red LED */
 	GRN_LED	= 0b010,   /**< Green LED */
-	HBL_LED	= 0b100    /**< Backlight */
+	HBL_LED	= 0b100    /**< мощный диод */
 } LED_Bits_t;
 
 /**
@@ -273,6 +273,11 @@ void start_aux_strobe(uint8_t index);
  * @brief Start beacon mode from EEPROM settings.
  */
 void start_aux_beacon(void);
+
+/**
+ * @brief Refresh button backlight state according to EE.aux settings.
+ */
+void aux_refresh_backlight(void);
 
 /**
  * @brief Indicate a number via AUX LEDs.

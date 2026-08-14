@@ -538,12 +538,20 @@ void start_aux_beacon(void) {
 	static const uint8_t bcon_win1[] = {63,           25,            50,            17};
 
 	uint8_t mode = EE.aux.beacon_mode & 0x03;
+	uint8_t br0 = (EE.aux.beacon_type & HBL_LED) ? CMODE_MIN : 1;
 
 	uint32_t cmd = MAKE_CMD(EE.aux.beacon_type, 1, 0,
 		AWU_PSC_256, 25, bcon_psc1[mode], bcon_win1[mode],
-		1, 0);
+		br0, 0);
 
 	start_aux_cmd(cmd, true, IDM_BEACON, AWU_120MS);
+}
+
+/**
+ * @brief Обновить состояние фоновой подсветки по настройкам EE.aux
+ */
+void aux_refresh_backlight(void) {
+	smart_off_leds(RED_LED | GRN_LED);
 }
 
 #ifdef USE_EX_AUX

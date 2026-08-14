@@ -132,6 +132,7 @@ __attribute__((noinline)) static void wake_i2c(void)
 {
     dac_pwrpin_restore();
     i2c_init(400000);
+    wait_ms(2);
 }
 
 /**

@@ -57,7 +57,6 @@ uint8_t need_save = false;
 uint8_t clicks_count = 0;
 uint8_t ui_table_idx = 1;        // runtime selector for dispatch tables
 uint8_t ui_save = 0;
-uint8_t beacon_save = 0;
 bool menu_beacon_mute = false;   // session-only AUX beacon mute while in menu
 uint8_t bcklight_type_save = 0;
 uint8_t strobe_index = 0;
@@ -399,21 +398,14 @@ void slot_backlight(void)
 {
     EE.aux.bcklight_type = !EE.aux.bcklight_type;
     clr_indicator((ind_clr_t)EE.aux.bcklight_type);
+    aux_refresh_backlight();
 }
 
 /** @brief Toggle beacon on/off (slot). */
 void slot_beacon(void)
 {
-    if (ui_table_idx == 6)
-    {
-        beacon_save = !beacon_save;
-        clr_indicator((ind_clr_t)beacon_save);
-    }
-    else
-    {
-        EE.aux.beacon_on = !EE.aux.beacon_on;
-        clr_indicator((ind_clr_t)EE.aux.beacon_on);
-    }
+    EE.aux.beacon_on = !EE.aux.beacon_on;
+    clr_indicator((ind_clr_t)EE.aux.beacon_on);
 }
 
 /** @brief Toggle memory recall (slot). */
@@ -518,7 +510,6 @@ void reset2def(void)
     ob_ResetToDefaults();   /* also reset OB calibration (tc/vc) and slots */
     ui_save = EE.uif.ui_index;
     ui_table_idx = ENG_MENU_IND;
-    beacon_save = EE.aux.beacon_on;
     clr_indicator(IND_GRN);
 }
 
@@ -674,7 +665,6 @@ void menu_exit(void)
     ui_select_from_slot = false;
     ui_save = ui_index_clamp(ui_save);
     EE.uif.ui_index = ui_save;
-    EE.aux.beacon_on = beacon_save;
     ui_table_idx = ui_save;
     menu_beacon_mute = false;
     driver_mode = MODE_OFF;
@@ -684,6 +674,9 @@ void menu_exit(void)
      * отпускания кнопки, чтобы HOLD-повторы не попали в новый UI. */
     menu_entry_flash(1, 500, true);
     menu_wait_release();
+
+    /* Применить цвет и состояние подсветки сразу при выходе из меню */
+    aux_refresh_backlight();
 #endif
 }
 
@@ -723,8 +716,7 @@ static __attribute__((noinline)) void menu_entry_flash(uint8_t cnt, uint16_t on_
  *  - Vbat > ENG_VOLTAGE_MV (4.5 В, стенд/USB) -> инженерное меню, 6 красных;
  *  - иначе (аккумулятор)                          -> меню пользователя, 3 зелёных.
  * Меню хранится только в runtime ui_table_idx (session-only); выход/перезагрузка
- * возвращают обычный UI. EE.uif.ui_index / EE.aux.beacon_on перед входом
- * сохраняются в ui_save/beacon_save, чтобы menu_exit() их восстановил.
+ * возвращают обычный UI. EE.uif.ui_index перед входом сохраняется в ui_save.
  */
 void enter_menu_at_boot(void)
 {
@@ -744,10 +736,8 @@ void enter_menu_at_boot(void)
         return;
 
     ui_save = EE.uif.ui_index;
-    beacon_save = EE.aux.beacon_on;
-    /* Маяк в меню не мешает, но EE не трогаем — сессионный RAM-флаг,
-     * сбрасывается при выходе (menu_exit) и при любом питании (reset). */
     menu_beacon_mute = true;
+    stop_aux_if(IDM_BEACON, true);
 
     ui_table_idx = is_eng ? ENG_MENU_IND : USR_MENU_IND;
     menu_entry_flash(is_eng ? 6 : 3, is_eng ? 200 : 100, !is_eng);
@@ -1207,6 +1197,7 @@ void ui_init(void)
     ui_table_idx = ui_index_clamp(EE.uif.ui_index);
     step_default = EE.default_ui1;   // восстановить сохранённую яркость
     mode_default = EE.default_ui2;   // восстановить сохранённый режим
+    aux_refresh_backlight();
 }
 
 /**
