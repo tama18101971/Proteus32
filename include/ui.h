@@ -91,6 +91,7 @@ typedef enum {
     MODE_OFF,               /**< Driver off. */
     MODE_ON,                /**< Driver on (normal operation). */
     MODE_STROB,             /**< Strobe mode. */
+    MODE_BLOCK_ON,          /**< Driver on, but button brightness control locked. */
 
     MODE_MOON_LEVEL = 10U,  /**< Config: moonlight level. */
 
@@ -116,6 +117,12 @@ typedef enum {
 
 /** @brief Current driver mode. */
 extern DRIVER_Mode_t driver_mode;
+
+/**
+ * @brief Check whether the main LED driver is physically active.
+ * @return true in normal ON mode and in the button-locked ON mode.
+ */
+bool driver_is_active(void);
 
 /*******************************************************************************
  *  UI2 discrete brightness modes

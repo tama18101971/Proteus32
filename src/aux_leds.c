@@ -593,7 +593,7 @@ void slot_batt_ind(void) {
 #ifdef USE_BATTIND
 	/* ID+SID uses the DAC as an AUX waveform.  Do not start it over the
 	 * normal driver output; on_driver() handles the opposite transition. */
-	if ((driver_mode == MODE_ON) && EE.usr.id_plus_sid)
+    if (driver_is_active() && EE.usr.id_plus_sid)
 		return;
 	stop_aux_if(IDM_BEACON, false);
 	uint8_t flashes = bat_get_flashes();

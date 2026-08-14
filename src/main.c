@@ -73,7 +73,7 @@ static sleep_owner_t sleep_owner = SLEEP_OWNER_NORMAL;
  */
 static bool thermal_fast_required(void)
 {
-    if (driver_mode != MODE_ON)
+    if (!driver_is_active())
         return false;
 
     return (step_tc > THERMAL_FAST_STEP) || (limiter != 0U);
@@ -85,7 +85,7 @@ static bool thermal_fast_required(void)
  */
 static bool thermal_sleep_allowed(void)
 {
-    return (driver_mode == MODE_ON) &&
+    return driver_is_active() &&
            !thermal_fast_required() &&
            !ss_is_active() &&
            !button_sequence_active() &&
@@ -288,7 +288,7 @@ int main(void)
 
         if (thermal_sleep && !thermal_sleep_allowed())
         {
-            if (driver_mode == MODE_ON)
+            if (driver_is_active())
             {
                 need_sleep = false;
                 sleep_owner = SLEEP_OWNER_NORMAL;
@@ -338,7 +338,7 @@ int main(void)
              * write a regular brightness value during an input window. */
             if (!is_aux_mode(IDM_STROBE) &&
                 (thermal_fast_required() ||
-                 (driver_mode == MODE_ON && aux_is_active())))
+                 (driver_is_active() && aux_is_active())))
             {
                 (void)sample_and_scan();
             }
@@ -374,7 +374,7 @@ int main(void)
             {
                 need_save = 0;
             }
-            if (driver_mode == MODE_ON)
+            if (driver_is_active())
             {
                 if (thermal_sleep_allowed())
                 {

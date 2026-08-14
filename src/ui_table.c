@@ -24,6 +24,48 @@ extern uint8_t ui_table_idx;
  * the same gesture can unlock after a button wake without a flash write. */
 static uint8_t block_slot_idx = SLOTS_COUNT;
 
+/* UI1 normally turns the driver off on the first click.  When SLOT_BLOCK is
+ * assigned to a click-sequence slot, defer that one-click decision until the
+ * sequence timeout so a 3..6 click block command can be recognised. */
+static bool block_click_pending;
+
+/**
+ * @brief Check whether SLOT_BLOCK uses a click-sequence gesture.
+ * @return true when a configured even slot 3..6-click gesture starts block.
+ */
+static bool has_block_click_slot(void)
+{
+#ifdef USE_MAGIC_SLOTS
+    for (uint8_t slot = 2u; slot < SLOTS_COUNT; slot += 2u)
+    {
+        if (ob_GetSlot(slot) == SLOT_BLOCK)
+            return true;
+    }
+#endif
+    return false;
+}
+
+/**
+ * @brief Check whether an event is the unlock gesture for a slot.
+ * @param slot    Slot index (0..SLOTS_COUNT-1).
+ * @param evt     Button event to test.
+ * @param timeout True after click-sequence timeout.
+ * @return true when the event matches the slot's physical gesture.
+ */
+static bool slot_gesture_matches(uint8_t slot, const btn_evt_t *evt,
+                                 bool timeout)
+{
+    bool is_hold_slot = (slot & 1u) != 0u || slot == 0u;
+    uint8_t req_clicks = (slot <= 1u) ? (uint8_t)(slot + 1u)
+                                     : (uint8_t)((slot >> 1) + 2u);
+
+    if (is_hold_slot)
+        return evt->type == BTN_EVT_HOLD && evt->clicks == req_clicks;
+
+    return timeout && evt->type == BTN_EVT_CLICK_SEQ &&
+           evt->clicks == req_clicks;
+}
+
 /**
  * @brief Check whether a dispatch table entry matches the current event.
  * @param entry  Table entry to test.
@@ -151,11 +193,19 @@ static uint8_t execute_slot(uint8_t slot)
     if (op_idx < SLOT_OP_FIRST || op_idx > SLOT_OP_LAST)
         op_idx = SLOT_OP_EMPTY;
 #endif
+
+    /* While the driver is on, only the plain block operation is allowed.
+     * In particular SLOT_BLOCK_BEACON must not replace the normal beacon
+     * behaviour or alter the active driver state. */
+    if (driver_mode == MODE_ON && op_idx != SLOT_BLOCK)
+        return 0;
+
     if (op_idx < MAIN_OP_COUNT && main_op[op_idx])
     {
         off_auto_repeat();
         main_op[op_idx]();
-        if (driver_mode == MODE_BLOCK || driver_mode == MODE_BLOCK0)
+        if (driver_mode == MODE_BLOCK || driver_mode == MODE_BLOCK0 ||
+            driver_mode == MODE_BLOCK_ON)
             block_slot_idx = slot;
         return 1;
     }
@@ -173,27 +223,34 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout)
 {
     uint8_t idx = ui_table_idx;
 
-    if (mode == MODE_BLOCK || mode == MODE_BLOCK0)
+    if (mode == MODE_BLOCK || mode == MODE_BLOCK0 || mode == MODE_BLOCK_ON)
     {
         if (block_slot_idx < SLOTS_COUNT)
         {
-            bool is_hold_slot = (block_slot_idx & 1) != 0 || (block_slot_idx == 0);
-            uint8_t req_clicks = (block_slot_idx <= 1) ? (block_slot_idx + 1) : ((block_slot_idx >> 1) + 2);
-            bool matched = is_hold_slot ? (evt->type == BTN_EVT_HOLD && evt->clicks == req_clicks)
-                                        : (timeout && evt->type == BTN_EVT_CLICK_SEQ && evt->clicks == req_clicks);
-            if (matched)
+            if (slot_gesture_matches(block_slot_idx, evt, timeout))
             {
                 off_auto_repeat();
                 unblock_drv();
                 block_slot_idx = SLOTS_COUNT;
+                block_click_pending = false;
                 return 1;
             }
         }
         return 0;
     }
 
-    /* Common slot dispatch in UI1 / UI2 (MODE_OFF) */
-    if (mode == MODE_OFF && (idx >= 1u && idx <= 3u))
+    /* UI1's one-click OFF action must wait while a click-sequence slot may
+     * contain SLOT_BLOCK.  A later CLICK_SEQ either enters block or replays
+     * the ordinary one-click OFF below. */
+    if (mode == MODE_ON && idx == 1u && evt->type == BTN_EVT_RELEASED &&
+        evt->clicks == 1u && has_block_click_slot())
+    {
+        block_click_pending = true;
+        return 1;
+    }
+
+    /* Common slot dispatch in UI1 / UI2 (MODE_OFF and MODE_ON). */
+    if ((mode == MODE_OFF || mode == MODE_ON) && (idx >= 1u && idx <= 3u))
     {
         int8_t slot = -1;
         if (evt->type == BTN_EVT_HOLD)
@@ -208,7 +265,28 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout)
         }
 
         if (slot >= 0)
-            return execute_slot((uint8_t)slot);
+        {
+            uint8_t dispatched = execute_slot((uint8_t)slot);
+            if (dispatched)
+            {
+                block_click_pending = false;
+                return 1;
+            }
+        }
+    }
+
+    /* Restore UI1's normal one-click OFF semantics if the sequence ended
+     * without matching the configured SLOT_BLOCK gesture.  Other sequences
+     * must continue to the normal UI table (notably UI1's two-click turbo). */
+    if (mode == MODE_ON && idx == 1u && timeout &&
+        evt->type == BTN_EVT_CLICK_SEQ && block_click_pending)
+    {
+        block_click_pending = false;
+        if (evt->clicks == 1u)
+        {
+            off_driver_false();
+            return 1;
+        }
     }
 
     /* Sub-modes HOLD -> MENU_EXIT */

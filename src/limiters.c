@@ -130,7 +130,7 @@ void scan_limiters(void)
 
     fault_streak = 0u;
     thermal_fault = false;
-    if (driver_mode == MODE_ON)
+    if (driver_is_active())
         update_limiters(get_exact_temp_adc());
 }
 
@@ -148,7 +148,7 @@ void scan_limiters_fault(void)
         return;
 
     thermal_fault = true;
-    if (driver_mode != MODE_ON)
+    if (!driver_is_active())
         return;
 
     state.flags |= THERMAL_FLAG_ERROR;

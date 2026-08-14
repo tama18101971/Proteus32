@@ -570,7 +570,7 @@ void scan_voltage(void)
 
     volt_max_mode = calc_volt_max_mode(eff_vcode);
 
-    if (driver_mode != MODE_ON) return;
+    if (!driver_is_active()) return;
 
     /* Ramping UI (brightness control UI1) */
     if (ui_index == 1)

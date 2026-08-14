@@ -73,6 +73,15 @@ static uint8_t ui_cfg_idx = 0xFF; // last ui_table_idx the button timing was app
 
 static const uint16_t modes[MODES_QTY] = {0, 20, 74, 136, 220, 360, 511};
 
+/**
+ * @brief Check whether the main LED driver is physically active.
+ * @return true in normal ON mode and in the button-locked ON mode.
+ */
+bool driver_is_active(void)
+{
+    return driver_mode == MODE_ON || driver_mode == MODE_BLOCK_ON;
+}
+
 /*******************************************************************************
  *  Power / DAC helpers (Proteus003)
  ******************************************************************************/
@@ -475,7 +484,10 @@ void off_strobe(void)
 void slot_block(void)
 {
 #ifdef USE_BLOCK
-    driver_mode = MODE_BLOCK;
+    if (driver_mode == MODE_ON)
+        driver_mode = MODE_BLOCK_ON;
+    else
+        driver_mode = MODE_BLOCK;
     aux_off();
 #endif
 }
@@ -493,7 +505,10 @@ void slot_block_beacon(void)
 void unblock_drv(void)
 {
 #ifdef USE_BLOCK
-    driver_mode = MODE_OFF;
+    if (driver_mode == MODE_BLOCK_ON)
+        driver_mode = MODE_ON;
+    else
+        driver_mode = MODE_OFF;
     aux_on();
 #endif
 }
