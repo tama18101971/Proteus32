@@ -1,1 +1,0 @@
-/* div32.c — no longer needed: zero runtime division in firmware */
