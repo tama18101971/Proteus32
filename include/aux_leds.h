@@ -422,7 +422,7 @@ bool handle_aux(void);
              brightness0, brightness1)
 
 #define INFO_RED  MAKE_CMD_MS(RED_LED, 0, 1, 448, 896, 1, 0)  /* 1 красная ~448/896мс */
-#define INFO_GRN  MAKE_CMD_MS(GRN_LED, 0, 1, 224, 1120, 1, 0) /* 1 зелёная ~224/1120мс */
+#define INFO_GRN  MAKE_CMD_MS(GRN_LED, 0, 2, 224, 112, 1, 0)  /* 2 зелёных ~224/112мс */
 #define ERRO_RED  MAKE_CMD_MS(RED_LED, 0, 3, 15, 90, 1, 0)    /* 3 красных ~15/90мс */
 #define DANG_RED  MAKE_CMD_MS(RED_LED, 0, 1, 15, 90, 1, 0)    /* 1 красная ~15/90мс */
 
