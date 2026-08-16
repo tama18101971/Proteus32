@@ -349,10 +349,9 @@ int main(void)
 #ifdef UART_DEBUG
             uint16_t out = (step_user > limiter) ? (step_user - limiter) : 0;
 #endif
-            EE_PRINTF("[NORMAL] T=%u F=%d I=%d L=%d P=%u S=%u V=%umV ramp=%u\r\n",
+            EE_PRINTF("[NORMAL] T=%u F=%d I=%d L=%d P=%u S=%u\r\n",
                       raw_temperature_adc, state.filtered_temp,
-                      state.integral, state.prev_limiter, out, step_user,
-                      vbat_to_mv_calibrated(), max_step);
+                      state.integral, state.prev_limiter, out, step_user);
         }
 
         if (tick_5s())

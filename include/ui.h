@@ -450,7 +450,7 @@ void chtk_clickX(void);
 /**
  * @brief Show an invalid user-menu selection without changing settings.
  */
-void menu_invalid_selection(void);
+void ui_invalid_selection(void);
 
 /**
  * @brief Enter beacon mode config.

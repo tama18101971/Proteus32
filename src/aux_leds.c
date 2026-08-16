@@ -619,14 +619,14 @@ void slot_batt_ind(void) {
  * @brief Включение (одна зелёная вспышка)
  */
 void aux_on(void) {
-	start_aux_cmd(INFO_GRN, true, IDM_OTHER, AWU_120MS);
+	start_aux_cmd(INFO_GRN, true, IDM_OTHER, AWU_60MS);
 }
 
 /**
  * @brief Выключение (одна красная вспышка)
  */
 void aux_off(void) {
-	start_aux_cmd(INFO_RED, true, IDM_OTHER, AWU_120MS);
+	start_aux_cmd(INFO_RED, true, IDM_OTHER, AWU_60MS);
 }
 
 /**
@@ -635,6 +635,13 @@ void aux_off(void) {
  */
 void aux_err(awu_tick_t delay) {
 	start_aux_cmd(ERRO_RED, true, IDM_OTHER, delay);
+}
+
+/**
+ * @brief Индикация блокировки (одна короткая красная вспышка, DANG_RED)
+ */
+void aux_dang(void) {
+	start_aux_cmd(DANG_RED, true, IDM_OTHER, AWU_IMMEDIATELY);
 }
 
 /**
