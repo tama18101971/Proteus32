@@ -638,6 +638,13 @@ void aux_err(awu_tick_t delay) {
 }
 
 /**
+ * @brief Индикация блокировки (одна короткая красная вспышка, DANG_RED)
+ */
+void aux_dang(void) {
+	start_aux_cmd(DANG_RED, true, IDM_OTHER, AWU_IMMEDIATELY);
+}
+
+/**
  * @brief Индикация числа (зелёные вспышки или одна красная)
  * @param count — количество (0 = одна красная, иначе count зелёных)
  */

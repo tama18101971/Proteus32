@@ -1327,6 +1327,13 @@ void ui_process(void)
     {
         case BTN_EVT_PRESSED:
             tick_5s_reset();
+            /* В режимах блокировки работает только жест разблокировки;
+             * каждое нажатие подтверждается красной вспышкой DANG_RED. */
+            if (driver_mode == MODE_BLOCK || driver_mode == MODE_BLOCK0 ||
+                driver_mode == MODE_BLOCK_ON)
+            {
+                aux_dang();
+            }
             if (ui_idx == 1)
             {
                 /* The UI1 ceiling is a sag ratchet.  A press starts a new

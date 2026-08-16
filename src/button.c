@@ -288,6 +288,7 @@ void button_tick(void)
                 stop_bit = false;
                 d_time = 1;
                 state = ST_PRESSED;
+                emit_event(BTN_EVT_PRESSED);
                 break;
             }
             u_time++;

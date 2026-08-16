@@ -302,6 +302,11 @@ void aux_off(void);
 void aux_err(awu_tick_t delay);
 
 /**
+ * @brief One short red flash (lock-mode press indication).
+ */
+void aux_dang(void);
+
+/**
  * @brief Main AUX processing loop (called on each AWU wake).
  * @return true if commands still active (AWU will be restarted), false if all done.
  */
