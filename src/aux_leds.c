@@ -619,14 +619,14 @@ void slot_batt_ind(void) {
  * @brief Включение (одна зелёная вспышка)
  */
 void aux_on(void) {
-	start_aux_cmd(INFO_GRN, true, IDM_OTHER, AWU_120MS);
+	start_aux_cmd(INFO_GRN, true, IDM_OTHER, AWU_60MS);
 }
 
 /**
  * @brief Выключение (одна красная вспышка)
  */
 void aux_off(void) {
-	start_aux_cmd(INFO_RED, true, IDM_OTHER, AWU_120MS);
+	start_aux_cmd(INFO_RED, true, IDM_OTHER, AWU_60MS);
 }
 
 /**
