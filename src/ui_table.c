@@ -306,7 +306,7 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout)
                 select_slot();
                 return 1;
             }
-            menu_invalid_selection();
+            ui_invalid_selection();
             return 0;
         }
 

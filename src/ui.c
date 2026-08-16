@@ -543,8 +543,7 @@ void calibration(void)
     {
         /* Do not save offsets derived from a stale or failed ADC pair. */
         EE_PRINTF("[CAL] rejected: invalid voltage sample\r\n");
-        off_auto_repeat();
-        aux_err(AWU_15MS);
+        ui_invalid_selection();
         return;
     }
 
@@ -583,10 +582,7 @@ void calibration(void)
     if (ok)
         clr_indicator(IND_GRN);
     else
-    {
-        off_auto_repeat();
-        aux_err(AWU_15MS);
-    }
+        ui_invalid_selection();
 #endif
 }
 
@@ -818,8 +814,7 @@ static bool menu_clicks_valid(uint8_t min_clicks, uint8_t max_clicks)
     if (clicks_count >= min_clicks && clicks_count <= max_clicks)
         return true;
 
-    off_auto_repeat();
-    aux_err(AWU_15MS);
+    ui_invalid_selection();
     return false;
 }
 
@@ -829,7 +824,7 @@ static bool menu_clicks_valid(uint8_t min_clicks, uint8_t max_clicks)
  * Kept public because the dispatch table owns the magic-slot range check,
  * while LED control belongs to this UI module.
  */
-void menu_invalid_selection(void)
+void ui_invalid_selection(void)
 {
     off_auto_repeat();
     aux_err(AWU_15MS);
