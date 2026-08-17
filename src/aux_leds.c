@@ -616,7 +616,7 @@ void slot_batt_ind(void) {
 }
 
 /**
- * @brief Включение (одна зелёная вспышка)
+ * @brief Включение (две зелёные вспышки)
  */
 void aux_on(void) {
 	start_aux_cmd(INFO_GRN, true, IDM_OTHER, AWU_60MS);

@@ -146,7 +146,7 @@ __attribute__((noinline)) static void wake_i2c(void)
  */
 int main(void)
 {
-    wait_ms(500);
+    wait_ms(250);
 
 #ifdef UART_DEBUG
     uart_init(460800);

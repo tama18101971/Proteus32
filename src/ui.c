@@ -766,13 +766,11 @@ void enter_menu_at_boot(void)
     /* Индикация доступного меню до опроса кнопки: 0.5 с. */
     menu_entry_flash(1, 500, is_eng ? RED_LED : GRN_LED);
 
-    if (!Pressed)
-        return;
+    if (!Pressed) return;
 
     wait_ms(MENU_ENTRY_DEBOUNCE_MS);
 
-    if (!Pressed)
-        return;
+    if (!Pressed) return;
 
     ui_save = EE.uif.ui_index;
     menu_beacon_mute = true;
