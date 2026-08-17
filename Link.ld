@@ -24,7 +24,7 @@ SECTIONS
     .vector :
     {
         *(.vector);
-        . = ALIGN(64);
+        . = ALIGN(4);
     } >FLASH AT>FLASH
 
     .highcode_initlalign :
@@ -72,22 +72,6 @@ SECTIONS
         *(.rodata*)
         *(.gnu.linkonce.t.*)
         . = ALIGN(4);
-        __fsymtab_start = .;
-        KEEP(*(FSymTab))
-        __fsymtab_end = .;
-        . = ALIGN(4);
-        __vsymtab_start = .;
-        KEEP(*(VSymTab))
-        __vsymtab_end = .;
-        . = ALIGN(4);
-        __rt_init_start = .;
-        KEEP(*(SORT(.rti_fn*)))
-        __rt_init_end = .;
-        . = ALIGN(4);
-        __rtmsymtab_start = .;
-        KEEP(*(RTMSymTab))
-        __rtmsymtab_end = .;
-        . = ALIGN(4);
     } >FLASH AT>FLASH
 
     .fini :
@@ -98,47 +82,6 @@ SECTIONS
 
     PROVIDE( _etext = . );
     PROVIDE( _eitcm = . );
-
-    .preinit_array :
-    {
-        PROVIDE_HIDDEN (__preinit_array_start = .);
-        KEEP (*(.preinit_array))
-        PROVIDE_HIDDEN (__preinit_array_end = .);
-    } >FLASH AT>FLASH
-
-    .init_array :
-    {
-        PROVIDE_HIDDEN (__init_array_start = .);
-        KEEP (*(SORT_BY_INIT_PRIORITY(.init_array.*) SORT_BY_INIT_PRIORITY(.ctors.*)))
-        KEEP (*(.init_array EXCLUDE_FILE (*crtbegin.o *crtbegin?.o *crtend.o *crtend?.o ) .ctors))
-        PROVIDE_HIDDEN (__init_array_end = .);
-    } >FLASH AT>FLASH
-
-    .fini_array :
-    {
-        PROVIDE_HIDDEN (__fini_array_start = .);
-        KEEP (*(SORT_BY_INIT_PRIORITY(.fini_array.*) SORT_BY_INIT_PRIORITY(.dtors.*)))
-        KEEP (*(.fini_array EXCLUDE_FILE (*crtbegin.o *crtbegin?.o *crtend.o *crtend?.o ) .dtors))
-        PROVIDE_HIDDEN (__fini_array_end = .);
-    } >FLASH AT>FLASH
-
-    .ctors :
-    {
-        KEEP (*crtbegin.o(.ctors))
-        KEEP (*crtbegin?.o(.ctors))
-        KEEP (*(EXCLUDE_FILE (*crtend.o *crtend?.o ) .ctors))
-        KEEP (*(SORT(.ctors.*)))
-        KEEP (*(.ctors))
-    } >FLASH AT>FLASH
-
-    .dtors :
-    {
-        KEEP (*crtbegin.o(.dtors))
-        KEEP (*crtbegin?.o(.dtors))
-        KEEP (*(EXCLUDE_FILE (*crtend.o *crtend?.o ) .dtors))
-        KEEP (*(SORT(.dtors.*)))
-        KEEP (*(.dtors))
-    } >FLASH AT>FLASH
 
     .dalign :
     {

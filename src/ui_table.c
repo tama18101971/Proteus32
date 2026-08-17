@@ -280,11 +280,11 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout)
         {
             if (evt->clicks == 1) slot = 0;
             else if (evt->clicks == 2) slot = 1;
-            else if (evt->clicks >= 3 && evt->clicks <= 6) slot = (int8_t)((evt->clicks - 2) * 2 + 1);
+            else if (evt->clicks >= 3 && evt->clicks <= 6) slot = (int8_t)(((evt->clicks - 2) << 1) + 1);
         }
         else if (timeout && (evt->type == BTN_EVT_CLICK_SEQ))
         {
-            if (evt->clicks >= 3 && evt->clicks <= 6) slot = (int8_t)((evt->clicks - 2) * 2);
+            if (evt->clicks >= 3 && evt->clicks <= 6) slot = (int8_t)((evt->clicks - 2) << 1);
         }
 
         if (slot >= 0)

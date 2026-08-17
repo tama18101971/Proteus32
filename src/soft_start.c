@@ -44,7 +44,7 @@ void ss_init(uint16_t target, uint16_t previous, SoftStartSpeed_t speed)
 		return;
 	}
 
-	int8_t s_size = (target > previous ? 1 : -1) * speed;
+	int8_t s_size = (target > previous) ? (int8_t)speed : (int8_t)-(int8_t)speed;
 
 	if (s_size != 0)
 	{

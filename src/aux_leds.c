@@ -235,6 +235,10 @@ void off_aux_cmd(bool stop_lsi) {
 	}
 }
 
+static inline uint32_t make_count_cmd(LED_Bits_t device, uint8_t flashes, uint8_t brightness0) {
+	return MAKE_CMD(device, 0, flashes, AWU_PSC_256, 38, AWU_PSC_1024, 28, brightness0, 0);
+}
+
 #ifdef USE_BATTIND
 /**
  * @brief Формирование команды индикации количества вспышек
@@ -285,7 +289,7 @@ static uint32_t set_aux_count(uint8_t count) {
 		brightness0 = AUX_HBL_DIRECT_STEP;
 	}
 
-	return MAKE_CMD(device, 0, flashes, AWU_PSC_256, 38, AWU_PSC_1024, 28, brightness0, 0);
+	return make_count_cmd(device, flashes, brightness0);
 }
 #endif
 
@@ -657,10 +661,5 @@ void aux_dang(void) {
 void aux_count(uint8_t count) {
 	LED_Bits_t dev = count ? GRN_LED : RED_LED;
 	uint8_t flashes = count ? (count > 15 ? 15 : count) : 1;
-	uint32_t cmd = MAKE_CMD(dev, 0, flashes,
-	                        AWU_PSC_256, 38,
-	                        AWU_PSC_1024, 28,
-	                        1, 0);
-
-	start_aux_cmd(cmd, true, IDM_OTHER, AWU_120MS);
+	start_aux_cmd(make_count_cmd(dev, flashes, 1), true, IDM_OTHER, AWU_120MS);
 }

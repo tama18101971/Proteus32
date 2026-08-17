@@ -408,7 +408,7 @@ void slot_tactical(void)
 /** @brief Toggle backlight type (slot). */
 void slot_backlight(void)
 {
-    EE.aux.bcklight_type = !EE.aux.bcklight_type;
+    EE.aux.bcklight_type ^= 1;
     clr_indicator((ind_clr_t)EE.aux.bcklight_type);
     aux_refresh_backlight();
 }
@@ -416,14 +416,14 @@ void slot_backlight(void)
 /** @brief Toggle beacon on/off (slot). */
 void slot_beacon(void)
 {
-    EE.aux.beacon_on = !EE.aux.beacon_on;
+    EE.aux.beacon_on ^= 1;
     clr_indicator((ind_clr_t)EE.aux.beacon_on);
 }
 
 /** @brief Toggle memory recall (slot). */
 void slot_memory(void)
 {
-    EE.uif.use_memory = !EE.uif.use_memory;
+    EE.uif.use_memory ^= 1;
     clr_indicator((ind_clr_t)EE.uif.use_memory);
 }
 
@@ -533,7 +533,7 @@ void lock_light_on(DRIVER_Mode_t prev_mode)
     direction = DIR_UP;
     mode_current = CMODE_MIN;
     set_curri(CMODE_MIN);
-    lock_light_ticks = (uint16_t)(((uint16_t)(EE.usr.lock_min_time & 0x03u) + 1u) * (15u * 160u));
+    lock_light_ticks = (uint16_t)(((uint16_t)(EE.usr.lock_min_time & 0x03u) + 1u) * 2400u);
 #endif
 }
 
@@ -674,12 +674,27 @@ void save_def_ui2(void)
  *  #ifdef USE_MENU гейтит только тело — как slot_batt_ind()/calibration().
  ******************************************************************************/
 
+#ifdef USE_MENU
+/** @brief Helper to enter a menu sub-mode and flash current value. */
+static void enter_submode(DRIVER_Mode_t mode, uint8_t count)
+{
+    driver_mode = mode;
+    aux_count(count);
+}
+
+/** @brief Helper to finish a menu sub-mode: flash new count and return to OFF. */
+static void menu_submode_done(void)
+{
+    aux_count(clicks_count);
+    driver_mode = MODE_OFF;
+}
+#endif
+
 /** @brief Enter moonlight level setting mode (engineering menu). */
 void enter_ml_mode(void)
 {
 #ifdef USE_MENU
-    driver_mode = MODE_MOON_LEVEL;
-    aux_count(ob_GetMl());
+    enter_submode(MODE_MOON_LEVEL, ob_GetMl());
 #endif
 }
 
@@ -688,8 +703,7 @@ void ml_clickX(void)
 {
 #ifdef USE_MENU
     ob_SetMl(clicks_count);
-    aux_count(clicks_count);
-    driver_mode = MODE_OFF;
+    menu_submode_done();
 #endif
 }
 
@@ -827,8 +841,7 @@ void enter_menu_at_boot(void)
 void enter_chtk_mode(void)
 {
 #ifdef USE_MENU
-    driver_mode = MODE_CTK_H;
-    aux_count(EE.usr.t_calibr);
+    enter_submode(MODE_CTK_H, EE.usr.t_calibr);
 #endif
 }
 
@@ -866,13 +879,11 @@ void ui_invalid_selection(void)
 void chtk_clickX(void)
 {
 #ifdef USE_MENU
-    if (!menu_clicks_valid(1u, 15u))
+    if (menu_clicks_valid(1u, 15u))
     {
-        driver_mode = MODE_OFF;
-        return;
+        EE.usr.t_calibr = clicks_count;
+        menu_submode_done();
     }
-    EE.usr.t_calibr = clicks_count;
-    aux_count(clicks_count);
     driver_mode = MODE_OFF;
 #endif
 }
@@ -893,7 +904,7 @@ void slot_eauxmode(void)
 void slot_ipsmode(void)
 {
 #ifdef USE_MENU
-    EE.usr.id_plus_sid = !EE.usr.id_plus_sid;
+    EE.usr.id_plus_sid ^= 1;
     clr_indicator((ind_clr_t)EE.usr.id_plus_sid);
 #endif
 }
@@ -902,8 +913,7 @@ void slot_ipsmode(void)
 void enter_bm_mode(void)
 {
 #ifdef USE_MENU
-    driver_mode = MODE_BM;
-    aux_count(EE.aux.beacon_mode + 1);
+    enter_submode(MODE_BM, (uint8_t)(EE.aux.beacon_mode + 1u));
 #endif
 }
 
@@ -911,13 +921,11 @@ void enter_bm_mode(void)
 void bm_clickX(void)
 {
 #ifdef USE_MENU
-    if (!menu_clicks_valid(1u, 4u))
+    if (menu_clicks_valid(1u, 4u))
     {
-        driver_mode = MODE_OFF;
-        return;
+        EE.aux.beacon_mode = clicks_count - 1u;
+        menu_submode_done();
     }
-    EE.aux.beacon_mode = clicks_count - 1;
-    aux_count(clicks_count);
     driver_mode = MODE_OFF;
 #endif
 }
@@ -926,8 +934,7 @@ void bm_clickX(void)
 void enter_bt_mode(void)
 {
 #ifdef USE_MENU
-    driver_mode = MODE_BT;
-    aux_count((EE.aux.beacon_type >> 1) + 1);
+    enter_submode(MODE_BT, (uint8_t)((EE.aux.beacon_type >> 1) + 1u));
 #endif
 }
 
@@ -935,13 +942,11 @@ void enter_bt_mode(void)
 void bt_clickX(void)
 {
 #ifdef USE_MENU
-    if (!menu_clicks_valid(1u, 3u))
+    if (menu_clicks_valid(1u, 3u))
     {
-        driver_mode = MODE_OFF;
-        return;
+        EE.aux.beacon_type = (uint8_t)(1u << (clicks_count - 1u));
+        menu_submode_done();
     }
-    EE.aux.beacon_type = (1 << (clicks_count - 1));
-    aux_count(clicks_count);
     driver_mode = MODE_OFF;
 #endif
 }
@@ -950,8 +955,7 @@ void bt_clickX(void)
 void enter_bl_mode(void)
 {
 #ifdef USE_MENU
-    driver_mode = MODE_BL;
-    aux_count(EE.aux.bcklight_color + 1);
+    enter_submode(MODE_BL, (uint8_t)(EE.aux.bcklight_color + 1u));
 #endif
 }
 
@@ -959,13 +963,11 @@ void enter_bl_mode(void)
 void bl_clickX(void)
 {
 #ifdef USE_MENU
-    if (!menu_clicks_valid(1u, 2u))
+    if (menu_clicks_valid(1u, 2u))
     {
-        driver_mode = MODE_OFF;
-        return;
+        EE.aux.bcklight_color = clicks_count - 1u;
+        menu_submode_done();
     }
-    EE.aux.bcklight_color = clicks_count - 1;
-    aux_count(clicks_count);
     driver_mode = MODE_OFF;
 #endif
 }
@@ -974,8 +976,7 @@ void bl_clickX(void)
 void enter_uis_mode(void)
 {
 #ifdef USE_MENU
-    driver_mode = MODE_UIS;
-    aux_count(ui_save);
+    enter_submode(MODE_UIS, ui_save);
 #endif
 }
 
@@ -996,7 +997,6 @@ void uis_clickX(void)
         return;
     }
     ui_save = clicks_count;
-    aux_count(clicks_count);
 
     if (ui_select_from_slot)
     {
@@ -1007,7 +1007,7 @@ void uis_clickX(void)
         ui_table_idx = clicks_count;
         ui_select_from_slot = false;
     }
-    driver_mode = MODE_OFF;
+    menu_submode_done();
 #endif
 }
 
@@ -1015,8 +1015,7 @@ void uis_clickX(void)
 void enter_lm_en_mode(void)
 {
 #ifdef USE_MENU
-    driver_mode = MODE_LM_EN;
-    aux_count(EE.usr.lock_min_en ? 2u : 1u);
+    enter_submode(MODE_LM_EN, EE.usr.lock_min_en ? 2u : 1u);
 #endif
 }
 
@@ -1024,13 +1023,11 @@ void enter_lm_en_mode(void)
 void lm_en_clickX(void)
 {
 #ifdef USE_MENU
-    if (!menu_clicks_valid(1u, 2u))
+    if (menu_clicks_valid(1u, 2u))
     {
-        driver_mode = MODE_OFF;
-        return;
+        EE.usr.lock_min_en = (clicks_count == 2u);
+        menu_submode_done();
     }
-    EE.usr.lock_min_en = (clicks_count == 2u) ? 1u : 0u;
-    aux_count(clicks_count);
     driver_mode = MODE_OFF;
 #endif
 }
@@ -1039,8 +1036,7 @@ void lm_en_clickX(void)
 void enter_lm_time_mode(void)
 {
 #ifdef USE_MENU
-    driver_mode = MODE_LM_TIME;
-    aux_count((uint8_t)(EE.usr.lock_min_time + 1u));
+    enter_submode(MODE_LM_TIME, (uint8_t)(EE.usr.lock_min_time + 1u));
 #endif
 }
 
@@ -1048,13 +1044,11 @@ void enter_lm_time_mode(void)
 void lm_time_clickX(void)
 {
 #ifdef USE_MENU
-    if (!menu_clicks_valid(1u, 4u))
+    if (menu_clicks_valid(1u, 4u))
     {
-        driver_mode = MODE_OFF;
-        return;
+        EE.usr.lock_min_time = clicks_count - 1u;
+        menu_submode_done();
     }
-    EE.usr.lock_min_time = clicks_count - 1u;
-    aux_count(clicks_count);
     driver_mode = MODE_OFF;
 #endif
 }
@@ -1089,9 +1083,8 @@ void exit_magic_mode(void)
 void select_slot(void)
 {
 #ifdef USE_MAGIC_SLOTS
-    uint8_t slot = clicks_count - 1;
-    driver_mode = MODE_SLOT01 + slot;
-    aux_count(ob_GetSlot(slot));
+    uint8_t slot = clicks_count - 1u;
+    enter_submode((DRIVER_Mode_t)(MODE_SLOT01 + slot), ob_GetSlot(slot));
 #else
     (void)0;
 #endif
@@ -1241,10 +1234,7 @@ void step_down_ui2(void)
     if (mode_current != CMODE_MOON)
     {
         ps.use_prev = false;
-        if (mode_current > CMODE_MIN)
-            mode_current = get_mode_down_ui2();
-        else
-            mode_current = get_up_mode(CMODE_MAX);
+        mode_current = (mode_current > CMODE_MIN) ? get_mode_down_ui2() : get_up_mode(CMODE_MAX);
         set_curri(mode_current);
     }
 }

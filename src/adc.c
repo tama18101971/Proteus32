@@ -183,11 +183,8 @@ void adc_init(void)
     // 2. Делим PCLK2 на 4 для ADC (биты [15:14] = 0b01)
     RCC->CFGR0 = (RCC->CFGR0 & ~(0x3 << 14)) | (0x1 << 14);
 
-    // 3. PD2 — аналоговый вход (верхний узел делителя NTC)
-    GPIOD->CFGLR &= ~(0xF << 8); // 0b0000 = Analog Input
-
-    // 4. PD3 — выход Push-Pull 50MHz (искусственная "земля" нижнего плеча делителя)
-    GPIOD->CFGLR = (GPIOD->CFGLR & ~(0xF << 12)) | (0x3 << 12);
+    // 3. PD2 — аналоговый вход (NTC), PD3 — Push-Pull 50MHz (делитель)
+    GPIOD->CFGLR = (GPIOD->CFGLR & ~(0xFF << 8)) | (0x3 << 12);
     GPIOD->BSHR = (1 << 3);  // PD3 = 1, делитель обесточен
 
     // 5. Сброс ADC1 через RCC (как делает SDK)
@@ -340,11 +337,8 @@ void adc_stop(void)
     /* 2. Отключаем тактирование ADC1 (бит 9 APB2PCENR) */
     RCC->APB2PCENR &= ~RCC_ADC1EN;
 
-    /* 3. PD2 и PD3 переводим в Analog Input — высокое импедансное состояние (Hi-Z)
-     *    PD3 (искусственная "земля" нижнего плеча делителя) — Hi-Z, делитель обесточен
-     *    PD2 (верхний узел делителя, вход NTC) — Hi-Z, нет утечки через АЦП */
-    GPIOD->CFGLR &= ~(0xF << 8);   /* PD2: 0b0000 = Analog Input (Hi-Z) */
-    GPIOD->CFGLR &= ~(0xF << 12);  /* PD3: 0b0000 = Analog Input (Hi-Z) */
+    /* 3. PD2 и PD3 переводим в Analog Input — высокое импедансное состояние (Hi-Z) */
+    GPIOD->CFGLR &= ~(0xFF << 8);  /* PD2/PD3: 0b0000 = Analog Input (Hi-Z) */
 }
 
 #if defined(UART_DEBUG) || defined(PRINT_ADC)
@@ -496,7 +490,7 @@ extern volatile uint8_t need_sleep;
  * Вечный цикл STANDBY: функция не возвращается (в отличие от AWU_Sleep_Now(),
  * который мог вернуться и отменить PDDS).
  */
-static void down_forever(void)
+__attribute__((noinline, noreturn)) static void down_forever(void)
 {
     /* 1. Обесточить нагрузку: AUX-светодиоды погасить через штатные ф-ции
      *    (уважают особенность PC6/PC7), питание DAC (PD0)=0. */
@@ -508,7 +502,7 @@ static void down_forever(void)
      *    утечки при зажатой кнопке на разряженном АКБ) и делитель NTC PD2/PD3 → Hi-Z Analog. */
     GPIOC->OUTDR &= ~(1 << 3);
     GPIOC->CFGLR &= ~((0x0F << 4) | (0x0F << 8) | (0x0F << 12));
-    GPIOD->CFGLR &= ~((0x0F << 8) | (0x0F << 12));
+    GPIOD->CFGLR &= ~(0xFF << 8);
 
     /* 3. Остановить AWU и LSI — не потребляют ток в STANDBY и не дают
      *    события пробуждения (EXTI Line9). */
@@ -572,7 +566,6 @@ void scan_voltage(void)
         {
             voff_count_off = 0;
             down_forever();
-            return;
         }
         return;
     }
@@ -593,20 +586,18 @@ void scan_voltage(void)
                 if (down_count)
                 {
                     down_count--;
-                    step_user = step_user - (step_user >> 2);
+                    step_user -= (step_user >> 2);
                     set_current(step_user, SS_SLOW);
                     aux_err(AWU_IMMEDIATELY);       // сигнализируем о сбросе
                 }
             }
+            return;
         }
-        else
-        {
-            voff_count = 0;
 
-            /* Recovery: voltage above top threshold (vbat > 3100) */
-            if (eff_vcode <= (int32_t)MV_GE(CUT_RECOVERY_MV))
-                down_count = 5;
-        }
+        voff_count = 0;
+        /* Recovery: voltage above top threshold (vbat > 3100) */
+        if (eff_vcode <= (int32_t)MV_GE(CUT_RECOVERY_MV))
+            down_count = 5;
     }
     /* Discrete UI (mode-based UI2: ui_index 2 или 3) */
     else
@@ -625,11 +616,10 @@ void scan_voltage(void)
                     aux_err(AWU_IMMEDIATELY);       // сигнализируем о сбросе
                 }
             }
+            return;
         }
-        else
-        {
-            voff_count = 0;
-        }
+
+        voff_count = 0;
     }
 }
 

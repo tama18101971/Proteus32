@@ -241,28 +241,8 @@ void button_tick(void)
             }
             break;
 
-        /* -- ST_HOLD: first hold tick emitted, waiting repeat interval -- */
+        /* -- ST_HOLD / ST_HOLD_REPEAT: hold timing and repeating hold events -- */
         case ST_HOLD:
-            if (falling)
-            {
-                hold_active = false;
-                clicks = 0;
-                long_mask = 0;
-                u_time = 0;
-                state = ST_RELEASE_WAIT;
-                break;
-            }
-            d_time++;
-            if (stop_bit || (cfg.repeat_ticks && d_time >= cfg.repeat_ticks))
-            {
-                d_time = 1;
-                if (!stop_bit)
-                    emit_event(BTN_EVT_HOLD);
-                state = ST_HOLD_REPEAT;
-            }
-            break;
-
-        /* -- ST_HOLD_REPEAT: repeating hold events -- */
         case ST_HOLD_REPEAT:
             if (falling)
             {
@@ -274,10 +254,12 @@ void button_tick(void)
                 break;
             }
             d_time++;
-            if (!stop_bit && cfg.repeat_ticks && d_time >= cfg.repeat_ticks)
+            if ((state == ST_HOLD && stop_bit) || (cfg.repeat_ticks && d_time >= cfg.repeat_ticks))
             {
                 d_time = 1;
-                emit_event(BTN_EVT_HOLD);
+                if (!stop_bit)
+                    emit_event(BTN_EVT_HOLD);
+                state = ST_HOLD_REPEAT;
             }
             break;
 
