@@ -66,7 +66,9 @@ static bool ui1_was_pressed;
 static bool ui_select_from_slot;
 static bool hold_guard;          // suppress HOLD repeats until the button is released
 static uint8_t ui_cfg_idx = 0xFF; // last ui_table_idx the button timing was applied for
+#ifdef USE_BLOCK
 static DRIVER_Mode_t saved_block_mode = MODE_BLOCK;
+#endif
 static uint16_t lock_light_ticks = 0;
 
 /*******************************************************************************
@@ -563,8 +565,9 @@ void reset2def(void)
 }
 
 /** @brief Measure Vbat (в кодах Vrefint) and temperature, save vc/tc to Option Bytes.
- * vc/tc допускаются только в окне ±0.29 В (VC_CLIP_MAX/MIN); вне окна
- * калибровка отвергается целиком и прежние значения OB сохраняются. */
+ * vc/tc допускаются только в окне ±0.29 В (VC_CLIP_MAX/MIN) и ±5 °C
+ * (TC_CLIP_MAX/MIN, ~±44 кода); вне окна калибровка отвергается целиком
+ * и прежние значения OB сохраняются. */
 void calibration(void)
 {
 #ifdef USE_MENU
@@ -712,13 +715,16 @@ void ml_clickX(void)
  * удержание превратилось бы в HOLD уже в новом UI. */
 #define MENU_ENTRY_RELEASE_MS   3000u
 
+#ifdef USE_MENU
 /** @brief Мигнуть индикатором cnt раз (для подтверждения входа в меню).
  * @param cnt     Число вспышек.
  * @param on_ms   Длительность свечения/паузы, мс.
  * @param device  Битовая маска LED (RED_LED и/или GRN_LED).
  */
 static __attribute__((noinline)) void menu_entry_flash(uint8_t cnt, uint16_t on_ms, LED_Bits_t device);
+#endif /* USE_MENU */
 
+#ifdef USE_MENU
 /** @brief Ждать отпускания кнопки (максимум MENU_ENTRY_RELEASE_MS).
  *  Вызывается после входа/выхода из меню, пока FSM в главном цикле ещё не
  *  тронул событие — иначе удержание попало бы в новый UI как HOLD. */
@@ -728,6 +734,7 @@ static void menu_wait_release(void)
     while (Pressed && count--)
         wait_ms(10);
 }
+#endif /* USE_MENU */
 
 /** @brief Clamp a UI index from EE to a valid dispatch table (1..3).
  *
@@ -771,6 +778,7 @@ void menu_exit(void)
  * в оригинале Proteus IID: ~1 с удержания кнопки). */
 #define MENU_ENTRY_DEBOUNCE_MS  1000u
 
+#ifdef USE_MENU
 /** @brief Flash one or more menu indicator LEDs.
  * @param cnt Number of flashes.
  * @param on_ms LED on/off duration in milliseconds.
@@ -791,6 +799,7 @@ static __attribute__((noinline)) void menu_entry_flash(uint8_t cnt, uint16_t on_
         wait_ms(on_ms);
     }
 }
+#endif /* USE_MENU */
 
 /**
  * @brief Войти в инженерное/пользовательское меню при подаче питания.
@@ -854,6 +863,7 @@ void enter_chtk_mode(void)
  * Invalid input is reported before any assignment is made, so the previous
  * setting remains intact instead of being truncated by a bit-field.
  */
+#ifdef USE_MENU
 static bool menu_clicks_valid(uint8_t min_clicks, uint8_t max_clicks)
 {
     if (clicks_count >= min_clicks && clicks_count <= max_clicks)
@@ -862,6 +872,7 @@ static bool menu_clicks_valid(uint8_t min_clicks, uint8_t max_clicks)
     ui_invalid_selection();
     return false;
 }
+#endif /* USE_MENU */
 
 /**
  * @brief Show a red indication for an invalid user-menu selection.

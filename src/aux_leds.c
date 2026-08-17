@@ -132,6 +132,7 @@ static const strobe_profile_t strobe_commands[STROBE_COUNT] = {
 };
 #endif
 
+#ifdef USE_STROBE
 /**
  * @brief Запуск пошаговой обработки массива команд
  * @param pArray — указатель на массив uint32_t команд в Flash
@@ -153,6 +154,7 @@ static void start_aux_array(const uint32_t *pArray, awu_tick_t delay) {
 	AWU_set_delay(delay);
 	AWU_ON();
 }
+#endif /* USE_STROBE */
 
 /**
  * @brief Умное выключение светодиода с учётом режима подсветки

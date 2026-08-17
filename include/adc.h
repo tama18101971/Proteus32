@@ -158,8 +158,8 @@ uint8_t bat_get_flashes(void);
 #define VC_VOLTAGE_WINDOW_MV  290u  /**< Допустимое отклонение стенда (mV), ±0.29 В */
 #define VC_CLIP_MAX           (int)(MV_GE(REF_VOLTAGE_MV - VC_VOLTAGE_WINDOW_MV) - REF_VREF_CODE)
 #define VC_CLIP_MIN           (int)(MV_LT(REF_VOLTAGE_MV + VC_VOLTAGE_WINDOW_MV) - REF_VREF_CODE)
-#define TC_CLIP_MAX     31     /**< Max tc value */
-#define TC_CLIP_MIN     -31
+#define TC_CLIP_MAX     44     /**< Max tc value (±5 °C at ~8.8 codes/°C) */
+#define TC_CLIP_MIN     -44
 
 #define ADC_MIN_VAL     0      /**< 10-bit ADC range minimum */
 #define ADC_MAX_VAL     1023   /**< 10-bit ADC range maximum */
