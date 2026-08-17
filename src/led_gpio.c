@@ -11,14 +11,27 @@
  *   - off_grn(): PC4=output-low
  */
 #include "led_gpio.h"
+#include "proteus_config.h"
 
-/** @brief Initialise all LED GPIO pins (red high/low-side, green). */
+/** @brief Initialise all LED GPIO pins (red high/low-side, green) and unused pins to Hi-Z Analog. */
 void led_init(void)
 {
-    RCC->APB2PCENR |= RCC_APB2Periph_GPIOC;
+    RCC->APB2PCENR |= RCC_APB2Periph_GPIOC | RCC_APB2Periph_GPIOA | RCC_APB2Periph_GPIOD;
+
+    /* Unused pins to Analog Input (0x00) to eliminate floating CMOS input leakage */
+    GPIO_PinConfig(GPIOA, GPIO_Pin_1, CFG_IN_ANALOG);
+    GPIO_PinConfig(GPIOA, GPIO_Pin_2, CFG_IN_ANALOG);
+    GPIO_PinConfig(GPIOC, GPIO_Pin_0, CFG_IN_ANALOG);
+    GPIO_PinConfig(GPIOC, GPIO_Pin_5, CFG_IN_ANALOG);
+    GPIO_PinConfig(GPIOD, GPIO_Pin_5, CFG_IN_ANALOG);
+    GPIO_PinConfig(GPIOD, GPIO_Pin_6, CFG_IN_ANALOG);
+#ifndef UART_DEBUG
+    GPIO_PinConfig(GPIOD, GPIO_Pin_4, CFG_IN_ANALOG);
+#endif
 
     REDH_PORT->BCR = REDH_PIN;
     GRN_PORT->BCR = GRN_PIN;
+    REDL_PORT->BCR = REDL_PIN;
 
     GPIO_PinConfig(REDH_PORT, REDH_PIN, CFG_OUT_PP_10M);
     GPIO_PinConfig(GRN_PORT, GRN_PIN, CFG_OUT_PP_10M);
@@ -29,6 +42,7 @@ void led_init(void)
 /** @brief Red LED high (bright). */
 void on_red_h(void) {
     REDL_PORT->BCR = REDL_PIN;
+    GPIO_PinConfig(REDL_PORT, REDL_PIN, CFG_IN_FLOAT);
 
     GPIO_PinConfig(REDH_PORT, REDH_PIN, CFG_OUT_PP_10M);
     REDH_PORT->BSHR = REDH_PIN;
@@ -39,12 +53,14 @@ void on_red_l(void) {
     GPIO_PinConfig(REDH_PORT, REDH_PIN, CFG_IN_PULL);
     REDH_PORT->BSHR = REDH_PIN;
 
+    GPIO_PinConfig(REDL_PORT, REDL_PIN, CFG_IN_PULL);
     REDL_PORT->BSHR = REDL_PIN;
 }
 
 /** @brief Red LED off. */
 void off_red(void) {
     REDL_PORT->BCR = REDL_PIN;
+    GPIO_PinConfig(REDL_PORT, REDL_PIN, CFG_IN_FLOAT);
 
     REDH_PORT->BCR = REDH_PIN;
     GPIO_PinConfig(REDH_PORT, REDH_PIN, CFG_OUT_PP_10M);

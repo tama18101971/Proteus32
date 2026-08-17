@@ -171,6 +171,7 @@ int main(void)
     dac_pwrpin_on();
     i2c_init(400000);
     dac7571_set_voltage(0);
+    OFF_POWER();
 
     ob_Init();
     (void)adc_read();
@@ -307,6 +308,11 @@ int main(void)
 
         if (need_sleep || strobe_sleep)
         {
+            if (!driver_is_active() && !aux_needs_dac())
+            {
+                OFF_POWER();
+            }
+
             adc_stop();
             tim2_stop();
 
@@ -323,6 +329,7 @@ int main(void)
                 start_aux_beacon();
             }
             AWU_Sleep_Now();
+            continue;
         }
 
         /* 4. Таймерные задачи */
@@ -408,6 +415,12 @@ int main(void)
                 sleep_owner = SLEEP_OWNER_NORMAL;
                 need_sleep = true;
             }
+        }
+
+        /* 5. Light Sleep (WFI) between 1 ms TIM2 ticks when awake */
+        if (!is_sleep_mode && !need_sleep && !strobe_sleep)
+        {
+            __WFI();
         }
     }
 }

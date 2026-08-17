@@ -504,11 +504,11 @@ static void down_forever(void)
     off_grn();
     dac_pwrpin_off();
  
-    /* 2. I2C-линии PC1/PC2 и делитель NTC PD2/PD3 → Hi-Z: нет утечек.
-     *    Тактирование АЦП/TIM2 выключать не нужно — в STANDBY чип и так
-     *    полностью обесточен (PDDS=1). */
-    GPIOC->CFGLR &= ~((0x0F << 4) | (0x0F << 8));
-    GPIOD->CFGLR &= ~((0xF << 8) | (0xF << 12));
+    /* 2. I2C-линии PC1/PC2, кнопка PC3 (отключение pull-up для предотвращения
+     *    утечки при зажатой кнопке на разряженном АКБ) и делитель NTC PD2/PD3 → Hi-Z Analog. */
+    GPIOC->OUTDR &= ~(1 << 3);
+    GPIOC->CFGLR &= ~((0x0F << 4) | (0x0F << 8) | (0x0F << 12));
+    GPIOD->CFGLR &= ~((0x0F << 8) | (0x0F << 12));
 
     /* 3. Остановить AWU и LSI — не потребляют ток в STANDBY и не дают
      *    события пробуждения (EXTI Line9). */

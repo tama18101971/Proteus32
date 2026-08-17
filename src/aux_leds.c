@@ -216,6 +216,9 @@ void off_aux_cmd(bool stop_lsi) {
 
 	if (had_dac_output) {
 		out_set_stc(0u);
+		if (!driver_is_active()) {
+			OFF_POWER();
+		}
 	}
 
 	aux_ctl.enable = false;
@@ -392,6 +395,9 @@ static void handle_aux_cmd(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits) {
 				ubits->period = PER_NEXT;
 				if (device & HBL_LED) {
 					SetBrightness(HBL_LED, 0u);
+					if (!driver_is_active()) {
+						OFF_POWER();
+					}
 				}
 				smart_off_leds(device);
 				return;
