@@ -66,6 +66,8 @@ static bool ui1_was_pressed;
 static bool ui_select_from_slot;
 static bool hold_guard;          // suppress HOLD repeats until the button is released
 static uint8_t ui_cfg_idx = 0xFF; // last ui_table_idx the button timing was applied for
+static DRIVER_Mode_t saved_block_mode = MODE_BLOCK;
+static uint16_t lock_light_ticks = 0;
 
 /*******************************************************************************
  *  UI2 discrete brightness table -- scaled to Proteus003 9-bit range (0..511)
@@ -79,7 +81,7 @@ static const uint16_t modes[MODES_QTY] = {0, 20, 74, 136, 220, 360, 511};
  */
 bool driver_is_active(void)
 {
-    return driver_mode == MODE_ON || driver_mode == MODE_BLOCK_ON;
+    return driver_mode == MODE_ON || driver_mode == MODE_BLOCK_ON || driver_mode == MODE_BLOCK_LIGHT;
 }
 
 /*******************************************************************************
@@ -117,8 +119,9 @@ void ee_defaults(void)
     EE.aux.beacon_on = true;
     EE.aux.beacon_type = GRN_LED;
 
-    EE.usr.eaux_onoff = false;
     EE.usr.id_plus_sid = false;
+    EE.usr.lock_min_en = 1;
+    EE.usr.lock_min_time = 0;
     EE.usr.t_calibr = TCALIBR_DEFAULT;
 
     EE.default_ui1 = DEFAULT_STEP;
@@ -505,11 +508,42 @@ void slot_block_beacon(void)
 void unblock_drv(void)
 {
 #ifdef USE_BLOCK
-    if (driver_mode == MODE_BLOCK_ON)
+    lock_light_ticks = 0;
+    if (driver_mode == MODE_BLOCK_ON || driver_mode == MODE_BLOCK_LIGHT)
         driver_mode = MODE_ON;
     else
         driver_mode = MODE_OFF;
     aux_on();
+#endif
+}
+
+/** @brief Turn on temporary CMODE_MIN light in lockout mode. */
+void lock_light_on(DRIVER_Mode_t prev_mode)
+{
+#ifdef USE_BLOCK
+    saved_block_mode = prev_mode;
+    driver_mode = MODE_BLOCK_LIGHT;
+    ps.use_prev = false;
+    if (aux_needs_dac())
+        off_aux_cmd(false);
+    ON_POWER();
+    down_count = 5;
+    vwarning = VWARNING_NONE;
+    vwarning_old = VWARNING_NONE;
+    direction = DIR_UP;
+    mode_current = CMODE_MIN;
+    set_curri(CMODE_MIN);
+    lock_light_ticks = (uint16_t)(((uint16_t)(EE.usr.lock_min_time & 0x03u) + 1u) * (15u * 160u));
+#endif
+}
+
+/** @brief Turn off temporary lockout light and restore locked mode. */
+void lock_light_off(void)
+{
+#ifdef USE_BLOCK
+    lock_light_ticks = 0;
+    off_driver(false, SS_FAST);
+    driver_mode = saved_block_mode;
 #endif
 }
 
@@ -851,8 +885,7 @@ void chtk_clickX(void)
 void slot_eauxmode(void)
 {
 #ifdef USE_MENU
-    EE.usr.eaux_onoff = !EE.usr.eaux_onoff;
-    clr_indicator((ind_clr_t)EE.usr.eaux_onoff);
+    clr_indicator(IND_GRN);
 #endif
 }
 
@@ -974,6 +1007,54 @@ void uis_clickX(void)
         ui_table_idx = clicks_count;
         ui_select_from_slot = false;
     }
+    driver_mode = MODE_OFF;
+#endif
+}
+
+/** @brief Enter lockout min-light enable/disable configuration (user menu). */
+void enter_lm_en_mode(void)
+{
+#ifdef USE_MENU
+    driver_mode = MODE_LM_EN;
+    aux_count(EE.usr.lock_min_en ? 2u : 1u);
+#endif
+}
+
+/** @brief Set lockout min-light enable/disable from click count (user menu). */
+void lm_en_clickX(void)
+{
+#ifdef USE_MENU
+    if (!menu_clicks_valid(1u, 2u))
+    {
+        driver_mode = MODE_OFF;
+        return;
+    }
+    EE.usr.lock_min_en = (clicks_count == 2u) ? 1u : 0u;
+    aux_count(clicks_count);
+    driver_mode = MODE_OFF;
+#endif
+}
+
+/** @brief Enter lockout min-light duration configuration (user menu). */
+void enter_lm_time_mode(void)
+{
+#ifdef USE_MENU
+    driver_mode = MODE_LM_TIME;
+    aux_count((uint8_t)(EE.usr.lock_min_time + 1u));
+#endif
+}
+
+/** @brief Set lockout min-light duration from click count (user menu). */
+void lm_time_clickX(void)
+{
+#ifdef USE_MENU
+    if (!menu_clicks_valid(1u, 4u))
+    {
+        driver_mode = MODE_OFF;
+        return;
+    }
+    EE.usr.lock_min_time = clicks_count - 1u;
+    aux_count(clicks_count);
     driver_mode = MODE_OFF;
 #endif
 }
@@ -1251,6 +1332,19 @@ void ui_process(void)
     if (hold_guard && !Pressed)
         hold_guard = false;
 
+    /* Temporary CMODE_MIN light countdown in lockout mode */
+    if (driver_mode == MODE_BLOCK_LIGHT)
+    {
+        if (lock_light_ticks > 0)
+        {
+            lock_light_ticks--;
+            if (lock_light_ticks == 0)
+            {
+                lock_light_off();
+            }
+        }
+    }
+
     uint8_t ui_idx = ui_table_idx;
 
     /* Tactical mode bypasses FSM events entirely */
@@ -1328,7 +1422,7 @@ void ui_process(void)
             /* В режимах блокировки работает только жест разблокировки;
              * каждое нажатие подтверждается красной вспышкой DANG_RED. */
             if (driver_mode == MODE_BLOCK || driver_mode == MODE_BLOCK0 ||
-                driver_mode == MODE_BLOCK_ON)
+                driver_mode == MODE_BLOCK_ON || driver_mode == MODE_BLOCK_LIGHT)
             {
                 aux_dang();
             }

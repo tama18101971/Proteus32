@@ -86,6 +86,7 @@ static bool thermal_fast_required(void)
 static bool thermal_sleep_allowed(void)
 {
     return driver_is_active() &&
+           (driver_mode != MODE_BLOCK_LIGHT) &&
            !thermal_fast_required() &&
            !ss_is_active() &&
            !button_sequence_active() &&

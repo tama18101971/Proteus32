@@ -13,9 +13,9 @@ struct __attribute__((packed)) aux_flags {
 
 struct __attribute__((packed)) usr_flags {
     uint8_t t_calibr       : 4;
-    uint8_t eaux_onoff     : 1;
     uint8_t id_plus_sid    : 1;
-    uint8_t reserved       : 2;
+    uint8_t lock_min_en    : 1;
+    uint8_t lock_min_time  : 2;
 };
 
 struct __attribute__((packed)) ui_flags {

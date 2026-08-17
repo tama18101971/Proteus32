@@ -123,6 +123,12 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout);
 #define UIS_CLICKX          47
 #define RESET2DEF           48
 
+/* -- User menu: lockout min-light (49..52) -- */
+#define ENTER_LM_EN_MODE    49
+#define LM_EN_CLICKX        50
+#define ENTER_LM_TIME_MODE  51
+#define LM_TIME_CLICKX      52
+
 /*******************************************************************************
  *  Main action function table
  ******************************************************************************/

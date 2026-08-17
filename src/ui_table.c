@@ -15,7 +15,7 @@
 #include "array.h"
 #include "ob.h"
 
-#define MAIN_OP_COUNT (RESET2DEF + 1)
+#define MAIN_OP_COUNT (LM_TIME_CLICKX + 1)
 
 /* Current UI index used for table selection. Defined in ui.c. */
 extern uint8_t ui_table_idx;
@@ -160,20 +160,24 @@ static const dispatch_t eng_table[] = {
 
 static const dispatch_t usr_table[] = {
     /* -- First level: MODE_OFF -- */
-    { MODE_OFF, 1, 0, false, true,  ENTER_BM_MODE },    /* 1 клик: период маяка (EE.aux.beacon_mode, 1..4) */
-    { MODE_OFF, 2, 0, false, true,  ENTER_BT_MODE },    /* 2 клика: цвет маяка  (EE.aux.beacon_type, 1..3) */
-    { MODE_OFF, 3, 0, false, true,  ENTER_BL_MODE },    /* 3 клика: цвет подсветки (EE.aux.bcklight_color, 1..2) */
-    { MODE_OFF, 4, 0, false, true,  ENTER_UIS_MODE },   /* 4 клика: выбор UI (EE.uif.ui_index, 1..3) */
-    { MODE_OFF, 5, 0, false, true,  ENTER_MAGIC_MODE }, /* 5 кликов: настройка magic-слотов (ob_SetSlot, 1..12) */
-    { MODE_OFF, 6, 0, false, true,  ENTER_CHTK_MODE },  /* 6 кликов: калибровка температуры (EE.usr.t_calibr, 1..15) */
+    { MODE_OFF, 1, 0, false, true,  ENTER_BM_MODE },        /* 1 клик: период маяка (EE.aux.beacon_mode, 1..4) */
+    { MODE_OFF, 2, 0, false, true,  ENTER_BT_MODE },        /* 2 клика: цвет маяка  (EE.aux.beacon_type, 1..3) */
+    { MODE_OFF, 3, 0, false, true,  ENTER_BL_MODE },        /* 3 клика: цвет подсветки (EE.aux.bcklight_color, 1..2) */
+    { MODE_OFF, 4, 0, false, true,  ENTER_UIS_MODE },       /* 4 клика: выбор UI (EE.uif.ui_index, 1..3) */
+    { MODE_OFF, 5, 0, false, true,  ENTER_MAGIC_MODE },     /* 5 кликов: настройка magic-слотов (ob_SetSlot, 1..12) */
+    { MODE_OFF, 6, 0, false, true,  ENTER_LM_EN_MODE },     /* 6 кликов: вкл/выкл подсветки блокировки (1..2) */
+    { MODE_OFF, 7, 0, false, true,  ENTER_LM_TIME_MODE },   /* 7 кликов: время подсветки блокировки (1..4) */
+    { MODE_OFF, 8, 0, false, true,  ENTER_CHTK_MODE },      /* 8 кликов: калибровка температуры (EE.usr.t_calibr, 1..15) */
     { MODE_OFF, 0, 0, true,  false, MENU_EXIT },
 
     /* -- Sub-modes -- */
-    { MODE_BM,  0, 0, false, true,  BM_CLICKX },
-    { MODE_BT,  0, 0, false, true,  BT_CLICKX },
-    { MODE_BL,  0, 0, false, true,  BL_CLICKX },
-    { MODE_UIS, 0, 0, false, true,  UIS_CLICKX },
-    { MODE_CTK_H, 0, 0, false, true,  CHTK_CLICKX },
+    { MODE_BM,      0, 0, false, true,  BM_CLICKX },
+    { MODE_BT,      0, 0, false, true,  BT_CLICKX },
+    { MODE_BL,      0, 0, false, true,  BL_CLICKX },
+    { MODE_UIS,     0, 0, false, true,  UIS_CLICKX },
+    { MODE_LM_EN,   0, 0, false, true,  LM_EN_CLICKX },
+    { MODE_LM_TIME, 0, 0, false, true,  LM_TIME_CLICKX },
+    { MODE_CTK_H,   0, 0, false, true,  CHTK_CLICKX },
 
     /* -- Magic mode -- */
     { MODE_MAGIC, 0,  0, true,  false, EXIT_MAGIC_MODE },
@@ -223,7 +227,7 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout)
 {
     uint8_t idx = ui_table_idx;
 
-    if (mode == MODE_BLOCK || mode == MODE_BLOCK0 || mode == MODE_BLOCK_ON)
+    if (mode == MODE_BLOCK || mode == MODE_BLOCK0 || mode == MODE_BLOCK_ON || mode == MODE_BLOCK_LIGHT)
     {
         if (block_slot_idx < SLOTS_COUNT)
         {
@@ -233,6 +237,25 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout)
                 unblock_drv();
                 block_slot_idx = SLOTS_COUNT;
                 block_click_pending = false;
+                return 1;
+            }
+        }
+        if (mode == MODE_BLOCK || mode == MODE_BLOCK0)
+        {
+            if (timeout && evt->type == BTN_EVT_CLICK_SEQ && evt->clicks == 1u)
+            {
+                if (EE.usr.lock_min_en)
+                {
+                    lock_light_on((DRIVER_Mode_t)mode);
+                    return 1;
+                }
+            }
+        }
+        else if (mode == MODE_BLOCK_LIGHT)
+        {
+            if (timeout && evt->type == BTN_EVT_CLICK_SEQ && evt->clicks == 1u)
+            {
+                lock_light_off();
                 return 1;
             }
         }
@@ -290,7 +313,7 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout)
     }
 
     /* Sub-modes HOLD -> MENU_EXIT */
-    if (evt->type == BTN_EVT_HOLD && ((mode >= MODE_BM && mode <= MODE_UIS) || mode == MODE_CTK_H || mode == MODE_MOON_LEVEL))
+    if (evt->type == BTN_EVT_HOLD && ((mode >= MODE_UIS && mode <= MODE_LM_TIME) || mode == MODE_CTK_H || mode == MODE_MOON_LEVEL))
     {
         menu_exit();
         return 1;
@@ -430,4 +453,10 @@ void (* const main_op[])(void) = {
     enter_uis_mode,
     uis_clickX,
     reset2def,
+
+    /*49..52*/
+    enter_lm_en_mode,
+    lm_en_clickX,
+    enter_lm_time_mode,
+    lm_time_clickX,
 };

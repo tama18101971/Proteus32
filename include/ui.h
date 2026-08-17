@@ -92,6 +92,7 @@ typedef enum {
     MODE_ON,                /**< Driver on (normal operation). */
     MODE_STROB,             /**< Strobe mode. */
     MODE_BLOCK_ON,          /**< Driver on, but button brightness control locked. */
+    MODE_BLOCK_LIGHT,       /**< Temporary CMODE_MIN light in lockout mode. */
 
     MODE_MOON_LEVEL = 10U,  /**< Config: moonlight level. */
 
@@ -102,6 +103,8 @@ typedef enum {
     MODE_BM,                /**< Beacon mode config. */
     MODE_BT,                /**< Beacon time config. */
     MODE_BL,                /**< Backlight config. */
+    MODE_LM_EN,             /**< Config: lockout min-light enable/disable. */
+    MODE_LM_TIME,           /**< Config: lockout min-light time. */
 
     MODE_SLOT01,            /**< Magic slot 1. */
     MODE_SLOT02,            /**< Magic slot 2. */
@@ -403,6 +406,17 @@ void off_strobe(void);
  */
 void unblock_drv(void);
 
+/**
+ * @brief Turn on temporary CMODE_MIN light in lockout mode.
+ * @param prev_mode Previous locked mode (MODE_BLOCK or MODE_BLOCK0).
+ */
+void lock_light_on(DRIVER_Mode_t prev_mode);
+
+/**
+ * @brief Turn off temporary lockout light and restore locked mode.
+ */
+void lock_light_off(void);
+
 /*******************************************************************************
  *  UI1 / menu action functions
  ******************************************************************************/
@@ -481,6 +495,26 @@ void enter_bl_mode(void);
  * @brief Handle click sequence in backlight menu.
  */
 void bl_clickX(void);
+
+/**
+ * @brief Enter lockout min-light enable/disable config.
+ */
+void enter_lm_en_mode(void);
+
+/**
+ * @brief Handle click sequence in lockout min-light enable/disable menu.
+ */
+void lm_en_clickX(void);
+
+/**
+ * @brief Enter lockout min-light duration config.
+ */
+void enter_lm_time_mode(void);
+
+/**
+ * @brief Handle click sequence in lockout min-light duration menu.
+ */
+void lm_time_clickX(void);
 
 /**
  * @brief Enter magic slots mode.
