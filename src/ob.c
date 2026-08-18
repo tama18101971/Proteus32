@@ -205,7 +205,7 @@ static flash_status_t _program(void) {
 static void _set_defaults(void) {
     _cache.tc = 0;
     _cache.vc = 0;
-    _cache.ml = 0;
+    _cache.ml = 4;
     static const uint8_t def_slots[SLOTS_COUNT] = {
         SLOT_DEFAULT_1CH, SLOT_DEFAULT_2CH, SLOT_DEFAULT_3C, SLOT_DEFAULT_3CH,
         SLOT_DEFAULT_4C,  SLOT_DEFAULT_4CH, SLOT_DEFAULT_5C, SLOT_DEFAULT_5CH,
