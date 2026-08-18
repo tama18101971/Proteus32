@@ -814,7 +814,7 @@ void enter_menu_at_boot(void)
     stop_aux_if(IDM_BEACON, true);
 
     ui_table_idx = is_eng ? ENG_MENU_IND : USR_MENU_IND;
-    menu_entry_flash(is_eng ? 6 : 3, is_eng ? 200 : 100,
+    menu_entry_flash(is_eng ? 6 : 3, is_eng ? 50 : 100,
                      is_eng ? RED_LED : GRN_LED);
 
     /* Ждём отпускания кнопки, чтобы FSM (button_tick) не принял удержание за
