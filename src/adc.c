@@ -490,7 +490,7 @@ extern volatile uint8_t need_sleep;
  * Вечный цикл STANDBY: функция не возвращается (в отличие от AWU_Sleep_Now(),
  * который мог вернуться и отменить PDDS).
  */
-__attribute__((noinline, noreturn)) static void down_forever(void)
+__attribute__((noinline, noreturn)) void down_forever(void)
 {
     /* 1. Обесточить нагрузку: AUX-светодиоды погасить через штатные ф-ции
      *    (уважают особенность PC6/PC7), питание DAC (PD0)=0. */
@@ -556,6 +556,14 @@ void scan_voltage(void)
     int32_t eff_vcode = (int32_t)vcode - vc;
 
     volt_max_mode = calc_volt_max_mode(eff_vcode);
+
+    if (voltage_ok)
+    {
+        if (eff_vcode >= (int32_t)MV_LT(3100))
+            beacon_low_voltage = true;
+        else if (eff_vcode <= (int32_t)MV_GE(3200))
+            beacon_low_voltage = false;
+    }
 
     if (!driver_is_active()) return;
 

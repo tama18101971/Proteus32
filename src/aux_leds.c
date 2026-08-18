@@ -38,6 +38,7 @@
 #include "app_data.h"
 #include "adc.h"
 #include "ui.h"
+#include "ob.h"
 #include <string.h>
 
 uint8_t vwarning = VWARNING_NONE;			// Текущий уровень предупреждения о напряжении
@@ -132,10 +133,9 @@ static const strobe_profile_t strobe_commands[STROBE_COUNT] = {
 };
 #endif
 
-#ifdef USE_STROBE
 /**
  * @brief Запуск пошаговой обработки массива команд
- * @param pArray — указатель на массив uint32_t команд в Flash
+ * @param pArray — указатель на массив uint32_t команд в Flash или RAM
  * @param delay  — начальная задержка перед первым полупериодом (awu_tick_t:
  *                 AWU_15MS, AWU_120MS, AWU_250MS, AWU_500MS, AWU_1S и т.д.)
  *
@@ -154,7 +154,6 @@ static void start_aux_array(const uint32_t *pArray, awu_tick_t delay) {
 	AWU_set_delay(delay);
 	AWU_ON();
 }
-#endif /* USE_STROBE */
 
 /**
  * @brief Умное выключение светодиода с учётом режима подсветки
@@ -535,6 +534,89 @@ bool handle_aux(void) {
 	return pending;
 }
 
+bool beacon_low_voltage = false;
+static uint32_t beacon_double_buf[3];
+
+/**
+ * @brief Check whether the beacon is at the start of its repetition cycle.
+ * @return true on the cycle-initial AWU wake before the first flash.
+ */
+bool beacon_is_cycle_start(void)
+{
+	if (!is_aux_mode(IDM_BEACON)) return false;
+	if (aux_ctl.period == PER_INIT) return true;
+	if (EnableArrayProcessing) {
+		return (aux_ctl.period == PER_END) && (aux_ctl.arr_index == 1);
+	} else {
+		return (aux_ctl.period == PER_END);
+	}
+}
+
+/**
+ * @brief Проверка напряжения батареи в режиме маяка при пробуждении по AWU.
+ *
+ * Выполняет замер ненагруженного аккумулятора перед вспышкой маяка.
+ * - При критическом разряде (< 2.70 В) переходит в необратимый глубокий сон down_forever().
+ * - При напряжении < 3.10 В переключает маяк на двойные вспышки.
+ * - При напряжении >= 3.20 В возвращает маяк на одиночные вспышки.
+ * - Сразу после замера АЦП обесточивается через adc_stop().
+ */
+void beacon_battery_check(void)
+{
+	adc_init();
+	bool ok = adc_read();
+	adc_stop();
+
+	if (!ok) return;
+
+	int16_t vc = ob_GetVc();
+	int32_t eff_vcode = (int32_t)vrefint_adc - (int32_t)vc;
+
+	/* 1. Защита от глубокого разряда (< 2.70 В) */
+	if (eff_vcode >= (int32_t)MV_LT(2700))
+	{
+		uint8_t confirmed = 0;
+		for (uint8_t i = 0; i < 3; i++)
+		{
+			adc_init();
+			if (adc_read())
+			{
+				int32_t code = (int32_t)vrefint_adc - (int32_t)vc;
+				if (code >= (int32_t)MV_LT(2700))
+				{
+					confirmed++;
+				}
+			}
+			adc_stop();
+		}
+		if (confirmed >= 2)
+		{
+			down_forever();
+		}
+	}
+
+	/* 2. Пороги переключения режима вспышек (гистерезис):
+	 *    Vbat < 3.10 В (eff_vcode >= MV_LT(3100)) -> двойные вспышки
+	 *    Vbat >= 3.20 В (eff_vcode <= MV_GE(3200)) -> одиночные вспышки
+	 */
+	bool prev_state = beacon_low_voltage;
+	if (eff_vcode >= (int32_t)MV_LT(3100))
+	{
+		beacon_low_voltage = true;
+	}
+	else if (eff_vcode <= (int32_t)MV_GE(3200))
+	{
+		beacon_low_voltage = false;
+	}
+
+	/* Если состояние изменилось — перезапускаем маяк с новым паттерном */
+	if (beacon_low_voltage != prev_state)
+	{
+		off_aux_cmd(false);
+		start_aux_beacon();
+	}
+}
+
 /**
  * @brief Запуск режима маяка (beacon)
  *
@@ -543,7 +625,8 @@ bool handle_aux(void) {
  *   - beacon_mode: частота моргания (BCON_1S..BCON_8S — пауза OFF)
  *   - beacon_type: цвет светодиода (RED_LED=1, GRN_LED=2, HBL_LED=4)
  *
- * ON всегда 50мс, OFF определяется beacon_mode.
+ * Одиночная вспышка при нормальном напряжении (>= 3.2 В).
+ * Двойная вспышка при пониженном напряжении (< 3.1 В).
  */
 void start_aux_beacon(void) {
 	if (!EE.aux.beacon_on) return;
@@ -560,12 +643,21 @@ void start_aux_beacon(void) {
 
 	uint8_t mode = EE.aux.beacon_mode & 0x03;
 	uint8_t br0 = (EE.aux.beacon_type & HBL_LED) ? CMODE_MIN : 1;
+	LED_Bits_t dev = (LED_Bits_t)EE.aux.beacon_type;
 
-	uint32_t cmd = MAKE_CMD(EE.aux.beacon_type, 1, 0,
-		AWU_PSC_256, 25, bcon_psc1[mode], bcon_win1[mode],
-		br0, 0);
-
-	start_aux_cmd(cmd, true, IDM_BEACON, AWU_120MS);
+	if (beacon_low_voltage) {
+		/* Двойная вспышка: 50 мс ON / 100 мс OFF, затем 50 мс ON / период OFF */
+		beacon_double_buf[0] = MAKE_CMD(dev, 0, 1, AWU_PSC_256, 25, AWU_PSC_256, 50, br0, 0);
+		beacon_double_buf[1] = MAKE_CMD(dev, 0, 1, AWU_PSC_256, 25, bcon_psc1[mode], bcon_win1[mode], br0, 0);
+		beacon_double_buf[2] = AC_REP_ATSTART;
+		start_aux_array(beacon_double_buf, AWU_120MS);
+		aux_ctl.idmode = IDM_BEACON;
+	} else {
+		uint32_t cmd = MAKE_CMD(dev, 1, 0,
+			AWU_PSC_256, 25, bcon_psc1[mode], bcon_win1[mode],
+			br0, 0);
+		start_aux_cmd(cmd, true, IDM_BEACON, AWU_120MS);
+	}
 }
 
 /**

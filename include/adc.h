@@ -208,4 +208,9 @@ uint16_t ratchet_max_step(void);
  */
 void reset_max_step(void);
 
+/**
+ * @brief Irreversible shutdown: unpower load, mask interrupts, enter permanent STANDBY.
+ */
+void down_forever(void) __attribute__((noreturn));
+
 #endif /* ADC_H_ */

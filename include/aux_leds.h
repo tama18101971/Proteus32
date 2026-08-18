@@ -219,6 +219,8 @@ extern uint8_t vwarning_old;
 extern bool EnableArrayProcessing;
 /** @brief Pointer to current command array. */
 extern const uint32_t *current_buf;
+/** @brief true when beacon operates in double-flash mode due to low battery (<3.1V). */
+extern bool beacon_low_voltage;
 
 /* ===== API functions ===== */
 
@@ -273,6 +275,17 @@ void start_aux_strobe(uint8_t index);
  * @brief Start beacon mode from EEPROM settings.
  */
 void start_aux_beacon(void);
+
+/**
+ * @brief Check whether the beacon is at the start of its repetition cycle.
+ * @return true on the cycle-initial AWU wake before the first flash.
+ */
+bool beacon_is_cycle_start(void);
+
+/**
+ * @brief Battery supervision during beacon AWU wakes (cutoff <2.7V, 3.1V/3.2V hysteresis).
+ */
+void beacon_battery_check(void);
 
 /**
  * @brief Refresh button backlight state according to EE.aux settings.

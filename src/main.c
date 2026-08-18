@@ -174,7 +174,12 @@ int main(void)
     OFF_POWER();
 
     ob_Init();
-    (void)adc_read();
+    if (adc_read())
+    {
+        int32_t eff_vcode = (int32_t)vrefint_adc - (int32_t)ob_GetVc();
+        if (eff_vcode >= (int32_t)MV_LT(3100))
+            beacon_low_voltage = true;
+    }
     if (!read_ee())
     {
         init_ee();
@@ -261,6 +266,10 @@ int main(void)
             }
             else
             {
+                if (beacon_is_cycle_start())
+                {
+                    beacon_battery_check();
+                }
                 if (aux_needs_dac())
                 {
                     wake_i2c();
