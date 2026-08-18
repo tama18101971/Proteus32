@@ -571,15 +571,9 @@ void reset2def(void)
 void calibration(void)
 {
 #ifdef USE_MENU
-    EE_PRINTF("[CAL] start voltage_ok=%u vref=%u temp=%u\r\n",
-              (unsigned)voltage_ok,
-              (unsigned)vrefint_adc,
-              (unsigned)raw_temperature_adc);
-
     if (!voltage_ok)
     {
         /* Do not save offsets derived from a stale or failed ADC pair. */
-        EE_PRINTF("[CAL] rejected: invalid voltage sample\r\n");
         ui_invalid_selection();
         return;
     }
@@ -594,32 +588,18 @@ void calibration(void)
         ok = 0;
     if (tc_delta > TC_CLIP_MAX || tc_delta < TC_CLIP_MIN)
         ok = 0;
-    EE_PRINTF("[CAL] vc_delta=%d (range %d..%d) tc_delta=%d (range %d..%d) ok=%u\r\n",
-              (int)vc_delta,
-              (int)VC_CLIP_MIN,
-              (int)VC_CLIP_MAX,
-              (int)tc_delta,
-              (int)TC_CLIP_MIN,
-              (int)TC_CLIP_MAX,
-              (unsigned)ok);
 
     /* Отказ не трогает OB: предыдущая калибровка остаётся в силе. */
     if (ok)
     {
         ob_SetVc((int8_t)vc_delta);
         ob_SetTc((int8_t)tc_delta);
-        EE_PRINTF("[CAL] saved vc=%d tc=%d\r\n",
-                  (int)ob_GetVc(),
-                  (int)ob_GetTc());
+        clr_indicator(IND_GRN);
     }
     else
     {
-        EE_PRINTF("[CAL] rejected: offsets outside allowed range\r\n");
-    }
-    if (ok)
-        clr_indicator(IND_GRN);
-    else
         ui_invalid_selection();
+    }
 #endif
 }
 
