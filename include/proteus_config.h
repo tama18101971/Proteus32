@@ -14,7 +14,7 @@
  */
 
 // Раскомментировать для отладки через UART
-//#define UART_DEBUG
+#define UART_DEBUG
 //#define PRINT_ADC
 
 #define USE_BATTIND
@@ -22,7 +22,7 @@
 #define USE_STROBE
 #define USE_BLOCK
 #define USE_MENU
-#define USE_MAGIC_SLOTS
+//#define USE_MAGIC_SLOTS
 
 #if defined(UART_DEBUG) || defined(PRINT_ADC)
     #include "mini_printf.h"
