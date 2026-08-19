@@ -17,8 +17,8 @@
 ThermalLimiterState_t  state;
 /** @brief Thermal limiter configuration (flash). */
 const ThermalLimiterConfig_t config = {
-    .kp_left_shift        = 2,
-    .ki_decimation_shift  = 3,
+    .kp_left_shift        = 3,
+    .ki_decimation_shift  = 2,
     .ki_recov_shift       = 3,
     .t_anticipate_offset  = 8,
     .filter_shift         = 3,
