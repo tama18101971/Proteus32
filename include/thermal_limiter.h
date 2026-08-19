@@ -64,8 +64,8 @@ extern "C" {
  */
 typedef struct {
     uint8_t  kp_left_shift;        /**< Proportional gain: P = (t_cur - t_set) << kp_left_shift */
-    uint8_t  ki_decimation_shift;  /**< Integral heat scale: delta_I = error >> ki_decimation_shift */
-    uint8_t  ki_recov_shift;       /**< Integral cool scale: delta_I = -(cool_error >> ki_recov_shift) */
+    uint8_t  ki_decimation_shift;  /**< Integral heat scale: delta_I = max(1, error >> ki_decimation_shift) */
+    uint8_t  ki_recov_shift;       /**< Integral cool scale: delta_I = -max(1, cool_error >> ki_recov_shift) */
     uint16_t t_anticipate_offset;  /**< Hold band (ADC counts): t_threshold = t_set - offset */
     uint8_t  filter_shift;         /**< EMA filter shift: filtered += (raw - filtered) >> filter_shift */
     uint16_t max_drop_rate;        /**< Max limiter increase per tick (brightness cut speed) */

@@ -74,6 +74,9 @@ uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
         }
         p_term = (int16_t)p_wide;
         delta_i = (int16_t)(error >> config->ki_decimation_shift);
+        if (delta_i == 0 && error > 0) {
+            delta_i = 1;
+        }
     } else if (t_cur >= t_threshold) {
         /* Equilibrium hold band: zero drift, holds steady-state output */
         p_term = 0;
@@ -83,6 +86,9 @@ uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
         p_term = 0;
         int16_t cool_error = (int16_t)(t_threshold - t_cur);
         delta_i = (int16_t)(-(cool_error >> config->ki_recov_shift));
+        if (delta_i == 0 && cool_error > 0) {
+            delta_i = -1;
+        }
     }
 
     /* e) Fixed-point integral update with anti-windup clamping */
