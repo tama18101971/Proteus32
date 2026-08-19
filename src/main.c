@@ -206,9 +206,9 @@ int main(void)
 
     reset_limiters();
 
-    EE_PRINTF("[LIM SET] setpoint=%u kp_shift=%u ki_shift=%u ki_decim=%u offset=%u\r\n",
-              get_thermal_setpoint(), config.kp_left_shift, config.ki_left_shift,
-              config.ki_decimation_shift, config.t_anticipate_offset);
+    EE_PRINTF("[LIM SET] setpoint=%u kp_shift=%u ki_decim=%u ki_recov=%u offset=%u\r\n",
+              get_thermal_setpoint(), config.kp_left_shift,
+              config.ki_decimation_shift, config.ki_recov_shift, config.t_anticipate_offset);
 
     while (1)
     {

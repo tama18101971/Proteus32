@@ -17,15 +17,14 @@
 ThermalLimiterState_t  state;
 /** @brief Thermal limiter configuration (flash). */
 const ThermalLimiterConfig_t config = {
-    .kp_left_shift        = 3,
-    .ki_decimation_shift  = 7,
-    .ki_left_shift        = 0,
-    .t_anticipate_offset  = 30,
+    .kp_left_shift        = 2,
+    .ki_decimation_shift  = 3,
+    .ki_recov_shift       = 3,
+    .t_anticipate_offset  = 8,
     .filter_shift         = 3,
     .max_drop_rate        = 3,
     .max_recovery_rate    = 1,
-    .overheat_leak_decimation_shift = 6,
-    .max_limiter          = 255
+    .max_limiter          = 511
 };
 
 /** @brief Current limiter amount subtracted from the user brightness. */
