@@ -12,11 +12,12 @@
  */
 void ThermalLimiter_Init(ThermalLimiterState_t *state)
 {
-    state->filtered_temp = 0;
-    state->integral      = 0;
-    state->sub_integral  = 0;
-    state->prev_limiter  = 0;
-    state->flags         = 0u;
+    state->filtered_temp    = 0;
+    state->filtered_temp_fp = 0;
+    state->integral         = 0;
+    state->sub_integral     = 0;
+    state->prev_limiter     = 0;
+    state->flags            = 0u;
 }
 
 /**
@@ -44,13 +45,15 @@ uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
 
     /* b) Seed filter on first run */
     if (!(state->flags & THERMAL_FLAG_INITIALIZED)) {
-        state->filtered_temp = (int16_t)t_raw;
-        state->flags        |= THERMAL_FLAG_INITIALIZED;
+        state->filtered_temp    = (int16_t)t_raw;
+        state->filtered_temp_fp = (int16_t)((int16_t)t_raw << THERMAL_TEMP_FP_SHIFT);
+        state->flags           |= THERMAL_FLAG_INITIALIZED;
     }
 
-    /* c) EMA Low-Pass Filter */
-    state->filtered_temp = (int16_t)(state->filtered_temp +
-        (((int16_t)t_raw - state->filtered_temp) >> config->filter_shift));
+    /* c) Fixed-Point EMA Low-Pass Filter (eliminates integer truncation bias) */
+    int16_t diff = (int16_t)(((int16_t)t_raw << THERMAL_TEMP_FP_SHIFT) - state->filtered_temp_fp);
+    state->filtered_temp_fp = (int16_t)(state->filtered_temp_fp + (diff >> config->filter_shift));
+    state->filtered_temp    = (int16_t)((state->filtered_temp_fp + (1 << (THERMAL_TEMP_FP_SHIFT - 1u))) >> THERMAL_TEMP_FP_SHIFT);
 
     int16_t t_cur = state->filtered_temp;
     int16_t t_threshold = (int16_t)t_set - (int16_t)config->t_anticipate_offset;

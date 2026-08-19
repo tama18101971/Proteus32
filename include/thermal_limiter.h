@@ -48,6 +48,9 @@ extern "C" {
 /** Fixed-point fractional bits for the integral accumulator (64 sub-steps). */
 #define THERMAL_FP_SHIFT           6u
 
+/** Fixed-point fractional bits for the temperature filter (32 sub-steps). */
+#define THERMAL_TEMP_FP_SHIFT      5u
+
 /** Flag bits packed into ::ThermalLimiterState_t::flags. */
 #define THERMAL_FLAG_INITIALIZED   0x01u /**< EMA filter seeded. */
 #define THERMAL_FLAG_ERROR         0x10u /**< Sensor/ADC hardware fault. */
@@ -78,11 +81,12 @@ typedef struct {
  * @brief Persistent state of a single thermal limiter instance.
  */
 typedef struct {
-    int16_t  filtered_temp;  /**< EMA-filtered ADC reading (t_cur) */
-    int16_t  integral;       /**< Integer integral limiter value (0..512) */
-    int16_t  sub_integral;   /**< Fractional sub-step accumulator (0..63) */
-    int16_t  prev_limiter;   /**< Previous tick's post-slew Limiter value (0..512) */
-    uint8_t  flags;          /**< Status flags (INITIALIZED, ERROR) */
+    int16_t  filtered_temp;     /**< EMA-filtered rounded ADC reading (t_cur) */
+    int16_t  filtered_temp_fp;  /**< Fixed-point EMA temperature accumulator (scale x32) */
+    int16_t  integral;          /**< Integer integral limiter value (0..512) */
+    int16_t  sub_integral;      /**< Fractional sub-step accumulator (0..63) */
+    int16_t  prev_limiter;      /**< Previous tick's post-slew Limiter value (0..512) */
+    uint8_t  flags;             /**< Status flags (INITIALIZED, ERROR) */
 } ThermalLimiterState_t;
 
 /* ------------------------------------------------------------------------ */
