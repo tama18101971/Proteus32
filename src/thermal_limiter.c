@@ -94,35 +94,38 @@ uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
     state->filtered_temp_fp = (int16_t)(state->filtered_temp_fp + (diff >> config->filter_shift));
     state->filtered_temp    = (int16_t)((state->filtered_temp_fp + (1 << (THERMAL_TEMP_FP_SHIFT - 1u))) >> THERMAL_TEMP_FP_SHIFT);
 
-    int16_t t_cur = state->filtered_temp;
-    int16_t t_threshold = (int16_t)t_set - (int16_t)config->t_anticipate_offset;
+    int16_t t_cur_fp       = state->filtered_temp_fp;
+    int16_t t_set_fp       = (int16_t)((int16_t)t_set << THERMAL_TEMP_FP_SHIFT);
+    int16_t t_threshold_fp = (int16_t)(((int16_t)t_set - (int16_t)config->t_anticipate_offset) << THERMAL_TEMP_FP_SHIFT);
 
     /* d) Continuous PI terms with Equilibrium Hold Band */
     int16_t p_term = 0;
     int16_t delta_i = 0;
 
-    if (t_cur >= (int16_t)t_set) {
+    if (t_cur_fp >= t_set_fp) {
         /* Overheat zone: proportional braking + integral accumulation */
-        int16_t error = (int16_t)(t_cur - (int16_t)t_set);
-        int32_t p_wide = (int32_t)error << config->kp_left_shift;
+        int16_t error_fp = (int16_t)(t_cur_fp - t_set_fp);
+        int32_t p_wide = ((int32_t)error_fp << config->kp_left_shift) >> THERMAL_TEMP_FP_SHIFT;
         if (p_wide > (int32_t)user_pwm) {
             p_wide = (int32_t)user_pwm;
         }
         p_term = (int16_t)p_wide;
+        int16_t error = (int16_t)(error_fp >> THERMAL_TEMP_FP_SHIFT);
         delta_i = (int16_t)(error >> config->ki_decimation_shift);
-        if (delta_i == 0 && error > 0) {
+        if (delta_i == 0 && error_fp > 0) {
             delta_i = 1;
         }
-    } else if (t_cur >= t_threshold) {
+    } else if (t_cur_fp >= t_threshold_fp) {
         /* Equilibrium hold band: zero drift, holds steady-state output */
         p_term = 0;
         delta_i = 0;
     } else {
         /* Cool / Recovery zone: gentle proportional decay */
         p_term = 0;
-        int16_t cool_error = (int16_t)(t_threshold - t_cur);
+        int16_t cool_error_fp = (int16_t)(t_threshold_fp - t_cur_fp);
+        int16_t cool_error = (int16_t)(cool_error_fp >> THERMAL_TEMP_FP_SHIFT);
         delta_i = (int16_t)(-(cool_error >> config->ki_recov_shift));
-        if (delta_i == 0 && cool_error > 0) {
+        if (delta_i == 0 && cool_error_fp > 0) {
             delta_i = -1;
         }
     }
