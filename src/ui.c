@@ -291,6 +291,9 @@ void set_current_ll(uint16_t step_target, SoftStartSpeed_t ss_speed)
  */
 void set_current(uint16_t step_target, SoftStartSpeed_t ss_speed)
 {
+    if (step_user && step_target && (step_user != step_target))
+        scale_limiters(step_user, step_target);
+
     step_user = step_target;
     set_current_ll(get_step_tc(step_target), ss_speed);
     if ((!step_target) && (!ss_speed)) OFF_POWER();
@@ -307,14 +310,14 @@ void off_auto_repeat(void)
 void step_up_ui1(void)
 {
     if (step_user < max_step)
-        set_current(++step_user, SS_NO);
+        set_current(step_user + 1u, SS_NO);
 }
 
 /** @brief Decrement brightness by one step (UI1 ramping). */
 void step_down_ui1(void)
 {
-    if (step_user > 1)
-        set_current(--step_user, SS_NO);
+    if (step_user > 1u)
+        set_current(step_user - 1u, SS_NO);
 }
 
 /** @brief Ramp up/down one step from hold (UI1). */
@@ -1430,7 +1433,7 @@ void ui_process(void)
                     max_step = ratchet_max_step();
                 }
                 stop_aux_if(IDM_BEACON, false);
-                if (step_tc >= max_step || limiter) direction = DIR_DOWN;
+                if (step_user >= max_step) direction = DIR_DOWN;
             }
             break;
 

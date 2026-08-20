@@ -54,6 +54,13 @@ extern bool thermal_fault;
  */
 void reset_limiters(void);
 
+/**
+ * @brief Scale limiter state proportionally when user brightness changes.
+ * @param old_step Previous user step.
+ * @param new_step New user step.
+ */
+void scale_limiters(uint16_t old_step, uint16_t new_step);
+
 extern uint16_t limiter;                          /**< Current limiter value (PWM ceiling) */
 extern ThermalLimiterState_t  state;              /**< Thermal limiter runtime state */
 extern const ThermalLimiterConfig_t config;        /**< Thermal limiter configuration (flash) */

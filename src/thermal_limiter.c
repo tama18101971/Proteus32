@@ -21,6 +21,45 @@ void ThermalLimiter_Init(ThermalLimiterState_t *state)
 }
 
 /**
+ * @brief Zero-division 10-bit scaler: returns (val * num) / den for val,num,den <= 512.
+ */
+static __attribute__((noinline)) uint16_t scale_val(uint16_t val, uint16_t num, uint16_t den)
+{
+    uint32_t n = (uint32_t)val * num;
+    uint32_t d = (uint32_t)den << 9;
+    uint16_t q = 0u;
+
+    for (uint8_t i = 10u; i != 0u; i--)
+    {
+        q = (uint16_t)(q << 1);
+        if (n >= d)
+        {
+            n -= d;
+            q |= 1u;
+        }
+        d >>= 1;
+    }
+    return q;
+}
+
+/**
+ * @brief Scale controller state proportionally when user brightness changes.
+ *
+ * @param state     Persistent controller state (RAM).
+ * @param old_pwm   Previous user brightness step (> 0).
+ * @param new_pwm   New user brightness step (0..512).
+ */
+void ThermalLimiter_Scale(ThermalLimiterState_t *state, uint16_t old_pwm, uint16_t new_pwm)
+{
+    if (new_pwm >= old_pwm)
+        return;
+
+    state->integral     = (int16_t)scale_val((uint16_t)state->integral, new_pwm, old_pwm);
+    state->prev_limiter = (int16_t)scale_val((uint16_t)state->prev_limiter, new_pwm, old_pwm);
+    state->sub_integral = 0;
+}
+
+/**
  * @brief Run one iteration of the thermal power limiter control loop.
  *
  * @param config    Controller configuration/tuning.
@@ -57,9 +96,6 @@ uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
 
     int16_t t_cur = state->filtered_temp;
     int16_t t_threshold = (int16_t)t_set - (int16_t)config->t_anticipate_offset;
-    if (t_threshold < 0) {
-        t_threshold = 0;
-    }
 
     /* d) Continuous PI terms with Equilibrium Hold Band */
     int16_t p_term = 0;
@@ -105,15 +141,8 @@ uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
     state->integral     = (int16_t)(total_fp >> THERMAL_FP_SHIFT);
     state->sub_integral = (int16_t)(total_fp & ((1u << THERMAL_FP_SHIFT) - 1u));
 
-    /* f) Summing P + I with bounds clamp */
-    int16_t raw_limiter = (int16_t)(state->integral + p_term);
-    if (raw_limiter < 0) {
-        raw_limiter = 0;
-    } else if (raw_limiter > (int16_t)user_pwm) {
-        raw_limiter = (int16_t)user_pwm;
-    }
-
-    /* g) Slew Rate Filter for smooth, flicker-free transitions */
+    /* f) Summing P + I and Slew Rate Filter for smooth transitions */
+    int16_t raw_limiter  = (int16_t)(state->integral + p_term);
     int16_t last_limiter = state->prev_limiter;
     int16_t delta        = (int16_t)(raw_limiter - last_limiter);
     int16_t next_limiter;

@@ -100,6 +100,15 @@ typedef struct {
 void ThermalLimiter_Init(ThermalLimiterState_t *state);
 
 /**
+ * @brief Scale controller state proportionally when user brightness changes.
+ *
+ * @param state     Persistent controller state (RAM).
+ * @param old_pwm   Previous user brightness step (> 0).
+ * @param new_pwm   New user brightness step (0..512).
+ */
+void ThermalLimiter_Scale(ThermalLimiterState_t *state, uint16_t old_pwm, uint16_t new_pwm);
+
+/**
  * @brief Run one iteration of the thermal power limiter control loop.
  *
  * @param config    Controller configuration/tuning.

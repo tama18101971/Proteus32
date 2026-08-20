@@ -161,8 +161,18 @@ void scan_limiters_fault(void)
 void reset_limiters(void)
 {
     ThermalLimiter_Init(&state);
-    limiter = 0;
-    last_limiter = 0;
+    limiter = last_limiter = 0;
     thermal_fault = false;
     fault_streak = 0u;
+}
+
+/**
+ * @brief Scale limiter state proportionally when user brightness changes.
+ * @param old_step Previous user step.
+ * @param new_step New user step.
+ */
+void scale_limiters(uint16_t old_step, uint16_t new_step)
+{
+    ThermalLimiter_Scale(&state, old_step, new_step);
+    limiter = last_limiter = (uint16_t)state.prev_limiter;
 }
