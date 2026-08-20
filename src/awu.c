@@ -159,8 +159,13 @@ void AWU_Sleep_Tick(awu_tick_t tick)
 void AWU_Sleep_Now(void)
 {
 #ifdef UART_DEBUG
-    while (!(USART1->STATR & USART_STATR_TC))
-        ;
+    /* Bounded wait: flush the last UART byte before entering STANDBY,
+     * but do not hang if USART1 is already in a bad state. */
+    {
+        uint32_t _w = 10000u;
+        while (!(USART1->STATR & USART_STATR_TC))
+            if (!--_w) break;
+    }
 #endif
 
     is_sleep_mode = true; /* Устанавливаем флаг сна */

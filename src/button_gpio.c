@@ -31,9 +31,17 @@ void EXTI7_0_IRQHandler(void)
 {
     if (EXTI->INTFR & (1U << 3))
     {
-        #ifdef UART_DEBUG
-        while (!(USART1->STATR & USART_STATR_TC)) {}
-        #endif
+#ifdef UART_DEBUG
+        /* Bounded wait: if USART1 is unclocked (STANDBY wake) or glitched,
+         * the flag will never set.  Bail out instead of hanging the ISR.
+         * At 48 MHz the loop body is ~4 cycles; 10000 iterations ≈ 85 µs,
+         * comfortably longer than one byte at 460800 baud (~22 µs). */
+        {
+            uint32_t _w = 10000u;
+            while (!(USART1->STATR & USART_STATR_TC))
+                if (!--_w) break;
+        }
+#endif
 
         need_sleep = false;
         wakeup_source = WS_BUTTON;

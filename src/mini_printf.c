@@ -1,6 +1,12 @@
 #include "mini_printf.h"
 #include "ch32v00x.h"
 
+/* Busy-wait iteration limit for USART1 flag polling.
+ * At 48 MHz each loop is ~4 core cycles → ~85 µs at 10 000 iterations.
+ * Enough for one full byte at 460800 baud (~22 µs) with generous margin,
+ * but short enough to avoid an observable hang. */
+#define USART_WAIT_LIMIT  10000u
+
 /**
  * @brief Initialise UART1 for debug output (bare-metal register writes).
  * @param baudrate Target baud rate (e.g. 460800).
@@ -24,14 +30,15 @@ void uart_init(uint32_t baudrate)
 /**
  * @brief Queue one character in USART1's transmit data register.
  * @param c Character to send.
- * @details Waits for TXE rather than TC so the next character can be loaded
- * while the previous one is still being shifted on the wire. mini_printf()
- * waits for TC once after the complete message.
+ * @details Waits for TXE with a bounded iteration count so a glitched or
+ *          unclocked USART1 cannot freeze the main loop.  If the limit
+ *          expires the character is silently dropped.
  */
 static void out_char(char c)
 {
+    uint32_t wait = USART_WAIT_LIMIT;
     while (!(USART1->STATR & USART_STATR_TXE))
-        ;
+        if (!--wait) return;
 
     USART1->DATAR = (uint8_t)c;
 }
@@ -179,9 +186,11 @@ int mini_printf(const char *fmt, ...)
     va_end(ap);
 
     /* Preserve the existing blocking-message contract: callers return only
-     * after the final byte has physically left USART1. */
+     * after the final byte has physically left USART1.
+     * Bounded wait: if USART1 is glitched or unclocked, bail out. */
+    uint32_t wait = USART_WAIT_LIMIT;
     while (!(USART1->STATR & USART_STATR_TC))
-        ;
+        if (!--wait) break;
 
     return 0;
 }
