@@ -206,7 +206,7 @@ int main(void)
 
     reset_limiters();
 
-    EE_PRINTF("[LIM SET] setpoint=%u kp_shift=%u ki_decim=%u ki_recov=%u offset=%u\r\n",
+    EE_PRINTF("[TSET] setpoint=%u kp_shift=%u ki_decim=%u ki_recov=%u offset=%u\r\n",
               get_thermal_setpoint(), config.kp_left_shift,
               config.ki_decimation_shift, config.ki_recov_shift, config.t_anticipate_offset);
 
@@ -246,7 +246,7 @@ int main(void)
                 adc_init();
 
                 bool sample_ok = sample_and_scan();
-                EE_PRINTF("[THERMAL WAKE] ok=%u T=%u F=%d I=%d L=%u V=%umV\r\n",
+                EE_PRINTF("[TWAKE] ok=%u T=%u F=%d I=%d L=%u V=%umV\r\n",
                           (unsigned)sample_ok, get_exact_temp_adc(),
                           state.filtered_temp, state.integral, limiter,
                           vbat_to_mv_calibrated());
@@ -365,7 +365,7 @@ int main(void)
         if (tick_2hz())
         {
             uint16_t out = (step_user > limiter) ? (step_user - limiter) : 0;
-            EE_PRINTF("[NORMAL] T=%u F=%d I=%d L=%d P=%u S=%u V=%umV\r\n",
+            EE_PRINTF("[TSTAT] T=%u F=%d I=%d L=%d P=%u S=%u V=%umV\r\n",
                       get_exact_temp_adc(), state.filtered_temp,
                       state.integral, state.prev_limiter, out, step_user,
                       vbat_to_mv_calibrated());
@@ -401,7 +401,7 @@ int main(void)
                     bool sample_ok = sample_and_scan();
                     if (sample_ok && thermal_sleep_allowed())
                     {
-                        EE_PRINTF("[THERMAL SLEEP] S=%u L=%u\r\n",
+                        EE_PRINTF("[TSLEEP] S=%u L=%u\r\n",
                                   step_tc, limiter);
                         sleep_owner = SLEEP_OWNER_THERMAL;
                         need_sleep = true;
