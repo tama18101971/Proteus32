@@ -15,7 +15,11 @@
 #include "array.h"
 #include "ob.h"
 
+#ifdef USE_EX_AUX
+#define MAIN_OP_COUNT (EAUX_CLICKX + 1)
+#else
 #define MAIN_OP_COUNT (LM_TIME_CLICKX + 1)
+#endif
 
 /* Current UI index used for table selection. Defined in ui.c. */
 extern uint8_t ui_table_idx;
@@ -168,6 +172,9 @@ static const dispatch_t usr_table[] = {
     { MODE_OFF, 6, 0, false, true,  ENTER_LM_EN_MODE },     /* 6 кликов: вкл/выкл подсветки блокировки (1..2) */
     { MODE_OFF, 7, 0, false, true,  ENTER_LM_TIME_MODE },   /* 7 кликов: время подсветки блокировки (1..4) */
     { MODE_OFF, 8, 0, false, true,  ENTER_CHTK_MODE },      /* 8 кликов: калибровка температуры (EE.usr.t_calibr, 1..15) */
+#ifdef USE_EX_AUX
+    { MODE_OFF, 9, 0, false, true,  ENTER_EAUX_MODE },      /* 9 кликов: ext aux voltage warning (EE.uif.eaux_onoff, 1..2) */
+#endif
     { MODE_OFF, 0, 0, true,  false, MENU_EXIT },
 
     /* -- Sub-modes -- */
@@ -178,6 +185,9 @@ static const dispatch_t usr_table[] = {
     { MODE_LM_EN,   0, 0, false, true,  LM_EN_CLICKX },
     { MODE_LM_TIME, 0, 0, false, true,  LM_TIME_CLICKX },
     { MODE_CTK_H,   0, 0, false, true,  CHTK_CLICKX },
+#ifdef USE_EX_AUX
+    { MODE_EAUX,    0, 0, false, true,  EAUX_CLICKX },
+#endif
 
     /* -- Magic mode -- */
     { MODE_MAGIC, 0,  0, true,  false, EXIT_MAGIC_MODE },
@@ -459,4 +469,9 @@ void (* const main_op[])(void) = {
     lm_en_clickX,
     enter_lm_time_mode,
     lm_time_clickX,
+#ifdef USE_EX_AUX
+    /*53..54*/
+    enter_eaux_mode,
+    eaux_clickX,
+#endif
 };

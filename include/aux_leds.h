@@ -276,6 +276,14 @@ void start_aux_strobe(uint8_t index);
  */
 void start_aux_beacon(void);
 
+#ifdef USE_EX_AUX
+/**
+ * @brief Start extended aux voltage warning blink pattern.
+ * @param ex_mode Warning level (VWARNING_FAST/MEDIUM/SLOW).
+ */
+void start_exaux_voltage(WARNING_Fr_t ex_mode);
+#endif
+
 /**
  * @brief Check whether the beacon is at the start of its repetition cycle.
  * @return true on the cycle-initial AWU wake before the first flash.

@@ -16,6 +16,7 @@
 
 #include "ch32v00x.h"
 #include "debug.h"
+#include "proteus_config.h"
 #include "soft_start.h"
 #include "button.h"
 
@@ -105,6 +106,9 @@ typedef enum {
     MODE_BL,                /**< Backlight config. */
     MODE_LM_EN,             /**< Config: lockout min-light enable/disable. */
     MODE_LM_TIME,           /**< Config: lockout min-light time. */
+#ifdef USE_EX_AUX
+    MODE_EAUX,              /**< Config: extended aux voltage warning toggle. */
+#endif
 
     MODE_SLOT01,            /**< Magic slot 1. */
     MODE_SLOT02,            /**< Magic slot 2. */
@@ -515,6 +519,18 @@ void enter_lm_time_mode(void);
  * @brief Handle click sequence in lockout min-light duration menu.
  */
 void lm_time_clickX(void);
+
+#ifdef USE_EX_AUX
+/**
+ * @brief Enter extended aux voltage warning toggle (user menu).
+ */
+void enter_eaux_mode(void);
+
+/**
+ * @brief Handle click sequence in extended aux voltage warning menu.
+ */
+void eaux_clickX(void);
+#endif
 
 /**
  * @brief Enter magic slots mode.

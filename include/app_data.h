@@ -22,7 +22,8 @@ struct __attribute__((packed)) ui_flags {
     uint8_t ui_index       : 2;
     uint8_t off_bckl       : 1;
     uint8_t use_memory     : 1;
-    uint8_t reserved       : 4;
+    uint8_t eaux_onoff     : 1;
+    uint8_t reserved       : 3;
 };
 
 union ee_view {

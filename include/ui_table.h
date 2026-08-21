@@ -129,6 +129,12 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout);
 #define ENTER_LM_TIME_MODE  51
 #define LM_TIME_CLICKX      52
 
+#ifdef USE_EX_AUX
+/* -- User menu: extended aux voltage warning (53..54) -- */
+#define ENTER_EAUX_MODE     53
+#define EAUX_CLICKX         54
+#endif
+
 /*******************************************************************************
  *  Main action function table
  ******************************************************************************/

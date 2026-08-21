@@ -62,6 +62,43 @@ uint8_t down_count = 5;
  * подтверждённо восстановившимся напряжением (reset_max_step()). */
 uint16_t volt_step_ratchet = MAX_STEP;
 
+#ifdef USE_EX_AUX
+/** @brief Voltage thresholds for extended aux warning (Vrefint codes, ascending).
+ *  ex_lvls[0] = FAST (~3.88 V), [1] = MEDIUM (~3.69 V), [2] = SLOW (~3.52 V). */
+static const uint16_t ex_lvls[3] = {
+    MV_LT(3880),
+    MV_LT(3690),
+    MV_LT(3520)
+};
+
+/**
+ * @brief Extended aux voltage warning check.
+ * @param eff_vcode Calibrated Vrefint code (vcode - vc).
+ *
+ * Compares effective voltage against three thresholds and triggers
+ * progressively more urgent blink patterns via start_exaux_voltage().
+ * Only active when eaux_onoff is set and driver is in MODE_ON.
+ */
+static void exaux(int32_t eff_vcode)
+{
+    if (!EE.uif.eaux_onoff) return;
+    if (driver_mode != MODE_ON) return;
+
+    if (eff_vcode >= ex_lvls[2])       vwarning = VWARNING_SLOW;
+    else if (eff_vcode >= ex_lvls[1])  vwarning = VWARNING_MEDIUM;
+    else if (eff_vcode >= ex_lvls[0])  vwarning = VWARNING_FAST;
+    else                                vwarning = VWARNING_NONE;
+
+    if (vwarning != vwarning_old) {
+        vwarning_old = vwarning;
+        if (vwarning != VWARNING_NONE)
+            start_exaux_voltage((WARNING_Fr_t)vwarning);
+        else
+            stop_aux_if(IDM_VWARNING, false);
+    }
+}
+#endif
+
 /* Таймаут циклов опроса флагов/битов АЦП (защита от зависания при сбое) */
 #define ADC_WAIT_TIMEOUT 100000
 
@@ -578,6 +615,10 @@ void scan_voltage(void)
         return;
     }
     voff_count_off = 0;
+
+#ifdef USE_EX_AUX
+    exaux(eff_vcode);
+#endif
 
     /* 2. Ступенчатое снижение яркости (UI1 / UI2) */
     uint8_t ui_index = ui_table_idx;

@@ -129,7 +129,10 @@ void ee_defaults(void)
     EE.default_ui1 = DEFAULT_STEP;
     EE.default_ui2 = DEFAULT_MODE;
 
-    EE.uif.off_bckl       = true;         
+    EE.uif.off_bckl       = true;
+#ifdef USE_EX_AUX
+    EE.uif.eaux_onoff     = 0;
+#endif
 }
 
 /**
@@ -886,11 +889,14 @@ void chtk_clickX(void)
  *  User settings: beacon / backlight / UI select / magic slots
  ******************************************************************************/
 
-/** @brief Toggle external aux mode. */
+/** @brief Toggle external aux mode (magic slot). */
 void slot_eauxmode(void)
 {
+#ifdef USE_EX_AUX
 #ifdef USE_MENU
-    clr_indicator(IND_GRN);
+    EE.uif.eaux_onoff ^= 1;
+    clr_indicator((ind_clr_t)EE.uif.eaux_onoff);
+#endif
 #endif
 }
 
@@ -1046,6 +1052,29 @@ void lm_time_clickX(void)
     driver_mode = MODE_OFF;
 #endif
 }
+
+#ifdef USE_EX_AUX
+/** @brief Enter extended aux voltage warning toggle (user menu). */
+void enter_eaux_mode(void)
+{
+#ifdef USE_MENU
+    enter_submode(MODE_EAUX, EE.uif.eaux_onoff ? 2u : 1u);
+#endif
+}
+
+/** @brief Set extended aux voltage warning from click count (user menu). */
+void eaux_clickX(void)
+{
+#ifdef USE_MENU
+    if (menu_clicks_valid(1u, 2u))
+    {
+        EE.uif.eaux_onoff = (clicks_count == 2u);
+        menu_submode_done();
+    }
+    driver_mode = MODE_OFF;
+#endif
+}
+#endif
 
 /*******************************************************************************
  *  Magic slots

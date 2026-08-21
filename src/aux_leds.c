@@ -675,7 +675,7 @@ void aux_refresh_backlight(void) {
  * Зацикленная (cycle=1) команда: одна вспышка RED_LED за период.
  * ON-полупериод — короткая вспышка, OFF — пауза до следующей вспышки.
  * Сумма ON+OFF ≈ период предупреждения (2/4/8 с).
- * Яркость0=ярко, Яркость1=выкл.
+ * 
  */
 void start_exaux_voltage(WARNING_Fr_t ex_mode) {
 	uint32_t cmd = 0;
@@ -692,7 +692,7 @@ void start_exaux_voltage(WARNING_Fr_t ex_mode) {
 	default:
 		break;
 	}
-	start_aux_cmd(cmd, true, IDM_VWARNING, AWU_15MS);
+	start_aux_cmd(cmd, true, IDM_VWARNING, AWU_IMMEDIATELY);
 }
 #endif
 
