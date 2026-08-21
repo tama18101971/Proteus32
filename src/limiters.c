@@ -102,7 +102,7 @@ uint16_t get_thermal_setpoint(void)
 static void update_limiters(uint16_t exact_adc)
 {
     uint16_t t_set = get_thermal_setpoint();
-    limiter = ThermalLimiter_Update(&config, &state, exact_adc, t_set, step_user);
+    limiter = ThermalLimiter_Update(&config, &state, exact_adc, t_set, MAX_STEP);
 
     if (limiter != last_limiter)
     {
@@ -151,8 +151,8 @@ void scan_limiters_fault(void)
         return;
 
     state.flags |= THERMAL_FLAG_ERROR;
-    limiter = step_user;
-    state.prev_limiter = (int16_t)step_user;
+    limiter = MAX_STEP;
+    state.prev_limiter = (int16_t)MAX_STEP;
     last_limiter = limiter;
     set_current_ll(0, SS_NO);
 }
@@ -164,15 +164,4 @@ void reset_limiters(void)
     limiter = last_limiter = 0;
     thermal_fault = false;
     fault_streak = 0u;
-}
-
-/**
- * @brief Scale limiter state proportionally when user brightness changes.
- * @param old_step Previous user step.
- * @param new_step New user step.
- */
-void scale_limiters(uint16_t old_step, uint16_t new_step)
-{
-    ThermalLimiter_Scale(&state, old_step, new_step);
-    limiter = last_limiter = (uint16_t)state.prev_limiter;
 }

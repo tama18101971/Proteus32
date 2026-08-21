@@ -17,12 +17,16 @@
 //#define UART_DEBUG
 //#define PRINT_ADC
 
-#define USE_BATTIND
-#define USE_EX_AUX
-#define USE_STROBE
-#define USE_BLOCK
-#define USE_MENU
-#define USE_MAGIC_SLOTS
+/* ── Флаги функций (каждый #define добавляет код в прошивку) ──────
+ * Отключение лишних флагов экономит Flash (лимит 16128 байт).      */
+
+#define USE_BATTIND         // Индикация уровня заряда батареи вспышками AUX-светодиодов (slot_batt_ind, aux_leds.c)
+#define USE_AUX_ERR         // Индикация ошибки — три короткие красные вспышки (aux_err, aux_leds.c)
+#define USE_EX_AUX          // Расширенные AUX-режимы: предупреждение о низком напряжении (start_exaux_voltage) и доп. команды в UI
+#define USE_STROBE          // Стробоскоп: режим MODE_STROB, профили strobe_sos[], переключение up_strobe (ui.c)
+#define USE_BLOCK           // Блокировка/лок-аут: MODE_BLOCK/MODE_BLOCK0, временный свет CMODE_MIN, разблокировка (ui.c)
+#define USE_MENU            // Инженерное и пользовательское меню (вход с кнопкой при включении, ui.c)
+#define USE_MAGIC_SLOTS     // «Волшебные» слоты: до 31 клика с маской длинного нажатия (ui_table.c, ui.c)
 
 #if defined(UART_DEBUG) || defined(PRINT_ADC)
     #include "mini_printf.h"

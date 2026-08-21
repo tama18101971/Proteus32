@@ -364,7 +364,7 @@ int main(void)
 #ifdef UART_DEBUG
         if (tick_2hz())
         {
-            uint16_t out = (step_user > limiter) ? (step_user - limiter) : 0;
+            uint16_t out = get_step_tc(step_user);
             EE_PRINTF("[TSTAT] T=%u F=%d I=%d L=%d P=%u S=%u V=%umV\r\n",
                       get_exact_temp_adc(), state.filtered_temp,
                       state.integral, state.prev_limiter, out, step_user,

@@ -138,7 +138,7 @@ void ee_defaults(void)
 /**
  * @brief Clamp brightness target to thermal ceiling.
  * @param step Requested brightness step.
- * @return max(step - limiter, 1) when step > 0, or 0 when off/fault.
+ * @return min(step, MAX_STEP - limiter) when step > 0, or 0 when off/fault.
  */
 uint16_t get_step_tc(uint16_t step)
 {
@@ -148,7 +148,8 @@ uint16_t get_step_tc(uint16_t step)
     if ((ui_table_idx == 2U || ui_table_idx == 3U) && (step <= modes[CMODE_MID]))
         return step;
 
-    return (step > limiter) ? (uint16_t)(step - limiter) : 1u;
+    uint16_t tc_step = (MAX_STEP > limiter) ? (uint16_t)(MAX_STEP - limiter) : 1u;
+    return (step <= tc_step) ? step : tc_step;
 }
 
 /**
@@ -294,9 +295,6 @@ void set_current_ll(uint16_t step_target, SoftStartSpeed_t ss_speed)
  */
 void set_current(uint16_t step_target, SoftStartSpeed_t ss_speed)
 {
-    if (step_user && step_target && (step_user != step_target))
-        scale_limiters(step_user, step_target);
-
     step_user = step_target;
     set_current_ll(get_step_tc(step_target), ss_speed);
     if ((!step_target) && (!ss_speed)) OFF_POWER();
@@ -314,6 +312,8 @@ void step_up_ui1(void)
 {
     if (step_user < max_step)
         set_current(step_user + 1u, SS_NO);
+    else if ((limiter > 0 || max_step < MAX_STEP) && !aux_is_active())
+        aux_err(AWU_IMMEDIATELY);
 }
 
 /** @brief Decrement brightness by one step (UI1 ramping). */
@@ -359,6 +359,8 @@ void on_turbo_ui1(void)
         ps.start = start;
         ps.pr_step = step_user ? step_user : step_default;
         ps.use_prev = true;
+        if (!start && (ps.pr_step >= max_step) && (limiter > 0 || max_step < MAX_STEP))
+            aux_err(AWU_IMMEDIATELY);
         set_current(max_step, SS_FAST);
     }
     else
@@ -1271,6 +1273,11 @@ void on_turbo_ui2(void)
         ps.start = on_driver();
         ps.pr_step = mode_current;
         mode_current = get_up_mode(CMODE_TURBO);
+        if (!ps.start && (get_step_tc(get_stepi(mode_current)) <= get_step_tc(get_stepi(ps.pr_step))))
+        {
+            if (limiter > 0 || mode_current < CMODE_TURBO)
+                aux_err(AWU_IMMEDIATELY);
+        }
         set_curri(mode_current);
     }
     else
@@ -1453,14 +1460,14 @@ void ui_process(void)
                  * permanent low-voltage ratchet.  Any valid reading,
                  * including a genuinely depleted cell, still follows the
                  * normal low-voltage ceiling and shutdown paths. */
+                uint16_t v_max = MAX_STEP;
                 if (voltage_ok)
                 {
-                    /* limiter is applied once when the physical target is
-                     * written; keep the battery ceiling in user-step space. */
-                    max_step = ratchet_max_step();
+                    v_max = ratchet_max_step();
                 }
+                max_step = (v_max > limiter) ? (uint16_t)(v_max - limiter) : 1u;
                 stop_aux_if(IDM_BEACON, false);
-                if (step_user >= max_step) direction = DIR_DOWN;
+                if (step_user >= max_step || step_tc >= max_step) direction = DIR_DOWN;
             }
             break;
 

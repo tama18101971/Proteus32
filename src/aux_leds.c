@@ -733,6 +733,7 @@ void aux_off(void) {
 	start_aux_cmd(INFO_RED, true, IDM_OTHER, AWU_60MS);
 }
 
+#ifdef USE_AUX_ERR
 /**
  * @brief Индикация ошибки (три короткие красные вспышки)
  * @param delay начальная задержка перед первой вспышкой или AWU_IMMEDIATELY
@@ -740,6 +741,7 @@ void aux_off(void) {
 void aux_err(awu_tick_t delay) {
 	start_aux_cmd(ERRO_RED, true, IDM_OTHER, delay);
 }
+#endif
 
 /**
  * @brief Индикация блокировки (одна короткая красная вспышка, DANG_RED)

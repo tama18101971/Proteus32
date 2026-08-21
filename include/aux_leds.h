@@ -320,7 +320,11 @@ void aux_off(void);
  * @brief Three short red flashes (error indication).
  * @param delay Initial delay, or AWU_IMMEDIATELY to start without waiting.
  */
+#ifdef USE_AUX_ERR
 void aux_err(awu_tick_t delay);
+#else
+#define aux_err(delay) ((void)0)
+#endif
 
 /**
  * @brief One short red flash (lock-mode press indication).
