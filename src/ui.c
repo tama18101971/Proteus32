@@ -893,10 +893,8 @@ void chtk_clickX(void)
 void slot_eauxmode(void)
 {
 #ifdef USE_EX_AUX
-#ifdef USE_MENU
     EE.uif.eaux_onoff ^= 1;
     clr_indicator((ind_clr_t)EE.uif.eaux_onoff);
-#endif
 #endif
 }
 

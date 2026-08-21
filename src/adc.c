@@ -64,7 +64,7 @@ uint16_t volt_step_ratchet = MAX_STEP;
 
 #ifdef USE_EX_AUX
 /** @brief Voltage thresholds for extended aux warning (Vrefint codes, ascending).
- *  ex_lvls[0] = FAST (~3.88 V), [1] = MEDIUM (~3.69 V), [2] = SLOW (~3.52 V). */
+ *  ex_lvls[0] = SLOW (~3.88 V), [1] = MEDIUM (~3.69 V), [2] = FAST (~3.52 V). */
 static const uint16_t ex_lvls[3] = {
     MV_LT(3880),
     MV_LT(3690),
@@ -81,15 +81,23 @@ static const uint16_t ex_lvls[3] = {
  */
 static void exaux(int32_t eff_vcode)
 {
-    if (!EE.uif.eaux_onoff) return;
-    if (driver_mode != MODE_ON) return;
+    if (!EE.uif.eaux_onoff || (driver_mode != MODE_ON))
+    {
+        if (vwarning != VWARNING_NONE)
+        {
+            vwarning = VWARNING_NONE;
+            vwarning_old = VWARNING_NONE;
+            stop_aux_if(IDM_VWARNING, false);
+        }
+        return;
+    }
 
-    if (eff_vcode >= ex_lvls[2])       vwarning = VWARNING_SLOW;
+    if (eff_vcode >= ex_lvls[2])       vwarning = VWARNING_FAST;
     else if (eff_vcode >= ex_lvls[1])  vwarning = VWARNING_MEDIUM;
-    else if (eff_vcode >= ex_lvls[0])  vwarning = VWARNING_FAST;
+    else if (eff_vcode >= ex_lvls[0])  vwarning = VWARNING_SLOW;
     else                                vwarning = VWARNING_NONE;
 
-    if (vwarning != vwarning_old) {
+    if (vwarning != vwarning_old || (vwarning != VWARNING_NONE && !aux_is_active())) {
         vwarning_old = vwarning;
         if (vwarning != VWARNING_NONE)
             start_exaux_voltage((WARNING_Fr_t)vwarning);
