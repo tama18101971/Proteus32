@@ -24,6 +24,23 @@
 
 volatile uint8_t is_sleep_mode = false;
 
+#ifdef UART_DEBUG
+/**
+ * @brief Ограниченное ожидание завершения передачи UART (флаг TC).
+ *
+ * Общая точка для пробуждения по кнопке и входа в STANDBY: сбрасывает
+ * последний байт перед потерей тактирования USART1. Цикл ограничен
+ * ~10000 итераций (~85 мкс при 48 МГц), чтобы неисправный/незаклоканный
+ * USART не подвесил ISR. noinline — чтобы LTO не дублировал цикл.
+ */
+__attribute__((noinline)) void uart_tc_wait(void)
+{
+    uint32_t _w = 10000u;
+    while (!(USART1->STATR & USART_STATR_TC))
+        if (!--_w) break;
+}
+#endif
+
 /* ============================================================
  * AWU TABLE
  * ============================================================
@@ -114,8 +131,13 @@ void AWU_init(void)
     RCC->APB1PCENR |= RCC_PWREN; /* Включаем тактирование PWR (бит 28 APB1PCENR) */
     RCC->RSTSCKR |= RCC_LSION;   /* Включаем LSI генератор (бит 0 RSTSCKR) */
 
-    while (!(RCC->RSTSCKR & RCC_LSIRDY)) /* Ждём стабилизации LSI (бит 1 RSTSCKR) */
-        ;
+    /* Ждём стабилизации LSI (бит 1 RSTSCKR) с таймаутом: отказ генератора
+     * не должен вешать boot до старта остальных подсистем (~120 мс при
+     * HSI 8 МГц до настройки PLL). */
+    uint32_t timeout = 1000000u;
+    while (!(RCC->RSTSCKR & RCC_LSIRDY))
+        if (!--timeout)
+            break;
 }
 
 /**
@@ -136,18 +158,6 @@ void AWU_stop(bool stop_lsi)
 }
 
 /**
- * @brief Настройка AWU на заданный интервал, затем вход в STANDBY.
- * @param tick Индекс интервала задержки (AWU_15MS..AWU_16S).
- *
- * Комбинирует AWU_set_delay() и AWU_Sleep_Now() для периодического пробуждения.
- */
-void AWU_Sleep_Tick(awu_tick_t tick)
-{
-    AWU_set_delay(tick);
-    AWU_Sleep_Now();
-}
-
-/**
  * @brief Вход в STANDBY и пробуждение.
  *
  * Устанавливает PDDS=1 для STANDBY, выполняет WFI.
@@ -159,13 +169,7 @@ void AWU_Sleep_Tick(awu_tick_t tick)
 void AWU_Sleep_Now(void)
 {
 #ifdef UART_DEBUG
-    /* Bounded wait: flush the last UART byte before entering STANDBY,
-     * but do not hang if USART1 is already in a bad state. */
-    {
-        uint32_t _w = 10000u;
-        while (!(USART1->STATR & USART_STATR_TC))
-            if (!--_w) break;
-    }
+    uart_tc_wait(); /* Сбросить последний байт перед потерей тактирования USART1 */
 #endif
 
     is_sleep_mode = true; /* Устанавливаем флаг сна */
@@ -226,24 +230,13 @@ void AWU_IRQHandler(void)
         if (is_sleep_mode) {
             SystemInit();            /* Восстанавливаем системные часы после пробуждения */
         }
-        wakeup_source = WS_AWU;
+        /* Кнопка и AWU могут стать pending одновременно сразу после __WFI().
+         * Не затираем уже установленный WS_BUTTON: нажатие — видимый
+         * пользователю источник пробуждения и имеет приоритет над тиком. */
+        if (wakeup_source != WS_BUTTON)
+            wakeup_source = WS_AWU;
 
         /* Очищаем pending-флаг EXTI9: CH32V003 clears it by writing 1. */
         EXTI->INTFR = (1U << 9);
-    }
-}
-
-/**
- * @brief Обработка отложенного события AWU в главном цикле.
- *
- * Если флаг wakeup_source == WS_AWU, сбрасывает его и входит в STANDBY
- * на следующий интервал AWU. Используется для периодических пробуждений.
- */
-void handle_awu(void)
-{
-    if (wakeup_source == WS_AWU)
-    {
-        wakeup_source = WS_NONE;
-        AWU_Sleep_Now();
     }
 }

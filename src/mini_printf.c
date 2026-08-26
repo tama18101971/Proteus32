@@ -135,6 +135,15 @@ static void out_format(const char *fmt, va_list ap)
             fmt++;
         }
 
+        if (*fmt == '\0') {
+            /* Lone '%' (optionally with flags/width) at the very end of
+             * the format string: print it literally and stop.  Falling
+             * into default would emit a stray NUL byte and walk fmt past
+             * the terminator, scanning arbitrary flash for another '\0'. */
+            out_char('%');
+            break;
+        }
+
         switch (*fmt) {
         case 'd':
         case 'i':

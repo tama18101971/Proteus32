@@ -176,9 +176,9 @@ int main(void)
     ob_Init();
     if (adc_read())
     {
-        int32_t eff_vcode = (int32_t)vrefint_adc - (int32_t)ob_GetVc();
-        if (eff_vcode >= (int32_t)MV_LT(3100))
-            beacon_low_voltage = true;
+        /* Гистерезисный флаг низкого заряда: при загрузке достаточно
+         * однократного обновления на валидной выборке. */
+        (void)beacon_low_voltage_update();
     }
     if (!read_ee())
     {
@@ -212,69 +212,76 @@ int main(void)
 
     while (1)
     {
-        /* 1. Пробуждение по кнопке: восстанавливаем периферию */
-        if ((wakeup_source == WS_BUTTON) && is_sleep_mode)
+        /* 1./2. Обработка пробуждения: снапшот и очистка выполняются ДО
+         * ветвления. Прерывание, вклинившееся между проверкой флага и его
+         * сбросом, иначе теряется (гонка кнопка/AWU). При совместном
+         * пробуждении кнопка приоритетна, AWU-тик просто пропускается. */
+        if (wakeup_source != WS_NONE)
         {
-            if (sleep_owner == SLEEP_OWNER_THERMAL)
-                AWU_OFF();
-            SystemInit();
+            wakeup_source_t ws = wakeup_source;
+            wakeup_source = WS_NONE;
+
+            /* 1. Пробуждение по кнопке: восстанавливаем периферию */
+            if (ws == WS_BUTTON && is_sleep_mode)
+            {
+                if (sleep_owner == SLEEP_OWNER_THERMAL)
+                    AWU_OFF();
+                SystemInit();
 #ifdef UART_DEBUG
-            uart_init(460800);
+                uart_init(460800);
 #endif
-            is_sleep_mode = false;
-            need_sleep = false;
-            wakeup_source = WS_NONE;
-            wake_i2c();
-            stop_aux_if(IDM_BEACON, false);
-            adc_init();
-            if (!is_aux_mode(IDM_STROBE))
-            {
-                (void)sample_and_scan();
-            }
-            tim2_start();
-            sleep_owner = SLEEP_OWNER_NORMAL;
-        }
-
-        /* 2. AWU wake: thermal sleep and AUX commands have separate owners. */
-        if (wakeup_source == WS_AWU)
-        {
-            wakeup_source = WS_NONE;
-            if ((sleep_owner == SLEEP_OWNER_THERMAL) && is_sleep_mode)
-            {
-                AWU_OFF();
+                is_sleep_mode = false;
+                need_sleep = false;
                 wake_i2c();
+                stop_aux_if(IDM_BEACON, false);
                 adc_init();
-
-                bool sample_ok = sample_and_scan();
-                EE_PRINTF("[TWAKE] ok=%u T=%u F=%d I=%d L=%u V=%umV\r\n",
-                          (unsigned)sample_ok, get_exact_temp_adc(),
-                          state.filtered_temp, state.integral, limiter,
-                          vbat_to_mv_calibrated());
-                if (!sample_ok || !thermal_sleep_allowed())
+                if (!is_aux_mode(IDM_STROBE))
                 {
-                    is_sleep_mode = false;
-                    need_sleep = false;
-                    sleep_owner = SLEEP_OWNER_NORMAL;
-                    tim2_start();
+                    (void)sample_and_scan();
+                }
+                tim2_start();
+                sleep_owner = SLEEP_OWNER_NORMAL;
+            }
+            /* 2. AWU wake: thermal sleep and AUX commands have separate owners. */
+            else if (ws == WS_AWU)
+            {
+                if ((sleep_owner == SLEEP_OWNER_THERMAL) && is_sleep_mode)
+                {
+                    AWU_OFF();
+                    wake_i2c();
+                    adc_init();
+
+                    bool sample_ok = sample_and_scan();
+                    EE_PRINTF("[TWAKE] ok=%u T=%u F=%d I=%d L=%u V=%umV\r\n",
+                              (unsigned)sample_ok, get_exact_temp_adc(),
+                              state.filtered_temp, state.integral, limiter,
+                              vbat_to_mv_calibrated());
+                    if (!sample_ok || !thermal_sleep_allowed())
+                    {
+                        is_sleep_mode = false;
+                        need_sleep = false;
+                        sleep_owner = SLEEP_OWNER_NORMAL;
+                        tim2_start();
+                    }
+                    else
+                    {
+                        /* Keep the request set; the common sleep block below
+                         * stops ADC/TIM2 and arms the next AWU_4S interval. */
+                        need_sleep = true;
+                    }
                 }
                 else
                 {
-                    /* Keep the request set; the common sleep block below
-                     * stops ADC/TIM2 and arms the next AWU_4S interval. */
-                    need_sleep = true;
+                    if (beacon_is_cycle_start())
+                    {
+                        beacon_battery_check();
+                    }
+                    if (aux_needs_dac())
+                    {
+                        wake_i2c();
+                    }
+                    handle_aux();
                 }
-            }
-            else
-            {
-                if (beacon_is_cycle_start())
-                {
-                    beacon_battery_check();
-                }
-                if (aux_needs_dac())
-                {
-                    wake_i2c();
-                }
-                handle_aux();
             }
         }
 

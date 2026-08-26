@@ -84,15 +84,6 @@ void dac_pwrpin_off(void)
 }
 
 /**
- * @brief Проверка состояния питания DAC
- * @return 1 если питание включено (PD0 = HIGH), 0 если выключено
- */
-uint8_t dac_pwrpin_is_on(void)
-{
-    return (DAC_PWR_PORT->INDR & DAC_PWR_PIN) != 0;
-}
-
-/**
  * @brief Установка выходного напряжения на ЦАП DAC7571
  * @param data_12bit: значение от 0 до DAC_MAX_VALUE (12 бит)
  * @return I2C_OK или I2C_NACK
@@ -127,28 +118,5 @@ uint8_t dac7571_set_voltage(uint16_t data_12bit)
         return I2C_NACK;
 
     last_voltage = data_12bit;
-    return I2C_OK;
-}
-
-/**
- * @brief Перевод ЦАП в режим сна (Power-Down) для экономии энергии
- * @param mode: 1 - подтяжка 1 кОм к GND, 2 - 100 кОм к GND, 3 - High-Z (высокий импеданс)
- */
-uint8_t dac7571_power_down(uint8_t mode)
-{
-    if (mode < 1 || mode > 3)
-        return I2C_NACK;
-
-    // Сдвигаем режим в биты PD1:PD0 (6-й и 7-й биты первого байта)
-    uint8_t byte_msb = (mode << 6);
-    last_voltage = 0xFFFFu;
-
-    if (i2c_start() != I2C_OK ||
-        i2c_send_addr(DAC7571_I2C_ADDR, I2C_DIR_TX) != I2C_OK ||
-        i2c_write_byte(byte_msb) != I2C_OK ||
-        i2c_write_byte(0x00) != I2C_OK ||
-        i2c_stop() != I2C_OK)
-        return I2C_NACK;
-
     return I2C_OK;
 }

@@ -42,9 +42,6 @@ extern "C" {
 #define THERMAL_ADC_MIN            0u
 #define THERMAL_ADC_MAX            1023u
 
-/** 9-bit user PWM / Limiter domain (0..512 inclusive). */
-#define THERMAL_PWM_MAX            512u
-
 /** Fixed-point fractional bits for the integral accumulator (64 sub-steps). */
 #define THERMAL_FP_SHIFT           6u
 

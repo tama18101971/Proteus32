@@ -12,8 +12,6 @@
 #include <stdbool.h>
 #include "thermal_limiter.h"
 
-/** @brief ADC value in termo_table at 50 °C (table index 70). */
-#define TERMO_50C_ADC    722u
 /** @brief Default t_calibr value stored in EE.usr.t_calibr (5 clicks = 50 °C). */
 #define TCALIBR_DEFAULT  5u
 

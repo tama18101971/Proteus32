@@ -173,7 +173,6 @@ extern uint8_t mode_default;
 #define VERY_LONG_PRESS_UI2         93
 
 #define MODES_QTY                   7
-#define SLEEP_DELAY                 108     // kept for compatibility; real sleep via tick_5s
 
 /*******************************************************************************
  *  Ramp direction
@@ -192,7 +191,6 @@ typedef enum {
 } ind_clr_t;
 
 #define MAX_STEP    511
-#define POW_THRD    120
 
 /*******************************************************************************
  *  Core UI API
@@ -394,11 +392,6 @@ void slot_ui_select(void);
  * @brief Cycle to next strobe pattern.
  */
 void up_strobe(void);
-
-/**
- * @brief Cycle to previous strobe pattern.
- */
-void back_strobe(void);
 
 /**
  * @brief Turn off strobe and exit strobe mode.

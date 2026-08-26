@@ -30,6 +30,19 @@
 
 uint8_t change = false;
 
+/* Лимит подряд неудачных попыток программирования OB: после него flush
+ * отказывается работать до следующего изменения кэша. Иначе стойкий сбой
+ * (write-защита, деградация питания) приводил бы к полному стиранию
+ * OB-страницы каждые 5 с без ограничений — выжигание ресурса NVM. */
+#define OB_FLUSH_MAX_FAILS 3u
+static uint8_t flush_fails = 0;
+
+/** @brief Пометить кэш грязным и снять лимит неудач предыдущей записи. */
+static void ob_mark_dirty(void) {
+    change = true;
+    flush_fails = 0;
+}
+
 /* Ключи разблокировки flash-контроллера (из datasheet CH32V003) */
 #define FLASH_KEY1      0x45670123u
 #define FLASH_KEY2      0xCDEF89ABu
@@ -244,15 +257,7 @@ bool ob_Init(void) {
  */
 void ob_ResetToDefaults(void) {
     _set_defaults();
-    change = true;
-}
-
-/**
- * @brief Проверка валидности данных в кэше.
- * @return true — magic-маркер совпадает (0xA5), false — данные невалидны.
- */
-bool ob_IsValid(void) {
-    return _cache.magic == MAGIC;
+    ob_mark_dirty();
 }
 
 /**
@@ -285,7 +290,7 @@ uint8_t ob_GetMl(void) {
  */
 void ob_SetTc(int8_t value) {
     if(value != _cache.tc)
-        change = true;
+        ob_mark_dirty();
     _cache.tc = value;
 }
 
@@ -295,7 +300,7 @@ void ob_SetTc(int8_t value) {
  */
 void ob_SetVc(int8_t value) {
     if(value != _cache.vc)
-        change = true;
+        ob_mark_dirty();
     _cache.vc = value;
 }
 
@@ -305,7 +310,7 @@ void ob_SetVc(int8_t value) {
  */
 void ob_SetMl(uint8_t value) {
     if(value != _cache.ml)
-        change = true;
+        ob_mark_dirty();
     _cache.ml = value;
 }
 
@@ -327,7 +332,7 @@ uint8_t ob_GetSlot(uint8_t index) {
 void ob_SetSlot(uint8_t index, uint8_t value) {
     if (index >= SLOTS_COUNT) return;
     if(value != _cache.slots[index])
-        change = true;
+        ob_mark_dirty();
     _cache.slots[index] = value;
 }
 
@@ -344,24 +349,38 @@ bool ob_Flush(void) {
 
     if (!change)
         return false;
-    
+
+    /* Стойкий сбой: исчерпан лимит попыток. Ожидаем следующего изменения
+     * кэша (ob_mark_dirty() обнулит счётчик), чтобы не стирать страницу
+     * вхолостую каждые 5 секунд. */
+    if (flush_fails >= OB_FLUSH_MAX_FAILS)
+        return false;
+
     /* Установка маркера валидности перед записью */
     _cache.magic = MAGIC;
 
     /* Запись кэша в flash */
     if (_program() != FLASH_OK)
+    {
+        flush_fails++;
         return false;
+    }
 
     /* Верификация: чтение обратно из flash и сравнение с кэшем */
     const uint8_t *p = (const uint8_t *)&_cache;
     for (uint8_t i = 0; i < sizeof(_cache); i++)
     {
         if (*(volatile uint8_t *)(OB_ADDR + i * 2) != p[i])
+        {
+            flush_fails++;
             return false;
+        }
     }
 
-    /* Keep the dirty flag set after any failed program/verify operation so
-     * the next 5-second persistence tick retries the unchanged cache. */
+    /* Успех: кэш и flash синхронны — снимаем dirty-флаг и счётчик неудач.
+     * При провале (выходы выше) dirty сохраняется, но реtry ограничен
+     * лимитом OB_FLUSH_MAX_FAILS. */
     change = false;
+    flush_fails = 0;
     return true;
 }

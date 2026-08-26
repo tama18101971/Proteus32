@@ -18,6 +18,17 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "button_gpio.h"
+#include "proteus_config.h"
+
+#ifdef UART_DEBUG
+/**
+ * @brief Ограниченное ожидание завершения передачи UART (флаг TC USART1).
+ *
+ * Общая для ISR кнопки и входа в STANDBY: сбрасывает последний байт перед
+ * потерей тактирования USART1; при неисправном USART выходит по таймауту.
+ */
+void uart_tc_wait(void);
+#endif
 
 /** @brief Preset AWU delay intervals. */
 typedef enum {
@@ -84,22 +95,8 @@ void AWU_set_raw(uint8_t psc_idx, uint8_t win);
 void AWU_stop(bool stop_lsi);
 
 /**
- * @brief Configure AWU for a delay tick, then enter sleep.
- * @param tick Delay interval to use for the sleep period.
- */
-void AWU_Sleep_Tick(awu_tick_t tick);
-
-/**
  * @brief Configure AWU and enter STANDBY immediately.
  */
 void AWU_Sleep_Now(void);
-
-/**
- * @brief Handle pending AWU event.
- *
- * Called from main loop when awu_event is set.
- * Processes AUX LED state machine etc.
- */
-void handle_awu(void);
 
 #endif /* AWU_H */

@@ -35,6 +35,10 @@ static uint8_t  long_mask;
 static uint8_t  deb_cnt;
 static bool     hold_active;
 static bool     prev_pin;
+/* true, когда ST_DEBOUNCE фильтрует повторное нажатие внутри sequence:
+ * отскок возвращает FSM в ST_RELEASE_WAIT (а не в ST_IDLE), сохраняя
+ * накопленные clicks и тайм-аут межкликового окна. */
+static bool     deb_seq;
 
 static btn_evt_t pending_evt;
 static bool     evt_pending;
@@ -139,15 +143,6 @@ bool button_sequence_active(void)
     return (state != ST_IDLE) || Pressed;
 }
 
-/**
- * @brief Reset click counter and long mask.
- */
-void button_reset_click_count(void)
-{
-    clicks = 0;
-    long_mask = 0;
-}
-
 /*******************************************************************************
  *  Main FSM tick -- call once per 160 Hz tick
  ******************************************************************************/
@@ -184,7 +179,20 @@ void button_tick(void)
         case ST_DEBOUNCE:
             if (falling)
             {
-                state = ST_IDLE;
+                if (deb_seq)
+                {
+                    /* Re-press within a sequence bounced off: resume the
+                     * inter-click timeout window without losing clicks.
+                     * u_time keeps counting only in RELEASE_WAIT, so the
+                     * debounce time slightly extends the allowed gap —
+                     * same magnitude as the debounce filter itself. */
+                    deb_seq = false;
+                    state = ST_RELEASE_WAIT;
+                }
+                else
+                {
+                    state = ST_IDLE;
+                }
             }
             else if (deb_cnt < BTN_DEBOUNCE_TICKS)
             {
@@ -193,6 +201,7 @@ void button_tick(void)
             else
             {
                 d_time = 0;
+                deb_seq = false;
                 state = ST_PRESSED;
                 emit_event(BTN_EVT_PRESSED);
             }
@@ -268,9 +277,12 @@ void button_tick(void)
             if (rising)
             {
                 stop_bit = false;
-                d_time = 1;
-                state = ST_PRESSED;
-                emit_event(BTN_EVT_PRESSED);
+                deb_cnt = 0;
+                deb_seq = true;
+                /* Re-presses pass the same debounce gate as the first
+                 * press; otherwise contact bounce on click 2..N would
+                 * inflate the sequence with phantom presses. */
+                state = ST_DEBOUNCE;
                 break;
             }
             u_time++;

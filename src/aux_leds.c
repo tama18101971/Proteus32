@@ -596,21 +596,9 @@ void beacon_battery_check(void)
 	}
 
 	/* 2. Пороги переключения режима вспышек (гистерезис):
-	 *    Vbat < 3.10 В (eff_vcode >= MV_LT(3100)) -> двойные вспышки
-	 *    Vbat >= 3.20 В (eff_vcode <= MV_GE(3200)) -> одиночные вспышки
-	 */
-	bool prev_state = beacon_low_voltage;
-	if (eff_vcode >= (int32_t)MV_LT(3100))
-	{
-		beacon_low_voltage = true;
-	}
-	else if (eff_vcode <= (int32_t)MV_GE(3200))
-	{
-		beacon_low_voltage = false;
-	}
-
-	/* Если состояние изменилось — перезапускаем маяк с новым паттерном */
-	if (beacon_low_voltage != prev_state)
+	 *    Vbat < 3.10 В -> двойные вспышки; >= 3.20 В -> одиночные
+	 * (одна реализация гистерезиса — adc.c:beacon_low_voltage_update) */
+	if (beacon_low_voltage_update())
 	{
 		off_aux_cmd(false);
 		start_aux_beacon();

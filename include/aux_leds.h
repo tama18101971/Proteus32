@@ -115,12 +115,6 @@ typedef enum {
 	 (psc_idx) == 6 ? 10240UL : 61440UL)
 
 /**
- * @brief Compute half-period in milliseconds from prescaler index and window.
- * Formula: time_ms = (psc_value × win) / 128
- */
-#define AWU_PERIOD_MS(psc_idx, win) ((AWU_PSC_VALUE(psc_idx) * (uint32_t)(win)) / 128)
-
-/**
  * @brief 32-bit LED command word.
  *
  * Two representations via union:
@@ -382,18 +376,6 @@ bool handle_aux(void);
 	 ((((uint32_t)(ms) * 128UL + ((psc_value) / 2UL)) / (psc_value)) < 1UL ? 1U : \
 	  (((uint32_t)(ms) * 128UL + ((psc_value) / 2UL)) / (psc_value)) > 63UL ? 63U : \
 	  (((uint32_t)(ms) * 128UL + ((psc_value) / 2UL)) / (psc_value))))
-
-/**
- * @brief Compare period error without floating-point arithmetic.
- * @return Absolute error multiplied by 128 (milliseconds * 128).
- */
-#define AWU_MS_ERROR(ms, psc_value) \
-	((uint32_t)(((uint32_t)(ms) * 128UL) >= \
-	 ((uint32_t)(psc_value) * AWU_MS_WIN_FOR((ms), (psc_value))) ? \
-	 ((uint32_t)(ms) * 128UL) - \
-	 ((uint32_t)(psc_value) * AWU_MS_WIN_FOR((ms), (psc_value))) : \
-	 ((uint32_t)(psc_value) * AWU_MS_WIN_FOR((ms), (psc_value))) - \
-	 ((uint32_t)(ms) * 128UL)))
 
 /**
  * @brief Select an AWU prescaler for a millisecond period.

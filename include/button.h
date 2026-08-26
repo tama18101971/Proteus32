@@ -115,9 +115,4 @@ const btn_evt_t* button_get_event(void);
  */
 bool button_sequence_active(void);
 
-/**
- * @brief Reset click counter and long mask.
- */
-void button_reset_click_count(void);
-
 #endif /* BUTTON_H_ */

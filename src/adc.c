@@ -261,14 +261,16 @@ void adc_init(void)
     for (volatile int i = 0; i < 1000; i++)
         ;
 
-    // 14. Сброс калибровки (RSTCAL = бит 3 в CTLR2)
+    // 14. Сброс калибровки (RSTCAL = бит 3 в CTLR2) — с таймаутом
+    uint32_t timeout = ADC_WAIT_TIMEOUT;
     ADC1->CTLR2 |= (1 << 3);
-    while (ADC1->CTLR2 & (1 << 3))
+    while ((ADC1->CTLR2 & (1 << 3)) && --timeout)
         ;
 
-    // 15. Калибровка ADC (CAL = бит 2 в CTLR2)
+    // 15. Калибровка ADC (CAL = бит 2 в CTLR2) — с таймаутом
+    timeout = ADC_WAIT_TIMEOUT;
     ADC1->CTLR2 |= (1 << 2);
-    while (ADC1->CTLR2 & (1 << 2))
+    while ((ADC1->CTLR2 & (1 << 2)) && --timeout)
         ;
 
     ema_init(0);
@@ -490,16 +492,50 @@ static const uint16_t step_max_tbl[6] = {120, 240, 310, 400, 463, 511};
  * vbat_mv == 0: все пороги «vbat < mv» срабатывают, «vbat > mv» — нет. */
 #define VREF_SENTINEL 1023u
 
+/**
+ * @brief Калиброванный код Vrefint с учётом vc и валидности выборки.
+ * @return (vrefint_adc - vc) при voltage_ok, иначе VREF_SENTINEL - vc
+ *         (аналог «критически низкого напряжения» прежнего vbat_mv == 0).
+ */
+int32_t adc_eff_vcode(void)
+{
+    uint16_t code = voltage_ok ? vrefint_adc : VREF_SENTINEL;
+    return (int32_t)code - (int32_t)ob_GetVc();
+}
+
+/**
+ * @brief Обновить флаг низкого заряда маяка по гистерезису 3.10 / 3.20 В.
+ *
+ * Ниже 3.10 В маяк переходит на двойные вспышки, выше 3.20 В — на одиночные;
+ * между порогами состояние не меняется. Обновление выполняется только на
+ * валидной выборке (voltage_ok).
+ * @return true если флаг beacon_low_voltage изменился.
+ */
+bool beacon_low_voltage_update(void)
+{
+    if (!voltage_ok)
+        return false;
+
+    bool prev = beacon_low_voltage;
+    int32_t eff_vcode = adc_eff_vcode();
+
+    if (eff_vcode >= (int32_t)MV_LT(3100))
+        beacon_low_voltage = true;
+    else if (eff_vcode <= (int32_t)MV_GE(3200))
+        beacon_low_voltage = false;
+
+    return beacon_low_voltage != prev;
+}
+
 /** @brief Чистый расчёт потолка по текущему коду Vrefint (без побочных эффектов). */
 static uint16_t calc_step_ceiling(void)
 {
-    int16_t vc = ob_GetVc();
-    uint16_t vcode = voltage_ok ? vrefint_adc : VREF_SENTINEL;
+    int32_t eff_vcode = adc_eff_vcode();
     uint8_t i = 6;
     while (i > 0)
     {
         i--;
-        if ((int32_t)vcode - vc <= (int32_t)ceil_cap[i]) break;
+        if (eff_vcode <= (int32_t)ceil_cap[i]) break;
     }
     return step_max_tbl[i];
 }
@@ -596,19 +632,12 @@ void scan_voltage(void)
     static uint8_t voff_count = 0;
     static uint8_t voff_count_off = 0;
 
-    int16_t vc = ob_GetVc();
-    uint16_t vcode = voltage_ok ? vrefint_adc : VREF_SENTINEL;
-    int32_t eff_vcode = (int32_t)vcode - vc;
+    int32_t eff_vcode = adc_eff_vcode();
 
     volt_max_mode = calc_volt_max_mode(eff_vcode);
 
-    if (voltage_ok)
-    {
-        if (eff_vcode >= (int32_t)MV_LT(3100))
-            beacon_low_voltage = true;
-        else if (eff_vcode <= (int32_t)MV_GE(3200))
-            beacon_low_voltage = false;
-    }
+    /* Гистерезис низкого заряда маяка: < 3.10 В / >= 3.20 В */
+    (void)beacon_low_voltage_update();
 
     if (!driver_is_active()) return;
 
@@ -684,7 +713,7 @@ void scan_voltage(void)
 uint8_t bat_get_flashes(void) {
 	static const uint16_t thresholds[] = {MV_LT(3000), MV_LT(3200), MV_LT(3400),
 	                                      MV_LT(3600), MV_LT(3800), MV_LT(4000)};
-	int32_t eff_vcode = (int32_t)(voltage_ok ? vrefint_adc : VREF_SENTINEL) - ob_GetVc();
+	int32_t eff_vcode = adc_eff_vcode();
 	for (uint8_t i = 0; i < sizeof(thresholds) / sizeof(thresholds[0]); i++) {
 		if (eff_vcode >= (int32_t)thresholds[i]) return i;
 	}

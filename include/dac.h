@@ -16,7 +16,10 @@
  *
  * Power control: PD0 on GPIOD switches DAC supply.
  *
- * Return codes: I2C_OK (0) on ACK, I2C_NACK (1) on NACK (see i2c.h).
+ * Return codes: I2C_OK (0) on success, I2C_NACK (1) otherwise. Since i2c
+ * lib v7.0.x internals may fail with I2C_ERR_TIMEOUT/I2C_ERR_BERR/
+ * I2C_ERR_ARLO, but this driver collapses every failure into I2C_NACK
+ * (checks are `!= I2C_OK`); see i2c.h for granular codes.
  */
 
 #ifndef DAC_H
@@ -29,15 +32,6 @@
 
 /** @brief Maximum 12-bit DAC value. */
 #define DAC_MAX_VALUE       4095
-
-/** @brief Normal operating mode (active output). */
-#define DAC7571_MODE_NORMAL    0x00
-/** @brief Power-down: 1 kOhm to GND. */
-#define DAC7571_MODE_PD_1K     0x01
-/** @brief Power-down: 100 kOhm to GND. */
-#define DAC7571_MODE_PD_100K   0x02
-/** @brief Power-down: High Impedance. */
-#define DAC7571_MODE_PD_HIZ    0x03
 
 /** @brief DAC power control port (PD0). */
 #define DAC_PWR_PORT    GPIOD
@@ -64,23 +58,10 @@ void dac_pwrpin_on(void);
 void dac_pwrpin_off(void);
 
 /**
- * @brief Check if DAC power is on.
- * @return 1 if powered, 0 if off.
- */
-uint8_t dac_pwrpin_is_on(void);
-
-/**
  * @brief Set 12-bit DAC output voltage (normal mode).
  * @param data_12bit 12-bit value (0-4095).
  * @return I2C_OK or I2C_NACK.
  */
 uint8_t dac7571_set_voltage(uint16_t data_12bit);
-
-/**
- * @brief Enter power-down mode.
- * @param mode Power-down mode (DAC7571_MODE_PD_*).
- * @return I2C_OK or I2C_NACK.
- */
-uint8_t dac7571_power_down(uint8_t mode);
 
 #endif /* DAC_H */

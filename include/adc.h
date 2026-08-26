@@ -173,6 +173,22 @@ uint16_t get_exact_temp_adc(void);
 /* ============ Battery protection ============ */
 
 /**
+ * @brief Калиброванный код Vrefint с учётом vc и валидности выборки.
+ * @return (vrefint_adc - vc) при валидной выборке, иначе код-сентинел
+ *         «критически низкого напряжения».
+ */
+int32_t adc_eff_vcode(void);
+
+/**
+ * @brief Обновить флаг низкого заряда маяка по гистерезису 3.10 / 3.20 В.
+ *
+ * Ниже 3.10 В — двойные вспышки, выше 3.20 В — одиночные; между порогами
+ * состояние не меняется. Только на валидной выборке (voltage_ok).
+ * @return true если beacon_low_voltage изменился.
+ */
+bool beacon_low_voltage_update(void);
+
+/**
  * @brief Main battery protection loop (call after a successful adc_read()).
  *
  * Implements UI1 ramping and UI2 discrete mode voltage protection.

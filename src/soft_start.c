@@ -21,6 +21,11 @@
 #include "limiters.h"
 #include "proteus_config.h"
 
+/* Q15-скейлер count/7 для SS_FAST: на единицу больше точного 32768/7 = 4681.43.
+ * Заниженное значение давало step_count на 1 тик меньше идеала при расстояниях,
+ * кратных 7, и финальное точное присваивание превращалось в видимый рывок +7. */
+#define SS_FAST_SCALER  4682u
+
 /** @brief Global soft start state. */
 ss_st ss;
 
@@ -31,6 +36,8 @@ ss_st ss;
  * @param speed    Transition speed (SS_NO = instant).
  *
  * If target == previous, soft start is skipped (already at target).
+ * SS_NO also cancels any pending transition (instant transitions are
+ * applied by the caller side without entering the FSM).
  * The caller resolves thermal limiting before entering this module. This
  * retains the pre-FSM Proteus003 profile: step_size is +/- speed and
  * step_count is distance / speed.  The final scan assigns target exactly,
@@ -38,7 +45,7 @@ ss_st ss;
  */
 void ss_init(uint16_t target, uint16_t previous, SoftStartSpeed_t speed)
 {
-	if (target == previous)
+	if ((target == previous) || (speed == SS_NO))
 	{
 		ss_cancel();
 		return;
@@ -52,7 +59,7 @@ void ss_init(uint16_t target, uint16_t previous, SoftStartSpeed_t speed)
 		 * low-level module, so target is already the physical safe target. */
 		ss.target = target;
 		uint16_t count = ABS((int16_t)(target - previous));
-		uint16_t sc = (speed == SS_FAST) ? (uint16_t)(((uint32_t)count * 4681u) >> 15) : count;
+		uint16_t sc = (speed == SS_FAST) ? (uint16_t)(((uint32_t)count * SS_FAST_SCALER) >> 15) : count;
 		ss.step_count = sc ? sc : 1;
 		ss.position = previous;
 	}

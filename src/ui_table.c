@@ -201,12 +201,10 @@ static const dispatch_t usr_table[] = {
 
 static uint8_t execute_slot(uint8_t slot)
 {
-    uint8_t op_idx = SLOT_OP_EMPTY;
 #ifdef USE_MAGIC_SLOTS
-    op_idx = ob_GetSlot(slot);
+    uint8_t op_idx = ob_GetSlot(slot);
     if (op_idx < SLOT_OP_FIRST || op_idx > SLOT_OP_LAST)
         op_idx = SLOT_OP_EMPTY;
-#endif
 
     /* While the driver is on, only the plain block operation is allowed.
      * In particular SLOT_BLOCK_BEACON must not replace the normal beacon
@@ -223,6 +221,12 @@ static uint8_t execute_slot(uint8_t slot)
             block_slot_idx = slot;
         return 1;
     }
+#else
+    (void)slot; /* Without magic slots the gesture belongs to the table
+                 * lookup below — falling through with SLOT_OP_EMPTY would
+                 * swallow 1-click-hold ramp, save-def and even-click
+                 * sequences before they reach their dispatch rows. */
+#endif
     return 0;
 }
 
@@ -322,8 +326,9 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout)
         }
     }
 
-    /* Sub-modes HOLD -> MENU_EXIT */
-    if (evt->type == BTN_EVT_HOLD && ((mode >= MODE_UIS && mode <= MODE_LM_TIME) || mode == MODE_CTK_H || mode == MODE_MOON_LEVEL))
+    /* Sub-modes HOLD -> MENU_EXIT (MODE_EAUX sits after the contiguous
+     * UIS..LM_TIME range and needs its own check). */
+    if (evt->type == BTN_EVT_HOLD && ((mode >= MODE_UIS && mode <= MODE_LM_TIME) || mode == MODE_CTK_H || mode == MODE_MOON_LEVEL || mode == MODE_EAUX))
     {
         menu_exit();
         return 1;
@@ -416,7 +421,8 @@ void (* const main_op[])(void) = {
     /*12*/ slot_ui_select,
 
     /*13*/ up_strobe,
-    /*14*/ back_strobe,
+    /*14*/ slot_empty,   /* бывший back_strobe: индексы опкодов зафиксированы,
+                           * содержимое никогда не достижимо из таблиц */
     /*15*/ off_strobe,
     /*16*/ unblock_drv,
     /*17*/ off_driver_false,

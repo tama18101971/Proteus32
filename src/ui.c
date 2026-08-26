@@ -58,7 +58,6 @@ uint8_t clicks_count = 0;
 uint8_t ui_table_idx = 1;        // runtime selector for dispatch tables
 uint8_t ui_save = 0;
 bool menu_beacon_mute = false;   // session-only AUX beacon mute while in menu
-uint8_t bcklight_type_save = 0;
 uint8_t strobe_index = 0;
 
 static uint8_t bt_r_time = 0;    // direction timeout counter
@@ -418,6 +417,8 @@ void slot_tactical(void)
 /** @brief Toggle backlight type (slot). */
 void slot_backlight(void)
 {
+    /* Поля — 1-битные члены packed-структур: инверсия только через
+     * присваивание члену, взятие адреса байта непортабельно. */
     EE.aux.bcklight_type ^= 1;
     clr_indicator((ind_clr_t)EE.aux.bcklight_type);
     aux_refresh_backlight();
@@ -466,19 +467,6 @@ void up_strobe(void)
     stop_aux_if(IDM_STROBE, false);
     if (++strobe_index == STROBE_COUNT) strobe_index = 0;
     start_aux_strobe(strobe_index);
-#endif
-}
-
-/** @brief Exit strobe back to previous brightness (non-magic-slots). */
-void back_strobe(void)
-{
-#if defined(USE_STROBE) && !defined(USE_MAGIC_SLOTS)
-    stop_aux_if(IDM_STROBE, false);
-    if (ps.start) off_driver(false, SS_NO);
-    else driver_mode = MODE_ON;
-    if (ps.use_prev) step_user = ps.pr_step;
-    ps.use_prev = false;
-    if (!ps.start) set_current(ps.pr_step, SS_NO);
 #endif
 }
 
@@ -681,6 +669,26 @@ static void menu_submode_done(void)
 }
 #endif
 
+/**
+ * @brief Check a click count against the range of one menu setting.
+ * @param min_clicks Smallest valid number of clicks.
+ * @param max_clicks Largest valid number of clicks.
+ * @return true when the current click count is valid.
+ *
+ * Invalid input is reported before any assignment is made, so the previous
+ * setting remains intact instead of being truncated by a bit-field.
+ */
+#ifdef USE_MENU
+static bool menu_clicks_valid(uint8_t min_clicks, uint8_t max_clicks)
+{
+    if (clicks_count >= min_clicks && clicks_count <= max_clicks)
+        return true;
+
+    ui_invalid_selection();
+    return false;
+}
+#endif /* USE_MENU */
+
 /** @brief Enter moonlight level setting mode (engineering menu). */
 void enter_ml_mode(void)
 {
@@ -693,8 +701,14 @@ void enter_ml_mode(void)
 void ml_clickX(void)
 {
 #ifdef USE_MENU
-    ob_SetMl(clicks_count);
-    menu_submode_done();
+    /* Validated like every other config handler: without the check an
+     * overlong sequence silently raised the moon floor for all outputs. */
+    if (menu_clicks_valid(1u, 15u))
+    {
+        ob_SetMl(clicks_count);
+        menu_submode_done();
+    }
+    driver_mode = MODE_OFF;
 #endif
 }
 
@@ -841,26 +855,6 @@ void enter_chtk_mode(void)
     enter_submode(MODE_CTK_H, EE.usr.t_calibr);
 #endif
 }
-
-/**
- * @brief Check a click count against the range of one menu setting.
- * @param min_clicks Smallest valid number of clicks.
- * @param max_clicks Largest valid number of clicks.
- * @return true when the current click count is valid.
- *
- * Invalid input is reported before any assignment is made, so the previous
- * setting remains intact instead of being truncated by a bit-field.
- */
-#ifdef USE_MENU
-static bool menu_clicks_valid(uint8_t min_clicks, uint8_t max_clicks)
-{
-    if (clicks_count >= min_clicks && clicks_count <= max_clicks)
-        return true;
-
-    ui_invalid_selection();
-    return false;
-}
-#endif /* USE_MENU */
 
 /**
  * @brief Show a red indication for an invalid user-menu selection.

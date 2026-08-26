@@ -63,9 +63,8 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout);
 
 /* -- Reserved: 12 -- */
 
-/* -- UI1 strobe / block (13..17) -- */
+/* -- UI1 strobe / block (13..17); 14 = зарезервирован (ранее BACK_STROBE_UI1) -- */
 #define UP_STROBE_UI1       13
-#define BACK_STROBE_UI1     14
 #define OFF_STROBE_UI1      15
 #define UNBLOCK_DRV         16
 #define OFF_DRV_FALSE       17
