@@ -369,9 +369,9 @@ void start_aux_strobe(uint8_t index)
 
 	profile = &strobe_commands[index];
 	if (profile->type == STROBE_PROFILE_COMMAND) {
-		start_aux_cmd(profile->value.command, true, IDM_STROBE, AWU_15MS);
+		start_aux_cmd(profile->value.command, true, IDM_STROBE, AWU_IMMEDIATELY);
 	} else {
-		start_aux_array(profile->value.array, AWU_15MS);
+		start_aux_array(profile->value.array, AWU_IMMEDIATELY);
 		aux_ctl.idmode = IDM_STROBE;
 	}
 }
