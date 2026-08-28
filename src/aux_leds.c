@@ -266,10 +266,10 @@ static uint32_t set_aux_count(uint8_t count) {
 	uint8_t flashes;
 	uint8_t brightness0 = 1;
 
-	if (count <= 2) {
+	if (count <= 1) {
 		device = RED_LED;
 		flashes = count ? count : 1;
-	} else if (count <= 4) {
+	} else if (count <= 3) {
 		device = RED_LED | GRN_LED;
 		flashes = count;
 	} else {
