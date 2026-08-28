@@ -1,6 +1,6 @@
 /**
  * @file main.c
- * @brief Entry point and main loop for Proteus003 firmware
+ * @brief Entry point and main loop for Proteus32 firmware
  *
  * CH32V003-based flashlight with:
  * - Red/green AUX LEDs via GPIO

@@ -39,7 +39,7 @@ ss_st ss;
  * SS_NO also cancels any pending transition (instant transitions are
  * applied by the caller side without entering the FSM).
  * The caller resolves thermal limiting before entering this module. This
- * retains the pre-FSM Proteus003 profile: step_size is +/- speed and
+ * retains the pre-FSM Proteus32 profile: step_size is +/- speed and
  * step_count is distance / speed.  The final scan assigns target exactly,
  * so truncation never leaves a transition one or more steps short.
  */

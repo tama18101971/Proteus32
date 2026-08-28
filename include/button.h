@@ -2,7 +2,7 @@
  * @file button.h
  * @brief Button FSM for press pattern recognition
  *
- * Ported from Proteus84 (AVR, 120 Hz) to Proteus003 (CH32V003, 160 Hz).
+ * Ported from Proteus84 (AVR, 120 Hz) to Proteus32 (CH32V003, 160 Hz).
  * This module reads the button pin via the Pressed macro defined in ui.h
  * and emits btn_evt_t events. It has no knowledge of driver modes, UI
  * actions or hardware other than the button.
@@ -17,7 +17,7 @@
 /**
  * @defgroup button_timing Button FSM timing constants
  *
- * Proteus84 used 120 Hz ticks. Proteus003 calls button_tick() at 160 Hz,
+ * Proteus84 used 120 Hz ticks. Proteus32 calls button_tick() at 160 Hz,
  * so all tick counts are scaled by 4/3 and rounded.
  * @{
  */

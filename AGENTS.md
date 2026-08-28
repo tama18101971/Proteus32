@@ -2,7 +2,7 @@
 
 ## Project
 
-Proteus003 firmware for CH32V003F4U6 (RISC-V RV32EC, 48 MHz, 16 KB Flash, 2 KB RAM) flashlight.
+Proteus32 firmware for CH32V003F4U6 (RISC-V RV32EC, 48 MHz, 16 KB Flash, 2 KB RAM) flashlight.
 
 ## Build & flash
 

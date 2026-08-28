@@ -2,8 +2,8 @@
  * @file ui.c
  * @brief UI action functions + ui_process dispatcher
  *
- * Ported from Proteus IID (AVR) to Proteus003 (CH32V003).
- * Low-level brightness/DAC functions are kept from the original Proteus003 ui.c.
+ * Ported from Proteus IID (AVR) to Proteus32 (CH32V003).
+ * Low-level brightness/DAC functions are kept from the original Proteus32 ui.c.
  *
  * AUX LED calls and EEPROM writes are intentionally left as comments,
  * replaced by EE_PRINTF debug output, per integration requirements.
@@ -71,7 +71,7 @@ static DRIVER_Mode_t saved_block_mode = MODE_BLOCK;
 static uint16_t lock_light_ticks = 0;
 
 /*******************************************************************************
- *  UI2 discrete brightness table -- scaled to Proteus003 9-bit range (0..511)
+ *  UI2 discrete brightness table -- scaled to Proteus32 9-bit range (0..511)
  ******************************************************************************/
 
 static const uint16_t modes[MODES_QTY] = {0, 20, 74, 136, 220, 360, 511};
@@ -86,7 +86,7 @@ bool driver_is_active(void)
 }
 
 /*******************************************************************************
- *  Power / DAC helpers (Proteus003)
+ *  Power / DAC helpers (Proteus32)
  ******************************************************************************/
 
 /** @brief Power-on sequence: reset limiters, enable DAC, init I2C. */
