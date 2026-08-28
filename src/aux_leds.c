@@ -677,11 +677,11 @@ void start_exaux_voltage(WARNING_Fr_t ex_mode) {
 	case VWARNING_FAST:   /* ON 100мс, OFF 1900мс → период ~2с */
 		cmd = MAKE_CMD_MS(RED_LED, 1, 0, 100, 1900, 1, 0);
 		break;
-	case VWARNING_MEDIUM: /* ON 200мс, OFF 3800мс → период ~4с */
-		cmd = MAKE_CMD_MS(RED_LED, 1, 0, 200, 3800, 1, 0);
+	case VWARNING_MEDIUM: /* ON 100мс, OFF 3900мс → период ~4с */
+		cmd = MAKE_CMD_MS(RED_LED, 1, 0, 100, 3900, 1, 0);
 		break;
-	case VWARNING_SLOW:   /* ON 300мс, OFF 7700мс → период ~8с */
-		cmd = MAKE_CMD_MS(RED_LED, 1, 0, 300, 7700, 1, 0);
+	case VWARNING_SLOW:   /* ON 100мс, OFF 7900мс → период ~8с */
+		cmd = MAKE_CMD_MS(RED_LED, 1, 0, 100, 7900, 1, 0);
 		break;
 	default:
 		break;

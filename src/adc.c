@@ -67,9 +67,9 @@ uint16_t volt_step_ratchet = MAX_STEP;
 /** @brief Voltage thresholds for extended aux warning (Vrefint codes, ascending).
  *  ex_lvls[0] = SLOW (~3.88 V), [1] = MEDIUM (~3.69 V), [2] = FAST (~3.52 V). */
 static const uint16_t ex_lvls[3] = {
-    MV_LT(3880),
-    MV_LT(3690),
-    MV_LT(3520)
+    MV_LT(3300),
+    MV_LT(3150),
+    MV_LT(3000)
 };
 
 /**
