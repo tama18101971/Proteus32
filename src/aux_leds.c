@@ -28,7 +28,7 @@
  *     AC_REP_ATSTEPS — loop from specified step
  *
  * Created: 22.02.2020
- * Modified: 15.06.2026
+ * Modified: 28.08.2026
  * Author: Tamagotchi
  */
 
@@ -400,7 +400,13 @@ static void handle_aux_cmd(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits) {
 				ubits->period = PER_NEXT;
 				if (device & HBL_LED) {
 					SetBrightness(HBL_LED, 0u);
-					if (!driver_is_active()) {
+					/* Power down only when the handler really goes idle.
+					 * An array chains its next element in this same wake:
+					 * cutting the DAC supply here makes that element's first
+					 * ON half-period write NACK on the unpowered DAC7571,
+					 * losing one pulse per group (SOS played as 2 short /
+					 * 2 long / 2 short).  Regression since 7ece51e. */
+					if (!EnableArrayProcessing && !driver_is_active()) {
 						OFF_POWER();
 					}
 				}
