@@ -237,7 +237,7 @@ void off_aux_cmd(bool stop_lsi) {
 }
 
 static inline uint32_t make_count_cmd(LED_Bits_t device, uint8_t flashes, uint8_t brightness0) {
-	return MAKE_CMD(device, 0, flashes, AWU_PSC_256, 38, AWU_PSC_1024, 28, brightness0, 0);
+	return MAKE_CMD(device, 0, flashes, AWU_PSC_512, 38, AWU_PSC_1024, 56, brightness0, 0);
 }
 
 #ifdef USE_BATTIND
@@ -258,7 +258,7 @@ static inline uint32_t make_count_cmd(LED_Bits_t device, uint8_t flashes, uint8_
  * чтобы основной светодиод светился на той же яркости, что и фонарик,
  * но не ниже get_stepi(CMODE_MIN): на минимальной яркости фонарика
  * вспышка иначе не видна.
- * Время: ON=75мс, OFF=225мс.
+ * Время: ON=152мс, OFF=448мс.
  * @return 32-битная команда для start_aux_cmd()
  */
 static uint32_t set_aux_count(uint8_t count) {
