@@ -227,6 +227,10 @@ int main(void)
                 if (sleep_owner == SLEEP_OWNER_THERMAL)
                     AWU_OFF();
                 SystemInit();
+                /* Вернуть LSI: в чистом OFF-сне он был остановлен (AWU_stop(true)),
+                 * а маяк/строб/термо-сон тактируются от него. Если LSI уже работает,
+                 * ожидание LSIRDY в AWU_init() завершается сразу. */
+                AWU_init();
 #ifdef UART_DEBUG
                 uart_init(460800);
 #endif
@@ -343,6 +347,15 @@ int main(void)
             else if (!is_aux_mode(IDM_STROBE))
             {
                 start_aux_beacon();
+                /* Всё выключено и маяк не стартовал (выкл или замьючен):
+                 * AWU никому не принадлежит — останавливаем AWU + LSI.
+                 * Даташит CH32V003DS0, Table 3-8: Standby без LSI =
+                 * 7.6 мкА typ вместо 9.1 мкА (LSI on) при VDD=3.3В.
+                 * LSI возвращается в AWU_init() при пробуждении по кнопке. */
+                if (!driver_is_active() && !aux_is_active())
+                {
+                    AWU_stop(true);
+                }
             }
             AWU_Sleep_Now();
             continue;
