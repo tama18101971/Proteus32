@@ -372,10 +372,13 @@ int main(void)
         if (tick_30hz())
         {
             /* The strobe owns the DAC waveform.  Do not let ADC/limiters
-             * write a regular brightness value during an input window. */
-            if (!is_aux_mode(IDM_STROBE) &&
-                (thermal_fast_required() ||
-                 (driver_is_active() && aux_is_active())))
+             * write a regular brightness value during an input window.
+             * Scan whenever the driver is active: the UI1 ramping ceiling
+             * (ratchet) needs fresh voltage from step 1, and a held button
+             * blocks the AWU_4S loop (button_sequence_active()), so the old
+             * step_tc > THERMAL_FAST_STEP gate left a monitoring blind zone
+             * during low-brightness ramps. */
+            if (driver_is_active() && !is_aux_mode(IDM_STROBE))
             {
                 (void)sample_and_scan();
             }

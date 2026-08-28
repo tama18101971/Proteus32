@@ -306,20 +306,30 @@ void off_auto_repeat(void)
         stop_bit = true;
 }
 
-/** @brief Increment brightness by one step (UI1 ramping). */
+/**
+ * @brief Increment brightness by one step (UI1 ramping).
+ *
+ * SS_SLOW (паритет с Proteus-IID): переход ±1 завершается за один тик
+ * 160 Гц, а активный спад (лимитер/потолок) не обрывается мгновенно, а
+ * ретаргетится с текущей позиции ss_init() — ступенчатых скачков нет.
+ */
 void step_up_ui1(void)
 {
     if (step_user < max_step)
-        set_current(step_user + 1u, SS_NO);
+        set_current(step_user + 1u, SS_SLOW);
     else if ((limiter > 0 || max_step < MAX_STEP) && !aux_is_active())
         aux_err(AWU_IMMEDIATELY);
 }
 
-/** @brief Decrement brightness by one step (UI1 ramping). */
+/**
+ * @brief Decrement brightness by one step (UI1 ramping).
+ *
+ * SS_SLOW — см. step_up_ui1(): плавный ретаргет вместо мгновенного сброса.
+ */
 void step_down_ui1(void)
 {
     if (step_user > 1u)
-        set_current(step_user - 1u, SS_NO);
+        set_current(step_user - 1u, SS_SLOW);
 }
 
 /** @brief Ramp up/down one step from hold (UI1). */

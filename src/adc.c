@@ -38,6 +38,7 @@
 #include "timers.h"
 #include "awu.h"
 #include "led_gpio.h"
+#include "limiters.h"
 
 
 /* Напряжение целиком в кодах Vrefint: vbat_mv = floor(1228800/vrefint_adc).
@@ -663,6 +664,26 @@ void scan_voltage(void)
     /* Ramping UI (UI1, тактический, меню) */
     if (ui_index <= 1u || ui_index > 3u)
     {
+        /* UI1: потолок рампинга следит за просадкой АКБ через храповик
+         * ratchet_max_step().  Пока кнопка удержана, рампинг упирается в
+         * потолок, а при его снижении плавно сползает к нему (SS_SLOW):
+         * ступенчатые «четвертушки» не применяются — мерцания нет
+         * (паритет с Proteus-IID).  Лестница ниже работает только после
+         * отпускания кнопки (установившийся режим). */
+        if (ui_index == 1)
+        {
+            if (voltage_ok)
+            {
+                uint16_t v_max = ratchet_max_step();
+                uint16_t cap = (v_max > limiter) ? (uint16_t)(v_max - limiter) : 1u;
+                max_step = cap;
+                if (Pressed && (step_user > cap))
+                    set_current(cap, SS_SLOW);
+            }
+            if (Pressed)
+                return;
+        }
+
         /* Step-down brightness on voltage sag */
         if (eff_vcode >= (int32_t)swt_cut[down_count])
         {
