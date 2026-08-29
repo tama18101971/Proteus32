@@ -237,7 +237,7 @@ void off_aux_cmd(bool stop_lsi) {
 }
 
 static inline uint32_t make_count_cmd(LED_Bits_t device, uint8_t flashes, uint8_t brightness0) {
-	return MAKE_CMD(device, 0, flashes, AWU_PSC_512, 38, AWU_PSC_1024, 56, brightness0, 0);
+	return MAKE_CMD(device, 0, flashes, AWU_PSC_512, 27, AWU_PSC_1024, 40, brightness0, 0);
 }
 
 #ifdef USE_BATTIND
