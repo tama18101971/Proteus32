@@ -662,8 +662,10 @@ void start_aux_beacon(void) {
 	LED_Bits_t dev = (LED_Bits_t)EE.aux.beacon_type;
 
 	if (beacon_low_voltage) {
-		/* Двойная вспышка: 50 мс ON / 100 мс OFF, затем 50 мс ON / период OFF */
-		beacon_double_buf[0] = MAKE_CMD(dev, 0, 1, AWU_PSC_256, 25, AWU_PSC_256, 50, br0, 0);
+		/* Двойная вспышка: 50 мс ON / 150 мс OFF, затем 50 мс ON / период OFF
+		 * (150 мс кодируется макросом как 512×38/128000 = 152 мс — ближайшее
+		 * значение по округлению AWU_MS_WIN_FOR). */
+		beacon_double_buf[0] = MAKE_CMD_MS(dev, 0, 1, 50, 150, br0, 0);
 		beacon_double_buf[1] = MAKE_CMD(dev, 0, 1, AWU_PSC_256, 25, bcon_psc1[mode], bcon_win1[mode], br0, 0);
 		beacon_double_buf[2] = AC_REP_ATSTART;
 		start_aux_array(beacon_double_buf, AWU_120MS);

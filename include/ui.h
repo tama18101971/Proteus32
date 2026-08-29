@@ -19,6 +19,7 @@
 #include "proteus_config.h"
 #include "soft_start.h"
 #include "button.h"
+#include "aux_leds.h"
 
 struct ee_data;
 
@@ -212,6 +213,18 @@ void ui_init(void);
  * Reads button events, executes dispatch table actions, handles ramping.
  */
 void ui_process(void);
+
+/**
+ * @brief Мигнуть индикаторными светодиодами cnt раз (busy-wait, блокирующе).
+ *
+ * Общего назначения: подтверждение входа/выхода из меню (USE_MENU) и
+ * индикация критического разряда в down_forever(). Компилируется всегда,
+ * независимо от USE_MENU. Каждая вспышка: ON on_ms + пауза on_ms.
+ * @param cnt     Число вспышек.
+ * @param on_ms   Длительность свечения/паузы, мс (0..65535).
+ * @param device  Битовая маска LED (RED_LED и/или GRN_LED).
+ */
+void menu_entry_flash(uint8_t cnt, uint16_t on_ms, LED_Bits_t device);
 
 /**
  * @brief Helper: set off_driver reset flag to false.
