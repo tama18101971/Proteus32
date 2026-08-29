@@ -253,8 +253,12 @@ void off_driver(uint8_t reset_step, SoftStartSpeed_t ss_speed)
     stop_aux_if(IDM_VWARNING, false);
     stop_aux_if(IDM_BEACON, false);
 
-    /* Memory mode: сохранить последний шаг/режим. Реальную запись решает
-     * сравнение с тенью на 5-сек тике (main.c). */
+    /* Memory mode: сохранить последний шаг/режим. К этому моменту значения
+     * уже очищены от турбо-сессии, запущенной двойным кликом (ps.start):
+     * set_current_ll()/off_driver_false() не записывают уровень турбо в
+     * память, а при !ps.start блок выше откатил step_default/mode_default
+     * на pr_step. Реальную запись решает сравнение с тенью на 5-сек тике
+     * (main.c). */
     if (EE.uif.use_memory)
     {
         EE.default_ui1 = step_default;
@@ -274,7 +278,12 @@ void off_driver(uint8_t reset_step, SoftStartSpeed_t ss_speed)
  */
 void set_current_ll(uint16_t step_target, SoftStartSpeed_t ss_speed)
 {
-    if (!step_target && step_tc && !step_user)
+    /* Запоминание последней яркости при выключении (аналог set_current_ll
+     * Proteus-IID, button.c:89). В турбо-сессии, запущенной двойным кликом
+     * из OFF (ps.use_prev && ps.start), уровень турбо в память не попадает:
+     * как в AVR, off_driver() восстанавливает pr_step только при !ps.start,
+     * поэтому здесь захват step_tc == уровня турбо подавлен. */
+    if (!step_target && step_tc && !step_user && !(ps.use_prev && ps.start))
         step_default = step_tc;
 
     if (ss_speed != SS_NO)
@@ -401,7 +410,16 @@ void off_driver_false(void)
 {
 //    EE_PRINTF("[UI] OFF DRV false\r\n");
     driver_mode = MODE_OFF;
-    mode_default = mode_current;
+    /* Память режимов (аналог off_driver_false Proteus-IID, button.c:499).
+     * Турбо-сессия, запущенная двойным кликом из OFF (ps.use_prev &&
+     * ps.start), в память не пишется: mode_current == CMODE_TURBO должен
+     * быть отброшен — так же поступает гвард if(!ps.start) в off_driver()
+     * AVR. Условие mode_current != CMODE_OFF не даёт выключению из UI1
+     * (там mode_current не используется и всегда CMODE_OFF) затирать
+     * память UI2 нулём. Турбо из ON (ps.start == 0) не трогаем: его
+     * откатывает блок if(!ps.start) в off_driver(). */
+    if (mode_current != CMODE_OFF && !(ps.use_prev && ps.start))
+        mode_default = mode_current;
     mode_current = CMODE_OFF;
     off_driver(false, SS_FAST);
 }

@@ -47,9 +47,14 @@ extern uint8_t need_save;
 
 /** @brief State for double-click turbo toggle feature. */
 typedef struct {
-    uint16_t start;     /**< Step at which turbo was entered. */
-    uint16_t pr_step;   /**< Previous step before turbo. */
-    uint16_t use_prev;  /**< Flag: restore pr_step on exit. */
+    uint16_t start;     /**< 1 if the driver was started by the turbo
+                           double-click (on_driver() return), i.e. the
+                           pre-turbo brightness was never shown and the
+                           turbo level must NOT be written to memory
+                           (see off_driver()/set_current_ll()). */
+    uint16_t pr_step;   /**< Previous step/mode before turbo (restore value). */
+    uint16_t use_prev;  /**< Flag: turbo session active (restore pr_step on
+                           exit / on turn-off). */
 } PSTEP_t;
 
 /*******************************************************************************
