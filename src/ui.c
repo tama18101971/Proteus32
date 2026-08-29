@@ -312,12 +312,16 @@ void off_auto_repeat(void)
  * SS_SLOW (паритет с Proteus-IID): переход ±1 завершается за один тик
  * 160 Гц, а активный спад (лимитер/потолок) не обрывается мгновенно, а
  * ретаргетится с текущей позиции ss_init() — ступенчатых скачков нет.
+ *
+ * Упор рампинга в потолок по напряжению (volt_step_ratchet < MAX_STEP)
+ * сигнализируется ERRO_RED. Термолимитер здесь не сигнализируется:
+ * индикация привязана только к напряжению.
  */
 void step_up_ui1(void)
 {
     if (step_user < max_step)
         set_current(step_user + 1u, SS_SLOW);
-    else if ((limiter > 0 || max_step < MAX_STEP) && !aux_is_active())
+    else if ((volt_step_ratchet < MAX_STEP) && !aux_is_active())
         aux_err(AWU_IMMEDIATELY);
 }
 
@@ -368,7 +372,13 @@ void on_turbo_ui1(void)
         ps.start = start;
         ps.pr_step = step_user ? step_user : step_default;
         ps.use_prev = true;
-        if (!start && (ps.pr_step >= max_step) && (limiter > 0 || max_step < MAX_STEP))
+        /* Турбо = максимум: если потолок храповика по напряжению ниже
+         * MAX_STEP, запрошенная яркость недостижима — сигнализируем
+         * ERRO_RED независимо от предыдущего состояния драйвера
+         * (фикс «индикация работает через раз»: прежний гейт !start
+         * подавлял сигнал при включении турбо из OFF, а сравнение
+         * pr_step >= max_step флипало после лестницы автосброса). */
+        if (volt_step_ratchet < MAX_STEP)
             aux_err(AWU_IMMEDIATELY);
         set_current(max_step, SS_FAST);
     }
@@ -1201,14 +1211,21 @@ void on_moon_ui2(void)
 /** @brief Go to minimum mode (UI2, voltage-clamped). */
 void on_min_ui2(void)
 {
-    mode_current = get_up_mode(CMODE_MIN);
+    uint8_t clamped = get_up_mode(CMODE_MIN);
+    if (clamped < CMODE_MIN)          /* даже MIN урезан по напряжению */
+        aux_err(AWU_IMMEDIATELY);
+    mode_current = clamped;
     on_mode(mode_current);
 }
 
-/** @brief Go to memorised/default mode (UI2). */
+/** @brief Go to memorised/default mode (UI2, voltage-clamped). */
 void on_xmode_ui2(void)
 {
-    mode_current = get_up_mode(EE.uif.use_memory ? mode_default : EE.default_ui2);
+    uint8_t req = EE.uif.use_memory ? mode_default : EE.default_ui2;
+    uint8_t clamped = get_up_mode(req);
+    if (clamped < req)                /* запрошенный режим урезан по напряжению */
+        aux_err(AWU_IMMEDIATELY);
+    mode_current = clamped;
     on_mode(mode_current);
 }
 
@@ -1221,6 +1238,12 @@ void mode_up_ui2(void)
         mode_current++;
     else
     {
+        /* Увеличение яркости заблокировано потолком по напряжению
+         * (up_mode < CMODE_MAX): сигнализируем ERRO_RED и выполняем
+         * wrap на минимум, как раньше. Wrap при здоровой батарее
+         * (up_mode == CMODE_MAX) остаётся беззвучным. */
+        if (up_mode < CMODE_MAX)
+            aux_err(AWU_IMMEDIATELY);
         if (mode_current != CMODE_MOON)
             mode_current = CMODE_MIN;
     }
@@ -1261,7 +1284,17 @@ void step_down_ui2(void)
     if (mode_current != CMODE_MOON)
     {
         ps.use_prev = false;
-        mode_current = (mode_current > CMODE_MIN) ? get_mode_down_ui2() : get_up_mode(CMODE_MAX);
+        if (mode_current > CMODE_MIN)
+        {
+            mode_current = get_mode_down_ui2();
+        }
+        else
+        {
+            uint8_t top = get_up_mode(CMODE_MAX);
+            if (top < CMODE_MAX)      /* wrap вверх урезан по напряжению */
+                aux_err(AWU_IMMEDIATELY);
+            mode_current = top;
+        }
         set_curri(mode_current);
     }
 }
@@ -1277,11 +1310,13 @@ void on_turbo_ui2(void)
         ps.start = on_driver();
         ps.pr_step = mode_current;
         mode_current = get_up_mode(CMODE_TURBO);
-        if (!ps.start && (get_step_tc(get_stepi(mode_current)) <= get_step_tc(get_stepi(ps.pr_step))))
-        {
-            if (limiter > 0 || mode_current < CMODE_TURBO)
-                aux_err(AWU_IMMEDIATELY);
-        }
+        /* Турбо = максимум: сигнализируем при любом клампе по напряжению,
+         * независимо от предыдущего состояния драйвера (фикс «индикация
+         * через раз»: прежний гейт !ps.start подавлял сигнал при включении
+         * турбо из OFF, а сравнение с pr_step не срабатывало, когда
+         * предыдущим режимом был CMODE_OFF/MOON). */
+        if (mode_current < CMODE_TURBO)
+            aux_err(AWU_IMMEDIATELY);
         set_curri(mode_current);
     }
     else

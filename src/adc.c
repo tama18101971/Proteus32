@@ -621,6 +621,8 @@ __attribute__((noinline, noreturn)) void down_forever(void)
  * @brief Battery undervoltage protection (call at 30 Hz), в кодах Vrefint.
  *
  * For UI1 (ramping): step-down brightness at each threshold, hard cutoff at 2700 mV.
+ * A drop of the ratchet ceiling while the button is held is announced with
+ * aux_err() (ERRO_RED) — once per ceiling decrease, voltage only.
  * For UI2 (discrete): reduce mode automatically, hard cutoff if already at mode 0.
  * Monotonic: volt_stop_mode only decreases, recovers on reboot.
  *
@@ -674,7 +676,17 @@ void scan_voltage(void)
         {
             if (voltage_ok)
             {
+                /* Рампинг «упёрся» в просадку АКБ: сигнализируем ERRO_RED
+                 * однократно на каждое снижение потолка храповика.
+                 * ratchet_max_step() монотонно не возрастает, поэтому на
+                 * одном уровне повторных сигналов не будет; reset_max_step()
+                 * при новом нажатии поднимает потолок — сигнала нет. */
+                static uint16_t v_max_prev = MAX_STEP;
                 uint16_t v_max = ratchet_max_step();
+                if (v_max < v_max_prev)
+                    aux_err(AWU_IMMEDIATELY);
+                v_max_prev = v_max;
+
                 uint16_t cap = (v_max > limiter) ? (uint16_t)(v_max - limiter) : 1u;
                 max_step = cap;
                 if (Pressed && (step_user > cap))
