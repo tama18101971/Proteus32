@@ -16,10 +16,10 @@
  *
  * Power control: PD0 on GPIOD switches DAC supply.
  *
- * Return codes: I2C_OK (0) on success, I2C_NACK (1) otherwise. Since i2c
- * lib v7.0.x internals may fail with I2C_ERR_TIMEOUT/I2C_ERR_BERR/
- * I2C_ERR_ARLO, but this driver collapses every failure into I2C_NACK
- * (checks are `!= I2C_OK`); see i2c.h for granular codes.
+ * Return codes: I2C_OK (0) on success, I2C_NACK (1) otherwise. The compact
+ * i2c driver (include/i2c.h) collapses every failure — NACK from the DAC
+ * (unpowered/missing), bus error or timeout — into I2C_NACK (checks are
+ * `!= I2C_OK`).
  */
 
 #ifndef DAC_H
