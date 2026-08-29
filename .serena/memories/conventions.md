@@ -1,0 +1,11 @@
+# Code conventions
+- C99; stdint.h fixed-width only (uint8_t/int16_t/...); never bare int/short/long
+- snake_case locals/fields; PascalCase public API prefixed per module (ThermalLimiter_*, etc.)
+- Doxygen `/** @brief ... */` above EVERY function; update it whenever signature/behavior changes
+- #ifndef guards on headers; timeout counters on every while loop
+- Bare metal > SDK: direct register writes (port->CFGLR, USART1->DATAR); mini_gpio.h allowed for new GPIO; do not rewrite existing bare-metal inline funcs
+- No 32-bit mul/div in hot paths (RV32EC) — bit shifts + fixed point (established scales: temp EMA ×32, PI integral ×64, DAC gamma (step^3)>>15)
+- Feature flags USE_* gate only function BODIES in include/proteus_config.h (USE_STROBE, USE_BLOCK, USE_BATTIND, USE_MENU; UART_DEBUG, PRINT_ADC for debug output); dispatch tables are always compiled — never #ifdef them out
+- ui_table_idx valid only: 1 (UI1), 2/3 (UI2), 5/6 (menus) — 5/6 assigned only at boot (enter_menu_at_boot); clamp to 1..3 otherwise, else dead UI (reboot-only)
+- Data: EE.fieldname overlay via include/app_data.h (WL_FLASH); hardware calibration via ob.c Option Bytes (calibration() writes OB, never WL_FLASH)
+- Style reference: root AGENTS.md is canonical and mirrors these rules
