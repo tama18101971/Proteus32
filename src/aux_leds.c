@@ -693,7 +693,10 @@ void aux_refresh_backlight(void) {
  * Зацикленная (cycle=1) команда: одна вспышка RED_LED за период.
  * ON-полупериод — короткая вспышка, OFF — пауза до следующей вспышки.
  * Сумма ON+OFF ≈ период предупреждения (2/4/8 с).
- * 
+ * Первая вспышка — через ~1 с (AWU_1S): «тихая пауза» отделяет начало
+ * паттерна от предыдущего AUX-сигнала (ошибка, индикация и т.п.),
+ * чтобы пользователь не сливал их в одну последовательность.
+ *
  */
 void start_exaux_voltage(WARNING_Fr_t ex_mode) {
 	uint32_t cmd = 0;
@@ -710,7 +713,7 @@ void start_exaux_voltage(WARNING_Fr_t ex_mode) {
 	default:
 		break;
 	}
-	start_aux_cmd(cmd, true, IDM_VWARNING, AWU_250MS);
+	start_aux_cmd(cmd, true, IDM_VWARNING, AWU_1S);
 }
 #endif
 
