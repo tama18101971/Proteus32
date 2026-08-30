@@ -309,7 +309,6 @@ static uint32_t set_aux_count(uint8_t count) {
 /**
  * @brief Запуск одиночной AUX-команды
  * @param command   — 32-битная команда
- * @param enable    — true = начать обработку немедленно
  * @param idm_mode  — режим индикации (IDM_BEACON, IDM_VWARNING, IDM_STROBE, IDM_OTHER)
  * @param delay     — начальная задержка перед первым полупериодом (awu_tick_t:
  *                    AWU_15MS, AWU_250MS, AWU_500MS, AWU_1S и т.д.) или
@@ -318,12 +317,12 @@ static uint32_t set_aux_count(uint8_t count) {
  *
  * Таймер AWU настраивается в handle_aux_cmd при обработке PER_FIRST.
  */
-static void start_aux_cmd(uint32_t command, bool enable, IDM_Type_t idm_mode, awu_tick_t delay) {
+static void start_aux_cmd(uint32_t command, IDM_Type_t idm_mode, awu_tick_t delay) {
 	off_aux_cmd(false);
 
 	aux_cmd.aux_cmd = command;
 
-	aux_ctl.enable = enable;
+	aux_ctl.enable = true;
 	aux_ctl.idmode = idm_mode;
 	aux_ctl.period = PER_INIT;
 	aux_ctl.current_brightness = 0;
@@ -391,7 +390,7 @@ void start_aux_strobe(uint8_t index)
 
 	profile = &strobe_commands[index];
 	if (profile->type == STROBE_PROFILE_COMMAND) {
-		start_aux_cmd(profile->value.command, true, IDM_STROBE, AWU_IMMEDIATELY);
+		start_aux_cmd(profile->value.command, IDM_STROBE, AWU_IMMEDIATELY);
 	} else {
 		start_aux_array(profile->value.array, AWU_IMMEDIATELY);
 		aux_ctl.idmode = IDM_STROBE;
@@ -674,7 +673,7 @@ void start_aux_beacon(void) {
 		uint32_t cmd = MAKE_CMD(dev, 1, 0,
 			AWU_PSC_256, 25, bcon_psc1[mode], bcon_win1[mode],
 			br0, 0);
-		start_aux_cmd(cmd, true, IDM_BEACON, AWU_120MS);
+		start_aux_cmd(cmd, IDM_BEACON, AWU_120MS);
 	}
 }
 
@@ -713,7 +712,7 @@ void start_exaux_voltage(WARNING_Fr_t ex_mode) {
 	default:
 		break;
 	}
-	start_aux_cmd(cmd, true, IDM_VWARNING, AWU_1S);
+	start_aux_cmd(cmd, IDM_VWARNING, AWU_1S);
 }
 #endif
 
@@ -736,7 +735,7 @@ void slot_batt_ind(void) {
 	 * flashlight was switched off, before STANDBY restores the DAC path. */
 	if (EE.usr.id_plus_sid)
 		ON_POWER();
-	start_aux_cmd(cmd, true, IDM_OTHER, AWU_120MS);
+	start_aux_cmd(cmd, IDM_OTHER, AWU_120MS);
 #endif
 }
 
@@ -744,14 +743,14 @@ void slot_batt_ind(void) {
  * @brief Включение (две зелёные вспышки)
  */
 void aux_on(void) {
-	start_aux_cmd(INFO_GRN, true, IDM_OTHER, AWU_60MS);
+	start_aux_cmd(INFO_GRN, IDM_OTHER, AWU_60MS);
 }
 
 /**
  * @brief Выключение (одна красная вспышка)
  */
 void aux_off(void) {
-	start_aux_cmd(INFO_RED, true, IDM_OTHER, AWU_60MS);
+	start_aux_cmd(INFO_RED, IDM_OTHER, AWU_60MS);
 }
 
 #ifdef USE_AUX_ERR
@@ -760,7 +759,7 @@ void aux_off(void) {
  * @param delay начальная задержка перед первой вспышкой или AWU_IMMEDIATELY
  */
 void aux_err(awu_tick_t delay) {
-	start_aux_cmd(ERRO_RED, true, IDM_OTHER, delay);
+	start_aux_cmd(ERRO_RED, IDM_OTHER, delay);
 }
 #endif
 
@@ -768,7 +767,7 @@ void aux_err(awu_tick_t delay) {
  * @brief Индикация блокировки (одна короткая красная вспышка, DANG_RED)
  */
 void aux_dang(void) {
-	start_aux_cmd(DANG_RED, true, IDM_OTHER, AWU_IMMEDIATELY);
+	start_aux_cmd(DANG_RED, IDM_OTHER, AWU_IMMEDIATELY);
 }
 
 /**
@@ -778,5 +777,5 @@ void aux_dang(void) {
 void aux_count(uint8_t count) {
 	LED_Bits_t dev = count ? GRN_LED : RED_LED;
 	uint8_t flashes = count ? (count > 15 ? 15 : count) : 1;
-	start_aux_cmd(make_count_cmd(dev, flashes, 1), true, IDM_OTHER, AWU_120MS);
+	start_aux_cmd(make_count_cmd(dev, flashes, 1), IDM_OTHER, AWU_120MS);
 }
