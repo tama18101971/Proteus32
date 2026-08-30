@@ -710,7 +710,7 @@ void start_exaux_voltage(WARNING_Fr_t ex_mode) {
 	default:
 		break;
 	}
-	start_aux_cmd(cmd, true, IDM_VWARNING, AWU_IMMEDIATELY);
+	start_aux_cmd(cmd, true, IDM_VWARNING, AWU_250MS);
 }
 #endif
 
