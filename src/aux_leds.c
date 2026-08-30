@@ -138,6 +138,7 @@ static const strobe_profile_t strobe_commands[STROBE_COUNT] = {
  * @param pArray — указатель на массив uint32_t команд в Flash или RAM
  * @param delay  — начальная задержка перед первым полупериодом (awu_tick_t:
  *                 AWU_15MS, AWU_120MS, AWU_250MS, AWU_500MS, AWU_1S и т.д.)
+ *                 или AWU_IMMEDIATELY для немедленного запуска первого элемента
  *
  * Сбрасывает структуру состояния, устанавливает флаг EnableArrayProcessing
  * и запоминает указатель на массив для дальнейшей обработки в handle_aux().
@@ -151,8 +152,19 @@ static void start_aux_array(const uint32_t *pArray, awu_tick_t delay) {
 	current_buf = pArray;
 	aux_ctl.enable = true;
 
-	AWU_set_delay(delay);
-	AWU_ON();
+	if (delay == AWU_IMMEDIATELY) {
+		/* Симметрично start_aux_cmd(): handle_aux() сначала делает AWU_OFF(),
+		 * сбрасывая неистекшее окно предыдущей AUX-команды, затем загружает
+		 * первый элемент массива и немедленно запускает его ON-полупериод
+		 * с корректным psc0/win0. Раньше 0xFF уходил в AWU_set_delay() и
+		 * молча отбрасывался проверкой границ — AWU продолжал отсчитывать
+		 * старое окно (до 4 с у строба 60ms/4s), и массив стартовал только
+		 * после его истечения. */
+		(void)handle_aux();
+	} else {
+		AWU_set_delay(delay);
+		AWU_ON();
+	}
 }
 
 /**
@@ -366,6 +378,16 @@ void start_aux_strobe(uint8_t index)
 
 	if (index >= STROBE_COUNT)
 		return;
+
+	/* Все профили стробов выводятся через DAC7571. Предшествующий
+	 * stop_aux_if() срезал питание DAC (PD0): в MODE_STROB
+	 * driver_is_active() == false, и off_aux_cmd() вызывает OFF_POWER().
+	 * Без восстановления питания первый немедленный импульс нового
+	 * строба уходит в обесточенный DAC (NACK) и теряется — первая
+	 * видимая вспышка случается лишь через один полный OFF-полупериод
+	 * (~1 с у 60ms/1s, ~4 с у 60ms/4s). ON_POWER() идемпотентен для
+	 * пути из slot_strobe(), где рельс уже включён on_driver(). */
+	ON_POWER();
 
 	profile = &strobe_commands[index];
 	if (profile->type == STROBE_PROFILE_COMMAND) {
@@ -640,8 +662,10 @@ void start_aux_beacon(void) {
 	LED_Bits_t dev = (LED_Bits_t)EE.aux.beacon_type;
 
 	if (beacon_low_voltage) {
-		/* Двойная вспышка: 50 мс ON / 100 мс OFF, затем 50 мс ON / период OFF */
-		beacon_double_buf[0] = MAKE_CMD(dev, 0, 1, AWU_PSC_256, 25, AWU_PSC_256, 50, br0, 0);
+		/* Двойная вспышка: 50 мс ON / 150 мс OFF, затем 50 мс ON / период OFF
+		 * (150 мс кодируется макросом как 512×38/128000 = 152 мс — ближайшее
+		 * значение по округлению AWU_MS_WIN_FOR). */
+		beacon_double_buf[0] = MAKE_CMD_MS(dev, 0, 1, 50, 150, br0, 0);
 		beacon_double_buf[1] = MAKE_CMD(dev, 0, 1, AWU_PSC_256, 25, bcon_psc1[mode], bcon_win1[mode], br0, 0);
 		beacon_double_buf[2] = AC_REP_ATSTART;
 		start_aux_array(beacon_double_buf, AWU_120MS);

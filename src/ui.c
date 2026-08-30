@@ -253,8 +253,12 @@ void off_driver(uint8_t reset_step, SoftStartSpeed_t ss_speed)
     stop_aux_if(IDM_VWARNING, false);
     stop_aux_if(IDM_BEACON, false);
 
-    /* Memory mode: сохранить последний шаг/режим. Реальную запись решает
-     * сравнение с тенью на 5-сек тике (main.c). */
+    /* Memory mode: сохранить последний шаг/режим. К этому моменту значения
+     * уже очищены от турбо-сессии, запущенной двойным кликом (ps.start):
+     * set_current_ll()/off_driver_false() не записывают уровень турбо в
+     * память, а при !ps.start блок выше откатил step_default/mode_default
+     * на pr_step. Реальную запись решает сравнение с тенью на 5-сек тике
+     * (main.c). */
     if (EE.uif.use_memory)
     {
         EE.default_ui1 = step_default;
@@ -274,7 +278,12 @@ void off_driver(uint8_t reset_step, SoftStartSpeed_t ss_speed)
  */
 void set_current_ll(uint16_t step_target, SoftStartSpeed_t ss_speed)
 {
-    if (!step_target && step_tc && !step_user)
+    /* Запоминание последней яркости при выключении (аналог set_current_ll
+     * Proteus-IID, button.c:89). В турбо-сессии, запущенной двойным кликом
+     * из OFF (ps.use_prev && ps.start), уровень турбо в память не попадает:
+     * как в AVR, off_driver() восстанавливает pr_step только при !ps.start,
+     * поэтому здесь захват step_tc == уровня турбо подавлен. */
+    if (!step_target && step_tc && !step_user && !(ps.use_prev && ps.start))
         step_default = step_tc;
 
     if (ss_speed != SS_NO)
@@ -401,7 +410,16 @@ void off_driver_false(void)
 {
 //    EE_PRINTF("[UI] OFF DRV false\r\n");
     driver_mode = MODE_OFF;
-    mode_default = mode_current;
+    /* Память режимов (аналог off_driver_false Proteus-IID, button.c:499).
+     * Турбо-сессия, запущенная двойным кликом из OFF (ps.use_prev &&
+     * ps.start), в память не пишется: mode_current == CMODE_TURBO должен
+     * быть отброшен — так же поступает гвард if(!ps.start) в off_driver()
+     * AVR. Условие mode_current != CMODE_OFF не даёт выключению из UI1
+     * (там mode_current не используется и всегда CMODE_OFF) затирать
+     * память UI2 нулём. Турбо из ON (ps.start == 0) не трогаем: его
+     * откатывает блок if(!ps.start) в off_driver(). */
+    if (mode_current != CMODE_OFF && !(ps.use_prev && ps.start))
+        mode_default = mode_current;
     mode_current = CMODE_OFF;
     off_driver(false, SS_FAST);
 }
@@ -738,15 +756,6 @@ void ml_clickX(void)
 #define MENU_ENTRY_RELEASE_MS   3000u
 
 #ifdef USE_MENU
-/** @brief Мигнуть индикатором cnt раз (для подтверждения входа в меню).
- * @param cnt     Число вспышек.
- * @param on_ms   Длительность свечения/паузы, мс.
- * @param device  Битовая маска LED (RED_LED и/или GRN_LED).
- */
-static __attribute__((noinline)) void menu_entry_flash(uint8_t cnt, uint16_t on_ms, LED_Bits_t device);
-#endif /* USE_MENU */
-
-#ifdef USE_MENU
 /** @brief Ждать отпускания кнопки (максимум MENU_ENTRY_RELEASE_MS).
  *  Вызывается после входа/выхода из меню, пока FSM в главном цикле ещё не
  *  тронул событие — иначе удержание попало бы в новый UI как HOLD. */
@@ -800,13 +809,17 @@ void menu_exit(void)
  * в оригинале Proteus IID: ~1 с удержания кнопки). */
 #define MENU_ENTRY_DEBOUNCE_MS  1000u
 
-#ifdef USE_MENU
-/** @brief Flash one or more menu indicator LEDs.
- * @param cnt Number of flashes.
- * @param on_ms LED on/off duration in milliseconds.
- * @param device LED bitmask (RED_LED and/or GRN_LED).
+/**
+ * @brief Мигнуть индикаторными светодиодами cnt раз (busy-wait, блокирующе).
+ *
+ * Общего назначения: подтверждение входа/выхода из меню (USE_MENU) и
+ * индикация критического разряда в down_forever() — компилируется всегда,
+ * независимо от USE_MENU. Каждая вспышка: ON on_ms + пауза on_ms.
+ * @param cnt     Число вспышек.
+ * @param on_ms   Длительность свечения/паузы, мс (0..65535).
+ * @param device  Битовая маска LED (RED_LED и/или GRN_LED).
  */
-static __attribute__((noinline)) void menu_entry_flash(uint8_t cnt, uint16_t on_ms, LED_Bits_t device)
+__attribute__((noinline)) void menu_entry_flash(uint8_t cnt, uint16_t on_ms, LED_Bits_t device)
 {
     for (uint8_t i = 0; i < cnt; i++)
     {
@@ -821,7 +834,6 @@ static __attribute__((noinline)) void menu_entry_flash(uint8_t cnt, uint16_t on_
         wait_ms(on_ms);
     }
 }
-#endif /* USE_MENU */
 
 /**
  * @brief Войти в инженерное/пользовательское меню при подаче питания.

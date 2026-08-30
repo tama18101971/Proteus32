@@ -195,6 +195,27 @@ static const dispatch_t usr_table[] = {
 
 #define USR_TABLE_SIZE (sizeof(usr_table) / sizeof(usr_table[0]))
 
+/* Дескрипторы таблиц диспетчеризации по ui_table_idx: заменяют каскад
+ * if/else-if в ui_table_lookup одним индексированным доступом.
+ * Индексы: 1..3 — интерфейсы (UI2 и UI3 шарят одну таблицу), 5/6 — меню
+ * (ENG_MENU_IND/USR_MENU_IND; назначаются только при загрузке из
+ * enter_menu_at_boot). Ячейки [0] и [4] пусты — такие idx отсекаются
+ * проверкой в ui_table_lookup. */
+static const dispatch_t *const ui_table_of[7] = {
+    [1] = ui1_table,
+    [2] = ui2_table,
+    [3] = ui2_table,
+    [5] = eng_table,
+    [6] = usr_table,
+};
+static const uint8_t ui_table_size[7] = {
+    [1] = UI1_TABLE_SIZE,
+    [2] = UI2_TABLE_SIZE,
+    [3] = UI2_TABLE_SIZE,
+    [5] = ENG_TABLE_SIZE,
+    [6] = USR_TABLE_SIZE,
+};
+
 /*******************************************************************************
  *  UI dispatch lookup
  ******************************************************************************/
@@ -355,33 +376,11 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout)
         }
     }
 
-    const dispatch_t *table;
-    uint8_t size;
-
-    if (idx == 1)
-    {
-        table = ui1_table;
-        size = UI1_TABLE_SIZE;
-    }
-    else if (idx == 2 || idx == 3)
-    {
-        table = ui2_table;
-        size = UI2_TABLE_SIZE;
-    }
-    else if (idx == 5)  // ENG_MENU_IND
-    {
-        table = eng_table;
-        size = ENG_TABLE_SIZE;
-    }
-    else if (idx == 6)  // USR_MENU_IND
-    {
-        table = usr_table;
-        size = USR_TABLE_SIZE;
-    }
-    else
-    {
+    if (idx > 6u || ui_table_of[idx] == NULL)
         return 0;
-    }
+
+    const dispatch_t *table = ui_table_of[idx];
+    const uint8_t size = ui_table_size[idx];
 
     for (uint8_t i = 0; i < size; i++)
     {
