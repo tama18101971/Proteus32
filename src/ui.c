@@ -208,7 +208,6 @@ uint8_t on_driver(void)
         if (aux_needs_dac())
             off_aux_cmd(false);
         ON_POWER();
-        down_count = 5;
         vwarning = VWARNING_NONE;
         vwarning_old = VWARNING_NONE;
         direction = DIR_UP;
@@ -386,7 +385,8 @@ void on_turbo_ui1(void)
          * ERRO_RED независимо от предыдущего состояния драйвера
          * (фикс «индикация работает через раз»: прежний гейт !start
          * подавлял сигнал при включении турбо из OFF, а сравнение
-         * pr_step >= max_step флипало после лестницы автосброса). */
+         * pr_step >= max_step флипало после автоснижения яркости
+         * по просадке АКБ). */
         if (volt_step_ratchet < MAX_STEP)
             aux_err(AWU_IMMEDIATELY);
         set_current(max_step, SS_FAST);
@@ -563,7 +563,6 @@ void lock_light_on(DRIVER_Mode_t prev_mode)
     if (aux_needs_dac())
         off_aux_cmd(false);
     ON_POWER();
-    down_count = 5;
     vwarning = VWARNING_NONE;
     vwarning_old = VWARNING_NONE;
     direction = DIR_UP;

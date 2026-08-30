@@ -53,11 +53,6 @@ uint16_t raw_temperature_adc = 0; // сырое значение темпера�
 uint8_t volt_max_mode = CMODE_TURBO;
 uint8_t volt_stop_mode = CMODE_TURBO;
 
-/* Счётчик ступеней снижения яркости UI1 при просадке АКБ.
- * Сбрасывается в 5 в on_driver() (аналог AVR button.c:209).
- * Глобальный — чтобы on_driver() в ui.c мог его сбросить. */
-uint8_t down_count = 5;
-
 /* Храповик потолка яркости UI1 (ramping): монотонно убывает по мере
  * просадки АКБ и сбрасывается лишь на новой попытке включения с
  * подтверждённо восстановившимся напряжением (reset_max_step()). */
@@ -449,24 +444,17 @@ uint16_t vbat_to_mv_calibrated(void)
  *   vbat < mV  ⟺  adc >= MV_LT(mV)   (низкое напряжение — код высокий)
  *   vbat >= mV ⟺  adc <= MV_GE(mV)
  * Калибровочный vc (int8, коды) входит как e = adc - vc.
- * Смысл индексов сохранён из исходника:
- *   [0] = критический разряд → принудительный сон
- *   [1] = только CMODE_MOON
- *   [2] = CMODE_MIN
- *   [3] = CMODE_MID0
- *   [4] = CMODE_MID
- *   [5] = восстановление / без ограничений (CMODE_TURBO)
+ * Смысл индексов:
+ *   [0] = критический разряд → down_forever()
+ *   [1..5] = единый потолок UI1/UI2 (calc_volt_max_mode):
+ *            vbat < порог[i] ⟺ макс. допустимый режим = i
+ *            (CMODE_MOON..CMODE_MAX; UI1 — тот же режим через get_stepi)
+ *   vbat >= 3100 мВ → без ограничений (CMODE_TURBO / step 511)
  */
 static const uint16_t swt_cut[6] =
 {   /* vbat < mV ⟺ adc >= это значение */
     MV_LT(2700), MV_LT(2750), MV_LT(2800), MV_LT(2900), MV_LT(3000), MV_LT(3100)
 };
-/* vbat > mV ⟺ adc <= это значение (потолок яркости UI1). */
-static const uint16_t ceil_cap[6] =
-{
-    MV_GE(2501), MV_GE(2821), MV_GE(2931), MV_GE(3081), MV_GE(3191), MV_GE(3301)
-};
-#define CUT_RECOVERY_MV 3101u   /* vbat > 3100 мВ ⟺ adc <= MV_GE(3101)=396 */
 
 /**
  * @brief Вычисляет максимально допустимый режим UI2 по текущему напряжению.
@@ -483,10 +471,16 @@ static uint8_t calc_volt_max_mode(int32_t eff_vcode)
 }
 
 /* ============ Потолок яркости UI1 по напряжению (ramping) ============
- * Аналог AVR adc.c limiter[2][6] + ratchet_max_step().
- * step_max_tbl — 9-битные шаги (0..511), масштабированные из AVR 8-бит.
+ * Единая шкала с UI2: потолок = get_stepi(volt_max_mode) — яркость
+ * режима, разрешённого при текущем напряжении (modes[]: 20..511 по
+ * порогам swt_cut 2.75/2.80/2.90/3.00/3.10 В).
  * volt_step_ratchet монотонно убывает (MIN) до явного безопасного восстановления. */
-static const uint16_t step_max_tbl[6] = {120, 240, 310, 400, 463, 511};
+uint16_t ratchet_max_step(void)
+{
+    uint16_t s = get_stepi(volt_max_mode);
+    if (s < volt_step_ratchet) volt_step_ratchet = s;
+    return volt_step_ratchet;
+}
 
 /* Код Vrefint, представляющий «критически низкое напряжение» при отсутствии
  * валидной выборки (voltage_ok == false).  Заменяет прежний маркер
@@ -526,27 +520,6 @@ bool beacon_low_voltage_update(void)
         beacon_low_voltage = false;
 
     return beacon_low_voltage != prev;
-}
-
-/** @brief Чистый расчёт потолка по текущему коду Vrefint (без побочных эффектов). */
-static uint16_t calc_step_ceiling(void)
-{
-    int32_t eff_vcode = adc_eff_vcode();
-    uint8_t i = 6;
-    while (i > 0)
-    {
-        i--;
-        if (eff_vcode <= (int32_t)ceil_cap[i]) break;
-    }
-    return step_max_tbl[i];
-}
-
-/** @brief Применить храповик: понизить volt_step_ratchet и вернуть его. */
-uint16_t ratchet_max_step(void)
-{
-    uint16_t s = calc_step_ceiling();
-    if (s < volt_step_ratchet) volt_step_ratchet = s;
-    return volt_step_ratchet;
 }
 
 /**
@@ -627,11 +600,13 @@ __attribute__((noinline, noreturn)) void down_forever(void)
 /**
  * @brief Battery undervoltage protection (call at 30 Hz), в кодах Vrefint.
  *
- * For UI1 (ramping): step-down brightness at each threshold, hard cutoff at 2700 mV.
- * A drop of the ratchet ceiling while the button is held is announced with
- * aux_err() (ERRO_RED) — once per ceiling decrease, voltage only.
+ * For UI1 (ramping): the sag ratchet ceiling (= get_stepi(volt_max_mode),
+ * единая шкала с UI2) clamps step_user both while the button is held and
+ * after release (SS_SLOW ramp-down, no steps).  A ceiling decrease is
+ * announced with aux_err() (ERRO_RED) — once per ceiling decrease.
  * For UI2 (discrete): reduce mode automatically, hard cutoff if already at mode 0.
  * Monotonic: volt_stop_mode only decreases, recovers on reboot.
+ * For tactical UI (ui_index 0): clamp without ratchet and indication.
  *
  * Все сравнения выполняются над кодом Vrefint (без делений); калибровочный
  * vc учитывается как сдвиг кода.  При voltage_ok == false используется
@@ -667,63 +642,48 @@ void scan_voltage(void)
     exaux(eff_vcode);
 #endif
 
-    /* 2. Ступенчатое снижение яркости (UI1 / UI2) */
+    /* 2. Потолок яркости по напряжению (единая шкала swt_cut + modes[]) */
     uint8_t ui_index = ui_table_idx;
 
-    /* Ramping UI (UI1, тактический, меню) */
-    if (ui_index <= 1u || ui_index > 3u)
+    /* Ramping UI1: храповик + кламп step_user к потолку */
+    if (ui_index == 1)
     {
-        /* UI1: потолок рампинга следит за просадкой АКБ через храповик
-         * ratchet_max_step().  Пока кнопка удержана, рампинг упирается в
-         * потолок, а при его снижении плавно сползает к нему (SS_SLOW):
-         * ступенчатые «четвертушки» не применяются — мерцания нет
-         * (паритет с Proteus-IID).  Лестница ниже работает только после
-         * отпускания кнопки (установившийся режим). */
-        if (ui_index == 1)
+        if (voltage_ok)
         {
-            if (voltage_ok)
-            {
-                /* Рампинг «упёрся» в просадку АКБ: сигнализируем ERRO_RED
-                 * однократно на каждое снижение потолка храповика.
-                 * ratchet_max_step() монотонно не возрастает, поэтому на
-                 * одном уровне повторных сигналов не будет; reset_max_step()
-                 * при новом нажатии поднимает потолок — сигнала нет. */
-                static uint16_t v_max_prev = MAX_STEP;
-                uint16_t v_max = ratchet_max_step();
-                if (v_max < v_max_prev)
-                    aux_err(AWU_IMMEDIATELY);
-                v_max_prev = v_max;
+            /* Рампинг «упёрся» в просадку АКБ: сигнализируем ERRO_RED
+             * однократно на каждое снижение потолка храповика.
+             * ratchet_max_step() монотонно не возрастает, поэтому на
+             * одном уровне повторных сигналов не будет; reset_max_step()
+             * при новом нажатии поднимает потолок — сигнала нет. */
+            static uint16_t v_max_prev = MAX_STEP;
+            uint16_t v_max = ratchet_max_step();
+            if (v_max < v_max_prev)
+                aux_err(AWU_IMMEDIATELY);
+            v_max_prev = v_max;
 
-                uint16_t cap = (v_max > limiter) ? (uint16_t)(v_max - limiter) : 1u;
-                max_step = cap;
-                if (Pressed && (step_user > cap))
-                    set_current(cap, SS_SLOW);
-            }
-            if (Pressed)
-                return;
+            uint16_t cap = (v_max > limiter) ? (uint16_t)(v_max - limiter) : 1u;
+            max_step = cap;
+            /* При удержании рампинг упирается в потолок (с термочастью
+             * limiter, как прежде): плавный ретаргет SS_SLOW, без ступенек. */
+            if (Pressed && (step_user > cap))
+                set_current(cap, SS_SLOW);
+            /* Замена ступенчатой лестницы ×0.75: после отпускания кнопки
+             * просадка АКБ тоже плавно тянет step_user к потолку храповика
+             * (без термочасти: requested brightness в step_user остаётся
+             * прерогативой термолимитера — get_step_tc в set_current). */
+            else if (!Pressed && (step_user > v_max))
+                set_current(v_max, SS_SLOW);
         }
-
-        /* Step-down brightness on voltage sag */
-        if (eff_vcode >= (int32_t)swt_cut[down_count])
-        {
-            if (++voff_count > 3)
-            {
-                voff_count = 0;
-                if (down_count)
-                {
-                    down_count--;
-                    step_user -= (step_user >> 2);
-                    set_current(step_user, SS_SLOW);
-                    aux_err(AWU_IMMEDIATELY);       // сигнализируем о сбросе
-                }
-            }
-            return;
-        }
-
-        voff_count = 0;
-        /* Recovery: voltage above top threshold (vbat > 3100) */
-        if (eff_vcode <= (int32_t)MV_GE(CUT_RECOVERY_MV))
-            down_count = 5;
+    }
+    /* Тактический UI (ui_index 0): кламп к единому потолку без храповика
+     * и сигнализации (моментарка пересетит step_default при каждом
+     * нажатии — кламп держит яркость в рамках на время удержания).
+     * Меню (5/6) сюда не попадают: driver_mode не активен. */
+    else if (ui_index == 0 || ui_index > 3u)
+    {
+        uint16_t cap = get_stepi(volt_max_mode);
+        if (step_user > cap)
+            set_current(cap, SS_SLOW);
     }
     /* Discrete UI (mode-based UI2: ui_index 2 или 3) */
     else
