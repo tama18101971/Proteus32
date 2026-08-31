@@ -38,7 +38,6 @@
 #include "app_data.h"
 #include "adc.h"
 #include "ui.h"
-#include "ob.h"
 #include <string.h>
 
 uint8_t vwarning = VWARNING_NONE;			// Текущий уровень предупреждения о напряжении
@@ -596,8 +595,7 @@ void beacon_battery_check(void)
 
 	if (!ok) return;
 
-	int16_t vc = ob_GetVc();
-	int32_t eff_vcode = (int32_t)vrefint_adc - (int32_t)vc;
+	int32_t eff_vcode = adc_eff_raw_vcode();
 
 	/* 1. Защита от глубокого разряда (< 2.70 В) */
 	if (eff_vcode >= (int32_t)MV_LT(2700))
@@ -608,7 +606,7 @@ void beacon_battery_check(void)
 			adc_init();
 			if (adc_read())
 			{
-				int32_t code = (int32_t)vrefint_adc - (int32_t)vc;
+				int32_t code = adc_eff_raw_vcode();
 				if (code >= (int32_t)MV_LT(2700))
 				{
 					confirmed++;

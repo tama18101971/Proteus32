@@ -46,6 +46,14 @@
  * порогами, без единого деления.  mB нужны только для отладочного вывода
  * (vbat_to_mv()). */
 uint16_t vrefint_adc = 0;    /* код Vrefint после EMA (обновляется в adc_read) */
+
+/* Последний проверенный СЫРОЙ код Vrefint (до EMA). Используется только
+ * необратимой защитой от глубокого разряда: зазор между потолком минимального
+ * режима (2712 мВ) и hard cutoff (2700 мВ) — всего 2 кода, а EMA при разряде
+ * устойчиво отстаёт от raw на величину до 2^EMA_SHIFT-1 (15 кодов) из-за
+ * одностороннего целочисленного округления (diff>>4 == 0 при diff 1..15), так
+ * что фильтр может не достичь порога 2.7 В и down_forever() не вызовется. */
+static uint16_t vrefint_raw_adc;
 bool voltage_ok = false;     /* false = нет валидной свежей выборки (сбой/таймаут) */
 int16_t temperature_c = 0;
 uint16_t raw_temperature_adc = 0; // сырое значение температуры с АЦП (обновляется в adc_read)
@@ -335,9 +343,9 @@ bool adc_read(void)
     if ((vrefint_raw < 240u) || (vrefint_raw > 512u))
         return false;
 
-    /* Commit all values together.  get_exact_temp_adc() intentionally reads
-     * the newly committed raw value so calibration and limiter see the same
-     * sample.  Voltage stays in raw Vrefint code domain — no division here. */
+    /* Commit all values together so voltage_ok never publishes a new filtered
+     * value with a stale raw code.  Voltage stays in the Vrefint code domain. */
+    vrefint_raw_adc = vrefint_raw;
     vrefint_adc = ema_update(vrefint_raw);
     voltage_ok = true;
     raw_temperature_adc = new_raw_temperature_adc;
@@ -499,6 +507,21 @@ int32_t adc_eff_vcode(void)
 }
 
 /**
+ * @brief Калиброванный СЫРОЙ код Vrefint (без EMA) для hard cutoff 2.7 В.
+ * @return (vrefint_raw_adc - vc) при валидной выборке, иначе VREF_SENTINEL - vc
+ *         (тот же fail-safe, что и у adc_eff_vcode()).
+ *
+ * EMA предназначена для регулирования яркости и предупреждений; необратимая
+ * защита от глубокого разряда не должна зависеть от параметров фильтра и
+ * частоты опроса, поэтому сравнивает именно raw-код («из коробки» выбросы
+ * гасятся счётчиком подтверждений voff_count_off в scan_voltage()). */
+int32_t adc_eff_raw_vcode(void)
+{
+    uint16_t code = voltage_ok ? vrefint_raw_adc : VREF_SENTINEL;
+    return (int32_t)code - (int32_t)ob_GetVc();
+}
+
+/**
  * @brief Обновить флаг низкого заряда маяка по гистерезису 3.10 / 3.20 В.
  *
  * Ниже 3.10 В маяк переходит на двойные вспышки, выше 3.20 В — на одиночные;
@@ -618,6 +641,7 @@ void scan_voltage(void)
     static uint8_t voff_count_off = 0;
 
     int32_t eff_vcode = adc_eff_vcode();
+    int32_t cutoff_vcode = adc_eff_raw_vcode();
 
     volt_max_mode = calc_volt_max_mode(eff_vcode);
 
@@ -626,10 +650,12 @@ void scan_voltage(void)
 
     if (!driver_is_active()) return;
 
-    /* 1. Общая защита от глубокого разряда (< 2.70 В) для всех UI */
-    if (eff_vcode >= (int32_t)swt_cut[0])
+    /* 1. Общая защита от глубокого разряда (< 2.70 В) для всех UI.
+     * Сырой проверенный отсчёт исключает задержку/залипание EMA; четыре
+     * последовательных попадания ниже порога подавляют одиночный шум. */
+    if (cutoff_vcode >= (int32_t)swt_cut[0])
     {
-        if (++voff_count_off > 3)
+        if (++voff_count_off > 3u)
         {
             voff_count_off = 0;
             down_forever();
