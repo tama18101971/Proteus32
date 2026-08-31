@@ -329,10 +329,10 @@ bool adc_read(void)
     uint16_t new_raw_temperature_adc = ADC1->RDATAR;
     uint16_t vrefint_raw = ADC1->IDATAR1;
 
-    /* A 1S cell should produce roughly 2.4..4.8 V in this measurement path,
-     * corresponding to Vrefint codes 256..512.  Reject implausible raw data
+    /* A 1S cell should produce roughly 2.4..5.1 V in this measurement path,
+     * corresponding to Vrefint codes 240..512.  Reject implausible raw data
      * before it can seed or contaminate the EMA or bypass undervoltage cut-off. */
-    if ((vrefint_raw < 256u) || (vrefint_raw > 512u))
+    if ((vrefint_raw < 240u) || (vrefint_raw > 512u))
         return false;
 
     /* Commit all values together.  get_exact_temp_adc() intentionally reads
