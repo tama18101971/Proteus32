@@ -21,8 +21,8 @@
  *   [31:29] brightness1 — modes[] index 2nd half-period
  *
  * Array command elements:
- *   Each element is either an LED command (is_cmd != 0)
- *   or a system command (is_cmd == 0):
+ *   Each element is either an LED command (AUX_IS_SYS_CMD == false)
+ *   or a system command (AUX_IS_SYS_CMD == true):
  *     AC_STOP        — stop array processing
  *     AC_REP_ATSTART — loop from start of array
  *     AC_REP_ATSTEPS — loop from specified step
@@ -215,7 +215,7 @@ bool aux_is_active(void)
 bool aux_needs_dac(void)
 {
 	return aux_ctl.enable && p_aux &&
-	       (((LED_Bits_t)p_aux->aux.device & HBL_LED) != 0u);
+	       (((LED_Bits_t)AUX_DEVICE(p_aux->aux_cmd) & HBL_LED) != 0u);
 }
 
 /**
@@ -333,7 +333,7 @@ static void start_aux_cmd(uint32_t command, IDM_Type_t idm_mode, awu_tick_t dela
 	if (delay == AWU_IMMEDIATELY) {
 		/* Skip the initial PER_INIT wake.  Initialise the fields that PER_INIT
 		 * normally loads, then execute the first (ON) half-period immediately. */
-		aux_ctl.work_count = aux_cmd.aux.count;
+		aux_ctl.work_count = AUX_COUNT(aux_cmd.aux_cmd);
 		aux_ctl.period = PER_FIRST;
 		(void)handle_aux();
 	} else {
@@ -407,13 +407,13 @@ void start_aux_strobe(uint8_t index)
 static void handle_aux_cmd(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits) {
 	if (!ubits->enable) return;
 
-	LED_Bits_t device = (LED_Bits_t)aux->aux.device;
+	LED_Bits_t device = (LED_Bits_t)AUX_DEVICE(aux->aux_cmd);
 
 	if (ubits->period == PER_INIT) {
-		ubits->work_count = aux->aux.count;
+		ubits->work_count = AUX_COUNT(aux->aux_cmd);
 		ubits->period = PER_FIRST;
 	} else if (ubits->period == PER_END) {
-		if (!aux->aux.cycle) {
+		if (!AUX_CYCLE(aux->aux_cmd)) {
 			if (ubits->work_count > 0) ubits->work_count--;
 			if (ubits->work_count == 0) {
 				if (!EnableArrayProcessing)
@@ -439,18 +439,18 @@ static void handle_aux_cmd(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits) {
 	}
 
 	if (ubits->period == PER_FIRST) {
-		if (aux->aux.brightness0 != ubits->current_brightness) {
-			SetBrightness(device, aux->aux.brightness0);
-			ubits->current_brightness = aux->aux.brightness0;
+		if (AUX_BR0(aux->aux_cmd) != ubits->current_brightness) {
+			SetBrightness(device, AUX_BR0(aux->aux_cmd));
+			ubits->current_brightness = AUX_BR0(aux->aux_cmd);
 		}
-		AWU_set_raw(aux->aux.psc0, aux->aux.win0);
+		AWU_set_raw(AUX_PSC0(aux->aux_cmd), AUX_WIN0(aux->aux_cmd));
 		ubits->period = PER_SECOND;
 	} else if (ubits->period == PER_SECOND) {
-		if (aux->aux.brightness1 != ubits->current_brightness) {
-			SetBrightness(device, aux->aux.brightness1);
-			ubits->current_brightness = aux->aux.brightness1;
+		if (AUX_BR1(aux->aux_cmd) != ubits->current_brightness) {
+			SetBrightness(device, AUX_BR1(aux->aux_cmd));
+			ubits->current_brightness = AUX_BR1(aux->aux_cmd);
 		}
-		AWU_set_raw(aux->aux.psc1, aux->aux.win1);
+		AWU_set_raw(AUX_PSC1(aux->aux_cmd), AUX_WIN1(aux->aux_cmd));
 		ubits->period = PER_END;
 	}
 }
@@ -461,7 +461,7 @@ static void handle_aux_cmd(union AUX_Cmd_u *aux, AUX_Ctr_t *ubits) {
  * @param ctr    — указатель на структуру состояния канала
  * @return указатель на текущую команду, или NULL если AC_STOP
  *
- * Если текущий элемент — системная команда (is_cmd == 0):
+ * Если текущий элемент — системная команда (AUX_IS_SYS_CMD == true):
  *   AC_STOP        → возвращает NULL (handle_aux отключит массив)
  *   AC_REP_ATSTART → сбрасывает индекс на начало массива
  *   AC_REP_ATSTEPS → устанавливает индекс на заданный шаг
@@ -490,8 +490,8 @@ static union AUX_Cmd_u *handle_aux_array(const uint32_t pArray[], AUX_Ctr_t *ctr
 	 * поля arr_index (4 бита = 0..15) — защита от взаимной зацикленности
 	 * команд AC_REP_*. */
 	uint8_t guard = 16;
-	while (p->cmd.is_cmd == 0 && guard--) {
-		switch ((Array_Cmd_t)p->cmd.command) {
+	while (AUX_IS_SYS_CMD(p->aux_cmd) && guard--) {
+		switch (AUX_SYS_CMD_OP(p->aux_cmd)) {
 		case AC_STOP:
 			ctr->enable = false;
 			return NULL;
@@ -500,7 +500,7 @@ static union AUX_Cmd_u *handle_aux_array(const uint32_t pArray[], AUX_Ctr_t *ctr
 			p = (union AUX_Cmd_u*)pArray;
 			break;
 		case AC_REP_ATSTEPS:
-			ctr->arr_index = p->cmd.steps;
+			ctr->arr_index = AUX_SYS_CMD_STEPS(p->aux_cmd);
 			p = (union AUX_Cmd_u*)pArray + ctr->arr_index;
 			break;
 		default:
@@ -511,7 +511,7 @@ static union AUX_Cmd_u *handle_aux_array(const uint32_t pArray[], AUX_Ctr_t *ctr
 
 	/* Защита: после 16 итераций всё ещё системная команда — зависание
 	 * (AC_REP_* ссылаются друг на друга). Прерываем во избежание краша. */
-	if (p->cmd.is_cmd == 0) {
+	if (AUX_IS_SYS_CMD(p->aux_cmd)) {
 		ctr->enable = false;
 		return NULL;
 	}

@@ -22,6 +22,11 @@
  *
  * Half-period time: (prescaler_value × win) / 128000 seconds
  * Parameters set via MAKE_CMD(device, cycle, count, psc0, win0, psc1, win1, brightness0, brightness1)
+ *
+ * The command word is serialised into Flash, therefore it is NEVER decoded
+ * through C bitfields (their layout is ABI-dependent).  All encoding and
+ * decoding goes through the explicit AUX_*_MASK/AUX_*_SHIFT macros and
+ * AUX_xxx() accessors; _Static_assert checks pin the layout at compile time.
  */
 
 #ifndef AUX_LEDS_H_
@@ -117,40 +122,88 @@ typedef enum {
 /**
  * @brief 32-bit LED command word.
  *
- * Two representations via union:
- *   aux      — LED command (brightness, timing)
- *   cmd      — System command (AC_STOP, AC_REP_ATSTART, AC_REP_ATSTEPS)
- *   aux_cmd  — Direct 32-bit word access (for Flash storage)
+ * The word is serialised into Flash arrays, so it MUST NOT be decoded via
+ * C bitfields: bitfield member layout is implementation-defined (ABI- and
+ * compiler-dependent).  All fields are accessed exclusively through the
+ * explicit mask/shift macros below (AUX_DEVICE(), AUX_PSC0(), ...), which
+ * makes the encoding independent of bitfield layout and byte order.
  *
- * If bits 5..31 == 0 → system command (cmd.command).
- * Otherwise → LED command (aux.device, aux.psc0, etc.)
+ * If bits 5..31 == 0 → system command (AUX_IS_SYS_CMD(), decode with
+ * AUX_SYS_CMD_OP()/AUX_SYS_CMD_STEPS(), build with MAKE_SYS_CMD()).
+ * Otherwise → LED command (AUX_DEVICE(), AUX_PSC0(), etc.)
  */
 union AUX_Cmd_u {
-	/** @brief LED command fields */
-	struct __attribute__((packed)) {
-		uint32_t device      : 3;  /**< Bits 0..2:   channel (1=RED, 2=GRN, 4=HBL, combos: 3=RED+GRN) */
-		uint32_t cycle       : 1;  /**< Bit 3:       0=once, 1=loop forever */
-		uint32_t count       : 4;  /**< Bits 4..7:   repeat count (0..15). Decrements when cycle=0 */
-		uint32_t psc0        : 3;  /**< Bits 8..10:  AWU prescaler index for 1st half-period (0..7) */
-		uint32_t win0        : 6;  /**< Bits 11..16: AWU window for 1st half-period (0..63) */
-		uint32_t psc1        : 3;  /**< Bits 17..19: AWU prescaler index for 2nd half-period */
-		uint32_t win1        : 6;  /**< Bits 20..25: AWU window for 2nd half-period */
-		uint32_t brightness0 : 3;  /**< Bits 26..28: modes[] index of 1st half-period */
-		uint32_t brightness1 : 3;  /**< Bits 29..31: modes[] index of 2nd half-period */
-	} aux;
-
-	/** @brief System command fields */
-	struct __attribute__((packed)) {
-		uint32_t command  : 2;   /**< Bits 0..1:  system command (0=STOP, 1=REP_ATSTART, 2=REP_ATSTEPS) */
-		uint32_t steps    : 3;   /**< Bits 2..4:  loop step (0..7) for REP_ATSTEPS */
-		uint32_t is_cmd  : 27;   /**< Bits 5..31: if ==0 → system command, else LED command */
-	} cmd;
-
 	uint32_t aux_cmd; /**< Raw 32-bit word access (for Flash I/O) */
 };
 
 /** @brief Compile-time layout check */
 _Static_assert(sizeof(union AUX_Cmd_u) == 4, "AUX_Cmd_u must be 32 bits");
+
+/* ===== Command field layout: single source of truth =====
+ * Bit positions match the table in the file header comment.  The static
+ * asserts below pin the layout at compile time: no overlap, no gaps. */
+
+#define AUX_DEVICE_SHIFT	0u   /**< Bits 0..2:   channel mask */
+#define AUX_CYCLE_SHIFT		3u   /**< Bit 3:       0=once, 1=looped */
+#define AUX_COUNT_SHIFT		4u   /**< Bits 4..7:   repeat count (0..15) */
+#define AUX_PSC0_SHIFT		8u   /**< Bits 8..10:  AWU prescaler, 1st half-period */
+#define AUX_WIN0_SHIFT		11u  /**< Bits 11..16: AWU window, 1st half-period */
+#define AUX_PSC1_SHIFT		17u  /**< Bits 17..19: AWU prescaler, 2nd half-period */
+#define AUX_WIN1_SHIFT		20u  /**< Bits 20..25: AWU window, 2nd half-period */
+#define AUX_BR0_SHIFT		26u  /**< Bits 26..28: brightness index, 1st half-period */
+#define AUX_BR1_SHIFT		29u  /**< Bits 29..31: brightness index, 2nd half-period */
+
+#define AUX_DEVICE_MASK		(0x07UL << AUX_DEVICE_SHIFT)
+#define AUX_CYCLE_MASK		(0x01UL << AUX_CYCLE_SHIFT)
+#define AUX_COUNT_MASK		(0x0FUL << AUX_COUNT_SHIFT)
+#define AUX_PSC0_MASK		(0x07UL << AUX_PSC0_SHIFT)
+#define AUX_WIN0_MASK		(0x3FUL << AUX_WIN0_SHIFT)
+#define AUX_PSC1_MASK		(0x07UL << AUX_PSC1_SHIFT)
+#define AUX_WIN1_MASK		(0x3FUL << AUX_WIN1_SHIFT)
+#define AUX_BR0_MASK		(0x07UL << AUX_BR0_SHIFT)
+#define AUX_BR1_MASK		(0x07UL << AUX_BR1_SHIFT)
+
+_Static_assert((AUX_DEVICE_MASK & (AUX_CYCLE_MASK | AUX_COUNT_MASK |
+		AUX_PSC0_MASK | AUX_WIN0_MASK | AUX_PSC1_MASK | AUX_WIN1_MASK |
+		AUX_BR0_MASK | AUX_BR1_MASK)) == 0u &&
+		(AUX_CYCLE_MASK & (AUX_COUNT_MASK | AUX_PSC0_MASK | AUX_WIN0_MASK |
+		AUX_PSC1_MASK | AUX_WIN1_MASK | AUX_BR0_MASK | AUX_BR1_MASK)) == 0u &&
+		(AUX_COUNT_MASK & (AUX_PSC0_MASK | AUX_WIN0_MASK | AUX_PSC1_MASK |
+		AUX_WIN1_MASK | AUX_BR0_MASK | AUX_BR1_MASK)) == 0u &&
+		(AUX_PSC0_MASK & (AUX_WIN0_MASK | AUX_PSC1_MASK | AUX_WIN1_MASK |
+		AUX_BR0_MASK | AUX_BR1_MASK)) == 0u &&
+		(AUX_WIN0_MASK & (AUX_PSC1_MASK | AUX_WIN1_MASK |
+		AUX_BR0_MASK | AUX_BR1_MASK)) == 0u &&
+		(AUX_PSC1_MASK & (AUX_WIN1_MASK | AUX_BR0_MASK | AUX_BR1_MASK)) == 0u &&
+		(AUX_WIN1_MASK & (AUX_BR0_MASK | AUX_BR1_MASK)) == 0u,
+		"AUX command fields overlap");
+_Static_assert((AUX_DEVICE_MASK | AUX_CYCLE_MASK | AUX_COUNT_MASK |
+		AUX_PSC0_MASK | AUX_WIN0_MASK | AUX_PSC1_MASK | AUX_WIN1_MASK |
+		AUX_BR0_MASK | AUX_BR1_MASK) == 0xFFFFFFFFUL,
+		"AUX command fields leave a gap");
+
+#define AUX_FIELD(word, mask, shift) \
+	((uint8_t)(((uint32_t)(word) & (uint32_t)(mask)) >> (shift)))
+
+#define AUX_DEVICE(word)	AUX_FIELD((word), AUX_DEVICE_MASK, AUX_DEVICE_SHIFT)
+#define AUX_CYCLE(word)		AUX_FIELD((word), AUX_CYCLE_MASK, AUX_CYCLE_SHIFT)
+#define AUX_COUNT(word)		AUX_FIELD((word), AUX_COUNT_MASK, AUX_COUNT_SHIFT)
+#define AUX_PSC0(word)		AUX_FIELD((word), AUX_PSC0_MASK, AUX_PSC0_SHIFT)
+#define AUX_WIN0(word)		AUX_FIELD((word), AUX_WIN0_MASK, AUX_WIN0_SHIFT)
+#define AUX_PSC1(word)		AUX_FIELD((word), AUX_PSC1_MASK, AUX_PSC1_SHIFT)
+#define AUX_WIN1(word)		AUX_FIELD((word), AUX_WIN1_MASK, AUX_WIN1_SHIFT)
+#define AUX_BR0(word)		AUX_FIELD((word), AUX_BR0_MASK, AUX_BR0_SHIFT)
+#define AUX_BR1(word)		AUX_FIELD((word), AUX_BR1_MASK, AUX_BR1_SHIFT)
+
+/* ===== System commands (bits 5..31 == 0): opcode [1:0], steps [4:2] ===== */
+
+#define AUX_IS_SYS_CMD(word)	(((uint32_t)(word) & 0xFFFFFFE0UL) == 0)
+#define AUX_SYS_CMD_OP(word) \
+	((Array_Cmd_t)AUX_FIELD((word), 0x03UL, 0u))
+#define AUX_SYS_CMD_STEPS(word)	AUX_FIELD((word), 0x1CUL, 2u)
+
+#define MAKE_SYS_CMD(op, steps) \
+	((uint32_t)((op) & 0x3u) | ((uint32_t)((steps) & 0x7u) << 2))
 
 /**
  * @brief AUX handler control structure (32 bits).
@@ -167,6 +220,10 @@ typedef struct {
 	uint32_t work_count         : 4;  /**< Bits 13..16: remaining repeats of current command (0..15) */
 	uint32_t reserved           : 15; /**< Bits 17..31: reserved */
 } __attribute__((packed, aligned(4))) AUX_Ctr_t;
+
+/* AUX_Ctr_t is an internal (never serialised) state container, bitfield
+ * layout is safe here; only the total size is pinned. */
+_Static_assert(sizeof(AUX_Ctr_t) == 4, "AUX_Ctr_t must fit in 32 bits");
 
 /**
  * @brief Beacon mode period options.
@@ -354,15 +411,15 @@ bool handle_aux(void);
  * @param brightness1  индекс modes[] 2-го полупериода (0=выкл, 1..6=уровень)
  */
 #define MAKE_CMD(device, cycle, count, psc0, win0, psc1, win1, brightness0, brightness1) \
-	((uint32_t)((device) & 0x7)              | \
-	 ((uint32_t)((cycle) & 0x1) << 3)        | \
-	 ((uint32_t)((count) & 0xF) << 4)        | \
-	 ((uint32_t)((psc0) & 0x7) << 8)         | \
-	 ((uint32_t)((win0) & 0x3F) << 11)       | \
-	 ((uint32_t)((psc1) & 0x7) << 17)        | \
-	 ((uint32_t)((win1) & 0x3F) << 20)       | \
-	 ((uint32_t)((brightness0) & 0x7) << 26) | \
-	 ((uint32_t)((brightness1) & 0x7) << 29))
+	((uint32_t)((device) & 0x7u) << AUX_DEVICE_SHIFT        | \
+	 ((uint32_t)((cycle) & 0x1u) << AUX_CYCLE_SHIFT)        | \
+	 ((uint32_t)((count) & 0xFu) << AUX_COUNT_SHIFT)        | \
+	 ((uint32_t)((psc0) & 0x7u) << AUX_PSC0_SHIFT)          | \
+	 ((uint32_t)((win0) & 0x3Fu) << AUX_WIN0_SHIFT)         | \
+	 ((uint32_t)((psc1) & 0x7u) << AUX_PSC1_SHIFT)          | \
+	 ((uint32_t)((win1) & 0x3Fu) << AUX_WIN1_SHIFT)         | \
+	 ((uint32_t)((brightness0) & 0x7u) << AUX_BR0_SHIFT)    | \
+	 ((uint32_t)((brightness1) & 0x7u) << AUX_BR1_SHIFT))
 
 /**
  * @brief Round an AWU window for a requested period.
@@ -436,6 +493,30 @@ bool handle_aux(void);
 #define INFO_RED  MAKE_CMD_MS(RED_LED, 0, 1, 448, 896, 1, 0)  /* 1 красная ~448/896мс */
 #define INFO_GRN  MAKE_CMD_MS(GRN_LED, 0, 2, 224, 112, 1, 0)  /* 2 зелёных ~224/112мс */
 #define ERRO_RED  MAKE_CMD_MS(RED_LED, 0, 3, 15, 90, 1, 0)    /* 3 красных ~15/90мс */
-#define DANG_RED  MAKE_CMD_MS(RED_LED, 0, 1, 15, 90, 1, 0)    /* 1 красная ~15/90мс */
+#define DANG_RED  MAKE_CMD_MS(RED_LED, 0, 1, 15, 90, 1, 0)    /* 3 red ~15/90ms */
+
+/* Freeze the documented encodings of the known commands (regression guard
+ * against accidental changes of MAKE_CMD_MS/AWU rounding constants). */
+_Static_assert(INFO_RED == 0x0789C311UL && INFO_GRN == 0x0783C222UL &&
+		ERRO_RED == 0x06D27831UL && DANG_RED == 0x06D27811UL,
+		"Known AUX command encodings changed");
+
+/* Round-trip layout test: all fields at their maximum value must fill the
+ * whole 32-bit word and decode back identically, pinning the bit format
+ * independently of any bitfield ABI. */
+#define AUX_LAYOUT_TEST_CMD MAKE_CMD(0x7u, 1u, 15u, 7u, 63u, 7u, 63u, 7u, 7u)
+_Static_assert(AUX_LAYOUT_TEST_CMD == 0xFFFFFFFFUL,
+		"MAKE_CMD layout does not tile the 32-bit word");
+_Static_assert(AUX_DEVICE(AUX_LAYOUT_TEST_CMD) == 0x7u &&
+		AUX_CYCLE(AUX_LAYOUT_TEST_CMD) == 1u &&
+		AUX_COUNT(AUX_LAYOUT_TEST_CMD) == 15u &&
+		AUX_PSC0(AUX_LAYOUT_TEST_CMD) == 7u &&
+		AUX_WIN0(AUX_LAYOUT_TEST_CMD) == 63u &&
+		AUX_PSC1(AUX_LAYOUT_TEST_CMD) == 7u &&
+		AUX_WIN1(AUX_LAYOUT_TEST_CMD) == 63u &&
+		AUX_BR0(AUX_LAYOUT_TEST_CMD) == 7u &&
+		AUX_BR1(AUX_LAYOUT_TEST_CMD) == 7u,
+		"AUX command encode/decode round-trip failed");
+#undef AUX_LAYOUT_TEST_CMD
 
 #endif /* AUX_LEDS_H_ */

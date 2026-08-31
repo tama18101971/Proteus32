@@ -81,6 +81,7 @@ AWU-sleep-driven FSM: `handle_aux()` runs **one** transition per AWU wake, then 
 ## Style
 
 - C99, `stdint.h` fixed-width — never bare int/short/long. snake_case locals/fields, PascalCase API (`ThermalLimiter_*`).
+- **Serialized 32-bit command words** (stored in Flash, e.g. AUX commands in `aux_leds.h`) must NEVER be decoded via C bitfields (ABI-dependent layout). Use explicit `AUX_*_MASK`/`AUX_*_SHIFT` macros and `AUX_xxx()` accessors, pinned by `_Static_assert` (no overlap, no gaps, encode/decode round-trip, golden values). C bitfields are fine only for internal, never-serialised state structs.
 - `#ifndef` guards, timeouts on all `while` loops.
 - **Bare metal > SDK**: direct register writes (`port->CFGLR`, `USART1->DATAR`). `mini_gpio.h` OK for new GPIO; don't rewrite existing bare-metal inline funcs.
 - **Doxygen headers** (`/** @brief ... */`) above every function — update when signature/behavior changes.
