@@ -1,4 +1,5 @@
 .pio
+.kilo/
 compile_commands.json
 .env
 .vscode/.browse.c_cpp.db*
