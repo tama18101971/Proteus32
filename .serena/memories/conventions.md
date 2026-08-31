@@ -8,4 +8,5 @@
 - Feature flags USE_* gate only function BODIES in include/proteus_config.h (USE_STROBE, USE_BLOCK, USE_BATTIND, USE_MENU; UART_DEBUG, PRINT_ADC for debug output); dispatch tables are always compiled — never #ifdef them out
 - ui_table_idx valid only: 1 (UI1), 2/3 (UI2), 5/6 (menus) — 5/6 assigned only at boot (enter_menu_at_boot); clamp to 1..3 otherwise, else dead UI (reboot-only)
 - Data: EE.fieldname overlay via include/app_data.h (WL_FLASH); hardware calibration via ob.c Option Bytes (calibration() writes OB, never WL_FLASH)
+- Serialized 32-bit formats (Flash-stored command words, e.g. AUX commands — see mem:aux_cmd_bit_layout) must NEVER be decoded via C bitfields: use explicit AUX_*_MASK/AUX_*_SHIFT macros + AUX_xxx() accessors, guarded by _Static_assert (overlap/gap/round-trip/golden-value). Bitfields are OK only for internal never-serialised state structs.
 - Style reference: root AGENTS.md is canonical and mirrors these rules

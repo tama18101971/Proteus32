@@ -10,3 +10,4 @@ C:\Sonet5\Proteus3D — порт Proteus32 (CH32V003) на ATtiny1634 (AVR, 1 М
 - UI-действия живут в src/button.c (не ui.c), main loop — src/proteus.c.
 - Сборка: `pio run` (C:\Sonet5\Proteus3D); после порта 2026-08-30: Flash 13896/16384 (84.8%), RAM 216/1024. Фичи-флаги в include/macros.h (USE_STROBE/MENU/BATTIND/EX_AUX/BLOCK/MAGIC_SLOTS, REAL_OFFPOWER — все включены).
 - При следующих изменениях логики Proteus32 — проверять дельту после `c26b30d` (`git log 2037f59..HEAD` в Proteus32) и портировать по той же схеме: логика — да, платформенно-специфичное (AWU/LSI/Option Bytes/I2C-драйвер) — адаптировать.
+- 2026-08-31: архитектурный приём из Proteus3D aux_leds.h (сериализуемое слово команды декодируется ТОЛЬКО явными масками/сдвигами + _Static_assert round-trip/golden-проверки, без C-битфилдов) перенесён обратно в Proteus32 — см. mem:aux_cmd_bit_layout. Отличие: у Proteus3D маркер LED-команды bit31==1, у Proteus32 системная команда = биты 5..31 == 0.
