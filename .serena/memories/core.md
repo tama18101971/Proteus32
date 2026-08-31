@@ -32,6 +32,7 @@ AGENTS.md (architecture + gotchas), TUNING.md (thermal limiter tuning), USER_MAN
 
 ## Deeper topics
 - Build/flash commands incl. Windows quirks and stale paths: `mem:suggested_commands`
+- Boot menu selection by supply voltage + ADC plausibility window (5 V bench): `mem:menu_entry_voltage`
 - Toolchain, PlatformIO env, libs: `mem:tech_stack`
 - Code style, naming, doc rules: `mem:conventions`
 - Definition of done incl. flash-size gate: `mem:task_completion`
