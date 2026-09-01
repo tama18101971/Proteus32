@@ -99,6 +99,13 @@ uint16_t ema_update(uint16_t raw);
 extern uint16_t vrefint_adc;
 
 /**
+ * @brief Последний проверенный СЫРОЙ код Vrefint (до EMA, обновляется в adc_read).
+ * Используется hard cutoff 2.7 В (adc_eff_raw_vcode) и калибровкой vc
+ * (усреднение серии свежих пар): EMA после скачка стенда отстаёт от raw.
+ */
+extern uint16_t vrefint_raw_adc;
+
+/**
  * @brief Признак валидной свежей выборки напряжения.
  * false — после таймаута/сбоя АЦП (main); защита трактует это как
  * «критически низкое» напряжение (sentinel), как раньше vbat_mv==0.

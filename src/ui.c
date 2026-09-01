@@ -597,24 +597,57 @@ void reset2def(void)
     clr_indicator(IND_GRN);
 }
 
+/** @brief Число свежих пар АЦП в калибровочной серии (усреднение шума NTC). */
+#define CALIB_SAMPLE_PAIRS     32u
+
+/** @brief Пауза между парами серии, мс (декорреляция выборок). */
+#define CALIB_SAMPLE_PAUSE_MS  2u
+
 /** @brief Measure Vbat (в кодах Vrefint) and temperature, save vc/tc to Option Bytes.
  * vc/tc допускаются только в окне ±0.29 В (VC_CLIP_MAX/MIN) и ±5 °C
  * (TC_CLIP_MAX/MIN, ~±44 кода); вне окна калибровка отвергается целиком
- * и прежние значения OB сохраняются. */
+ * и прежние значения OB сохраняются.
+ *
+ * В меню (MODE_OFF) главный цикл АЦП не опрашивает (гейт driver_is_active
+ * в тике 30 Гц), поэтому калибровка обязана взять собственную серию свежих
+ * пар — иначе она сравнит стенд 4.2 В с кодом на момент подачи питания.
+ * Дельты считаются от усреднённых СЫРЫХ кодов (vrefint_raw_adc,
+ * raw_temperature_adc): EMA после скачка стенда 4.9→4.2 В несёт остаточное
+ * смещение даже после 32 пар, а усреднение NTC обязательно — он шумит сильнее
+ * внутреннего датчика. Невалидная пара серии отклоняет калибровку целиком
+ * (красная индикация), прежние значения vc/tc не трогаются. */
 void calibration(void)
 {
 #ifdef USE_MENU
-    if (!voltage_ok)
+    /* Блокирующая серия: только по клику из меню, вне действия таймерных
+     * задач главного цикла (без WDT). 32 пары × (преобразование + 2 мс)
+     * ≈ 96 мс — меньше уже существующих блокировок меню (menu_entry_flash
+     * 500 мс, menu_wait_release 2 с). */
+    uint16_t v_acc = 0;
+    uint16_t t_acc = 0;
+
+    for (uint8_t i = 0; i < CALIB_SAMPLE_PAIRS; i++)
     {
-        /* Do not save offsets derived from a stale or failed ADC pair. */
-        ui_invalid_selection();
-        return;
+        if (!adc_read())
+        {
+            /* Невалидная пара: серия бракуется целиком, OB не трогаем. */
+            ui_invalid_selection();
+            return;
+        }
+        v_acc += vrefint_raw_adc;
+        t_acc += raw_temperature_adc;
+        wait_ms(CALIB_SAMPLE_PAUSE_MS);
     }
+
+    /* Средние с округлением +N/2 (без 32-битного деления в горячем пути —
+     * здесь единственный сдвиг по фиксированной степени двойки). */
+    uint16_t v_avg = (uint16_t)((v_acc + CALIB_SAMPLE_PAIRS / 2u) >> 5);
+    uint16_t t_avg = (uint16_t)((t_acc + CALIB_SAMPLE_PAIRS / 2u) >> 5);
 
     /* Калибровка в кодах Вrefint (см. adc.h): vc = измеренный код - опорный код.
      * Положительный vc повышает эффективное напряжение (сдвиг e = adc - vc). */
-    int16_t vc_delta = (int16_t)vrefint_adc - (int16_t)REF_VREF_CODE;
-    int16_t tc_delta = (int16_t)raw_temperature_adc - (int16_t)REF_TEMP_ADC;
+    int16_t vc_delta = (int16_t)v_avg - (int16_t)REF_VREF_CODE;
+    int16_t tc_delta = (int16_t)t_avg - (int16_t)REF_TEMP_ADC;
 
     uint8_t ok = 1;
     if (vc_delta > VC_CLIP_MAX || vc_delta < VC_CLIP_MIN)
