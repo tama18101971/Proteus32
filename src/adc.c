@@ -461,7 +461,7 @@ uint16_t vbat_to_mv_calibrated(void)
  */
 static const uint16_t swt_cut[6] =
 {   /* vbat < mV ⟺ adc >= это значение */
-    MV_LT(2700), MV_LT(2712), MV_LT(2725), MV_LT(2825), MV_LT(2975), MV_LT(3100)
+    MV_LT(2700), MV_LT(2712), MV_LT(2725), MV_LT(2800), MV_LT(2975), MV_LT(3100)
 };
 
 /**
