@@ -827,8 +827,7 @@ __attribute__((noinline)) void menu_entry_flash(uint8_t cnt, uint16_t on_ms, LED
 
         wait_ms(on_ms);
 
-        if (device & RED_LED) off_red();
-        if (device & GRN_LED) off_grn();
+        smart_off_leds(device);
 
         wait_ms(on_ms);
     }
