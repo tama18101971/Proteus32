@@ -7,7 +7,6 @@ compile_commands.json
 .vscode/launch.json
 .vscode/ipch
 
-# clangd runtime artifacts (keep the tracked .clangd config, ignore its cache)
-.clangd/index/
-.clangd/cache/
+# clangd
+.clangd
 
