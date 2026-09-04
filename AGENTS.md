@@ -2,7 +2,7 @@
 
 ## Project
 
-Proteus32 firmware for CH32V003F4U6 (RISC-V RV32EC, 48 MHz, 16 KB Flash, 2 KB RAM) flashlight.
+Proteus32 firmware for CH32V003F4U6 (RISC-V RV32EC, 24 MHz, 16 KB Flash, 2 KB RAM) flashlight.
 
 ## Build & flash
 
@@ -16,7 +16,8 @@ pio device monitor               460800 8N1
 ## ⚠️ Hardware & Resource Constraints
 
 - **CH32V003 ≠ STM32**: Same register names, different behavior. AWU exists, only USART1, I2C CKCFGR differs. GPIO CFGLR masks Mode via `& 0x0F` in SDK helpers — **use `GPIO_PinConfig()` from `mini_gpio.h`**, never raw AF_OD like `0x1C`.
-- **Flash limit is strict (16128 bytes)**: Codebase runs near ~98-100% Flash capacity with LTO. Always inspect binary size on `pio run`. If flash overflows during feature development, feature flags in `include/proteus_config.h` (`USE_STROBE`, `USE_BLOCK`, `USE_BATTIND`, `USE_MENU`) can be temporarily disabled.
+- **Clock: 24 MHz native HSI, no PLL, no APB dividers.** `RCC_CFGR0` has only `HPRE`/`ADCPRE`/`SW`/`PLLSRC`, so HCLK = PCLK1 = PCLK2 = SYSCLK. `SYSCLK_HZ` in `include/proteus_config.h` is the single source for TIM2 `PSC`/`ARR`, I2C1 `FREQ`/`CCR`, the USART1 `BRR` divisor and `SPIN_LOOPS_MS()` timeouts; invariants are pinned by `_Static_assert` in `timers.c`/`i2c.c`/`mini_printf.c`. **`SYSCLK_HZ` must be kept in sync with `board_build.f_cpu` in `platformio.ini` by hand** — `f_cpu` picks the actual `SetSysClockTo_*()`, `SYSCLK_HZ` only the expected dividers, and a mismatch compiles silently.
+- **Flash limit is strict (16128 bytes)**: Codebase runs near ~98-100% Flash capacity with LTO. Always inspect binary size on `pio run`. If flash overflows during feature development, feature flags in `include/proteus_config.h` (`USE_STROBE`, `USE_BLOCK`, `USE_BATTIND`, `USE_MENU`) can be temporarily disabled. `-DUART_DEBUG` no longer fits and is expected to overflow.
 - **RV32EC Core**: No hardware multiplier or divider. Avoid software 32-bit division/multiplication in hot paths (use bit-shifts `<<`, `>>` and fixed-point math).
 
 ## Architecture
@@ -71,7 +72,7 @@ AWU-sleep-driven FSM: `handle_aux()` runs **one** transition per AWU wake, then 
 
 | File | Purpose |
 |------|---------|
-| `include/proteus_config.h` | Feature flags (`USE_*`), `UART_DEBUG`/`PRINT_ADC` debug toggles |
+| `include/proteus_config.h` | `SYSCLK_HZ` + `SPIN_LOOPS_MS()`, feature flags (`USE_*`), `UART_DEBUG`/`PRINT_ADC` debug toggles |
 | `include/app_data.h` | EE overlay + `EE` macro |
 | `include/adc.h` | `REF_TEMP_ADC`, `REF_VOLTAGE_MV`, `ADC_MIN/MAX_VAL` |
 | `src/limiters.c` | `config` struct (thermal tuning) |
