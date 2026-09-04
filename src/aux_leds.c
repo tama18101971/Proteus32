@@ -175,7 +175,7 @@ static void start_aux_array(const uint32_t *pArray, awu_tick_t delay) {
  *   - Иначе — полное выключение (off_*)
  * Если подсветка выключена — полное выключение.
  */
-static void smart_off_leds(LED_Bits_t channel) {
+void smart_off_leds(LED_Bits_t channel) {
 	uint8_t bck_on = (EE.aux.bcklight_type == BCK_TYPE_ON);
 	if (channel & RED_LED) {
 		(bck_on && EE.aux.bcklight_color == BCK_COLOR_RED) ? on_red_l() : off_red();

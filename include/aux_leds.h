@@ -352,6 +352,17 @@ void beacon_battery_check(void);
 void aux_refresh_backlight(void);
 
 /**
+ * @brief Гашение каналов с учётом настройки подсветки (backlight).
+ *
+ * Если подсветка включена и её цвет совпадает с каналом, канал переводится
+ * в тусклый режим (on_*_l), иначе полностью гасится (off_*). Биты HBL_LED
+ * в текущей реализации игнорируются.
+ *
+ * @param channel Битовая маска каналов (RED_LED|GRN_LED|HBL_LED).
+ */
+void smart_off_leds(LED_Bits_t channel);
+
+/**
  * @brief Indicate a number via AUX LEDs.
  * @param count 0 = one red flash, otherwise N green flashes.
  */

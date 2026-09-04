@@ -829,7 +829,7 @@ void menu_exit(void)
 
     /* Подтверждение выхода: 1 зелёная вспышка 500 мс, затем ожидание
      * отпускания кнопки, чтобы HOLD-повторы не попали в новый UI. */
-    menu_entry_flash(1, 500, GRN_LED | RED_LED);
+    menu_entry_flash(1, 500, GRN_LED);
     menu_wait_release();
 
     /* Применить цвет и состояние подсветки сразу при выходе из меню */
@@ -860,8 +860,7 @@ __attribute__((noinline)) void menu_entry_flash(uint8_t cnt, uint16_t on_ms, LED
 
         wait_ms(on_ms);
 
-        if (device & RED_LED) off_red();
-        if (device & GRN_LED) off_grn();
+        smart_off_leds(device);
 
         wait_ms(on_ms);
     }
