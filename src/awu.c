@@ -30,12 +30,13 @@ volatile uint8_t is_sleep_mode = false;
  *
  * Общая точка для пробуждения по кнопке и входа в STANDBY: сбрасывает
  * последний байт перед потерей тактирования USART1. Цикл ограничен
- * ~10000 итераций (~85 мкс при 48 МГц), чтобы неисправный/незаклоканный
- * USART не подвесил ISR. noinline — чтобы LTO не дублировал цикл.
+ * UART_TC_WAIT_LOOPS (~1 мс, выводится из SYSCLK_HZ), чтобы неисправный
+ * или незаклокированный USART не подвесил ISR. noinline — чтобы LTO не
+ * дублировал цикл.
  */
 __attribute__((noinline)) void uart_tc_wait(void)
 {
-    uint32_t _w = 10000u;
+    uint32_t _w = UART_TC_WAIT_LOOPS;
     while (!(USART1->STATR & USART_STATR_TC))
         if (!--_w) break;
 }
@@ -207,7 +208,7 @@ void AWU_Sleep_Now(void)
     PWR->CTLR &= ~PWR_CTLR_PDDS;
 
 #ifdef UART_DEBUG
-    uart_init(460800);
+    uart_init(UART_DEBUG_BAUD);
 #endif
 
     return;  /* wakeup_source содержит WS_AWU, WS_BUTTON или WS_NONE */

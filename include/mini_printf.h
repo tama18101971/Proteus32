@@ -15,7 +15,7 @@ int mini_printf(const char *fmt, ...);
 
 /**
  * @brief Initialise UART1 for debug output (bare-metal register writes).
- * @param baudrate Target baud rate (e.g. 460800).
+ * @param baudrate Target baud rate (e.g. UART_DEBUG_BAUD).
  */
 void uart_init(uint32_t baudrate);
 

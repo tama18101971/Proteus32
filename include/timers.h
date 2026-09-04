@@ -7,7 +7,8 @@
  *
  * Tick helper functions provide periodic flags for the main loop.
  *
- * Configuration: SYSCLK = 48 MHz, PSC = 47 (1 MHz), ATRLR = 999 (1 ms)
+ * Configuration: PSC/ARR выводятся из SYSCLK_HZ (proteus_config.h);
+ * промежуточная частота таймера 1 МГц, период 1 мс.
  *
  * Power management:
  *   tim2_start() — full init + start (enables clock)
@@ -58,10 +59,11 @@ bool tick_5s(void);
 void tick_5s_reset(void);
 
 /**
- * @brief Busy-wait for ms milliseconds (approximate, SYSCLK 48 MHz).
+ * @brief Busy-wait for ms milliseconds (approximate).
  * @param ms Milliseconds to wait (0..65535).
  * Replacement for SDK Delay_Ms()/Delay_Init() — no SystemCoreClock or libgcc
- * math dependency. Timing is approximate, not for exact measurement.
+ * math dependency. Loop count is derived from SYSCLK_HZ; timing is
+ * approximate, not for exact measurement.
  */
 void wait_ms(uint16_t ms);
 

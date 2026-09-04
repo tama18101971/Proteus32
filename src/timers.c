@@ -1,11 +1,10 @@
 /*
  * timers.c — Таймер 2 (1 мс системный тик)
  *
- * Конфигурация:
- *   SYSCLK = 48 МГц (HSI + PLL)
- *   APB1 timer clock = 48 МГц (нет делителя на CH32V003)
- *   PSC = 47 → timer clock = 48 МГц / 48 = 1 МГц (1 тик = 1 мкс)
- *   ARR = 999 → прерывание каждые 1000 тиков = 1 мс
+ * Конфигурация (выводится из SYSCLK_HZ, см. proteus_config.h):
+ *   APB1 timer clock = SYSCLK (на CH32V003 делителя APB нет)
+ *   PSC = SYSCLK/1МГц - 1  → timer clock = 1 МГц (1 тик = 1 мкс)
+ *   ARR = 999              → прерывание каждые 1000 тиков = 1 мс
  *
  * Использование:
  *   tim2_start()  — полная инициализация + запуск таймера
@@ -18,6 +17,21 @@
 
 #include "timers.h"
 #include "ch32v00x.h"
+#include "proteus_config.h"
+
+/* Предделитель и период 1-мс тика. Промежуточная частота фиксирована на
+ * 1 МГц, поэтому весь пересчёт при смене SYSCLK_HZ ложится на PSC. */
+#define TIM2_TICK_HZ    1000000u
+#define TIM2_PSC        ((SYSCLK_HZ / TIM2_TICK_HZ) - 1u)
+#define TIM2_ARR        ((TIM2_TICK_HZ / 1000u) - 1u)
+
+/* Тик обязан быть ровно 1 мс: от него зависят все опросы (160/30/2 Гц,
+ * 5 с), пороги FSM кнопки в тиках и tim2_ms. */
+_Static_assert((TIM2_PSC + 1u) * (TIM2_ARR + 1u) == SYSCLK_HZ / 1000u,
+               "TIM2 prescaler/period do not yield a 1 ms tick");
+/* PSC (CTLR/PSC) и ARR (ATRLR) — 16-битные регистры. */
+_Static_assert(TIM2_PSC <= 0xFFFFu && TIM2_ARR <= 0xFFFFu,
+               "TIM2 prescaler/period exceed the 16-bit registers");
 
 volatile uint32_t tim2_ms = 0;
 
@@ -60,16 +74,17 @@ void tick_5s_reset(void)
 }
 
 /**
- * @brief Busy-wait for ms milliseconds (approximate, SYSCLK 48 MHz).
+ * @brief Busy-wait for ms milliseconds (approximate).
  * @param ms Milliseconds to wait (0..65535).
  * @details Заменяет SDK Delay_Ms()/Delay_Init(): не зависит от
- * SystemCoreClock и не тянет libgcc-арифметику. Калибровка: ~12000
- * итераций внутреннего volatile-цикла на миллисекунду при 48 МГц.
- * Точность приблизительная — только для пауз (boot, мигание индикатора).
+ * SystemCoreClock и не тянет libgcc-арифметику. Число итераций
+ * внутреннего volatile-цикла выводится из SYSCLK_HZ через
+ * SPIN_LOOPS_MS(). Точность приблизительная — только для пауз
+ * (boot, мигание индикатора).
  */
 void wait_ms(uint16_t ms)
 {
-    const uint32_t loops = 12000;
+    const uint32_t loops = SPIN_LOOPS_MS(1);
     while (ms--)
     {
         volatile uint32_t cnt = loops;
@@ -83,7 +98,7 @@ void wait_ms(uint16_t ms)
  * Выполняет полную инициализацию:
  *   1. Включает тактирование TIM2 (APB1 → RCC_TIM2EN)
  *   2. Настраивает NVIC (вектор 38, приоритет preemption=1, sub=1)
- *   3. Конфигурирует таймер: PSC=47, ARR=999, прерывание Update
+ *   3. Конфигурирует таймер: PSC/ARR из SYSCLK_HZ, прерывание Update
  *   4. Запускает счётчик
  */
 void tim2_start(void)
@@ -98,8 +113,8 @@ void tim2_start(void)
 
     TIM2->CTLR1 = 0;
     TIM2->INTFR = 0;
-    TIM2->PSC = 48 - 1;
-    TIM2->ATRLR = 1000 - 1;
+    TIM2->PSC = TIM2_PSC;
+    TIM2->ATRLR = TIM2_ARR;
     TIM2->SWEVGR = TIM_PSCReloadMode_Immediate;
     TIM2->DMAINTENR = TIM_IT_Update;
 

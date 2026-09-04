@@ -1,18 +1,39 @@
 #include "mini_printf.h"
 #include "ch32v00x.h"
+#include "proteus_config.h"
 
-/* Busy-wait iteration limit for USART1 flag polling.
- * At 48 MHz each loop is ~4 core cycles → ~85 µs at 10 000 iterations.
- * Enough for one full byte at 460800 baud (~22 µs) with generous margin,
- * but short enough to avoid an observable hang. */
-#define USART_WAIT_LIMIT  10000u
+/* Busy-wait iteration limit for USART1 flag polling: ~1 ms, derived from
+ * SYSCLK_HZ.  Enough for one full byte at UART_DEBUG_BAUD (~22 us at
+ * 460800) with generous margin, but short enough to avoid an observable
+ * hang if USART1 is glitched or unclocked. */
+#define USART_WAIT_LIMIT  UART_TC_WAIT_LOOPS
+
+/* USART1->BRR кодирует USARTDIV*16 полями DIV_Mantissa[15:4] и
+ * DIV_Fraction[3:0], поэтому целое частное SYSCLK/baud записывается в
+ * регистр напрямую (с симметричным округлением). */
+#define UART_BRR(baud)    ((SYSCLK_HZ + ((baud) / 2u)) / (baud))
+
+/* Мантисса должна быть хотя бы 1: BRR < 16 означает делитель < 1. */
+_Static_assert(UART_BRR(UART_DEBUG_BAUD) >= 16u,
+               "UART_DEBUG_BAUD too high for SYSCLK_HZ (BRR mantissa is zero)");
+/* Ошибка округления делителя должна оставаться существенно меньше
+ * разброса HSI (+-2.2 % при -40..85 C, DS табл. 3-11), иначе суммарный
+ * бюджет 8N1 исчерпан. Порог 2 % от номинала.
+ * Текст сообщений — только ASCII: компилятор печатает его в консоль,
+ * кодовая страница которой не обязана быть UTF-8. */
+_Static_assert(SYSCLK_HZ / UART_BRR(UART_DEBUG_BAUD)
+                   <= UART_DEBUG_BAUD + (UART_DEBUG_BAUD / 50u),
+               "UART baud rate error above +2% - lower UART_DEBUG_BAUD");
+_Static_assert(SYSCLK_HZ / UART_BRR(UART_DEBUG_BAUD)
+                   >= UART_DEBUG_BAUD - (UART_DEBUG_BAUD / 50u),
+               "UART baud rate error below -2% - lower UART_DEBUG_BAUD");
 
 /**
  * @brief Initialise UART1 for debug output (bare-metal register writes).
- * @param baudrate Target baud rate (e.g. 460800).
+ * @param baudrate Target baud rate (e.g. UART_DEBUG_BAUD).
  *
  * Configures PD5 as alternate-function push-pull output, computes the
- * baud-rate divisor from SYSCLK (48 MHz), and enables USART1 transmitter.
+ * baud-rate divisor from SYSCLK_HZ, and enables USART1 transmitter.
  * Uses direct register writes — not the SDK's USART_Printf_Init.
  */
 void uart_init(uint32_t baudrate)
@@ -21,7 +42,7 @@ void uart_init(uint32_t baudrate)
 
     GPIOD->CFGLR = (GPIOD->CFGLR & ~(0xF << 20)) | (0xE << 20); // PD5 AF-PP 50MHz
 
-    uint32_t div = (48000000u + (baudrate >> 1)) / baudrate;
+    uint32_t div = (SYSCLK_HZ + (baudrate >> 1)) / baudrate;
     USART1->BRR = (uint16_t)div;
 
     USART1->CTLR1 = USART_CTLR1_UE | USART_CTLR1_TE;

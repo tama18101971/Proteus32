@@ -5,10 +5,11 @@
  * Компактная замена библиотеки I2C-CH32V003 (экономия Flash).
  * Только передача (Master Transmitter): START -> ADDR(W) -> data -> STOP.
  *
- * Конфигурация фиксирована: SYSCLK = 48 МГц, SCL = 400 кГц:
- *   CTLR2.FREQ = 48, CKCFGR = FS | CCR=40 (48М/(400к*3)), TRISE = 49,
+ * Тактирование выводится из SYSCLK_HZ (proteus_config.h); целевая частота
+ * SCL — I2C_SCL_HZ (400 кГц, Fast mode, DUTY=0):
+ *   CTLR2.FREQ = SYSCLK в МГц, CKCFGR = FS | CCR, где CCR = SYSCLK/(3*SCL),
  *   OADDR1 = бит14 (обязателен по спецификации WCH/Synopsys).
- * Таймауты — простой счётчик циклов (~10 мс @ 48 МГц), без делений.
+ * Таймауты — простой счётчик циклов (SPIN_LOOPS_MS), без делений.
  *
  * Обработка ошибок: AF (NACK) / BERR / ARLO / таймаут → все сворачиваются
  * в I2C_NACK. При NACK адреса или ошибке шины автоматически выдаётся STOP,
@@ -16,9 +17,36 @@
  */
 
 #include "i2c.h"
+#include "proteus_config.h"
 
-/* Таймаут ожидания флага в итерациях цикла (~4 такта/итерацию ≈ 10 мс @ 48 МГц) */
-#define I2C_TIMEOUT_LOOPS   120000u
+/* ── Тактирование I2C1 (всё выводится из SYSCLK_HZ) ────────────────
+ * Fast mode при DUTY=0: T(SCL) = 3 * CCR / PCLK1, то есть
+ * SCL = PCLK1 / (3 * CCR). PCLK1 == SYSCLK (у CH32V003 нет делителя APB). */
+#define I2C_SCL_HZ          400000u
+#define I2C_FREQ_MHZ        (SYSCLK_HZ / 1000000u)
+#define I2C_CCR             (SYSCLK_HZ / (3u * I2C_SCL_HZ))
+
+/* CCR должен получиться без остатка, иначе фактическая SCL уедет от
+ * заявленной, а ассерт round-trip ниже это молча пропустил бы. */
+_Static_assert(SYSCLK_HZ % (3u * I2C_SCL_HZ) == 0u,
+               "SYSCLK_HZ does not divide evenly into the I2C CCR");
+_Static_assert(SYSCLK_HZ / (3u * I2C_CCR) == I2C_SCL_HZ,
+               "I2C CCR does not reproduce the requested SCL frequency");
+/* Ширина поля CKCFGR.CCR[11:0] (RM 13.11.8). */
+_Static_assert(I2C_CCR >= 1u && I2C_CCR <= 0x0FFFu,
+               "I2C CCR outside the 12-bit CKCFGR field");
+/* Поле CTLR2.FREQ[5:0] допускает 001000b..110000b = 8..48 МГц (RM 13.11.2). */
+_Static_assert(I2C_FREQ_MHZ >= 8u && I2C_FREQ_MHZ <= 48u,
+               "I2C CTLR2.FREQ outside the documented 8..48 MHz range");
+/* Тайминги Fast I2C (DS табл. 3-21): при DUTY=0 низкий полупериод равен
+ * 2*CCR тактов PCLK1, высокий — CCR. Считаем в наносекундах. */
+_Static_assert((1000u * I2C_CCR) / I2C_FREQ_MHZ >= 600u,
+               "I2C SCL high time below the 600 ns Fast-mode minimum");
+_Static_assert((2000u * I2C_CCR) / I2C_FREQ_MHZ >= 1200u,
+               "I2C SCL low time below the 1200 ns Fast-mode minimum");
+
+/* Таймаут ожидания флага в итерациях цикла (~10 мс) */
+#define I2C_TIMEOUT_LOOPS   SPIN_LOOPS_MS(10)
 
 /* Конфигурация линий PC1 (SDA) / PC2 (SCL): AF Open-Drain, 50 МГц */
 #define I2C_PINS_AF_OD      0x00000FF0u
@@ -61,10 +89,10 @@ static uint8_t i2c_wait_flag(uint16_t flag)
 }
 
 /**
- * @brief Инициализация I2C1 (PC1=SDA, PC2=SCL, 400 кГц @ 48 МГц)
+ * @brief Инициализация I2C1 (PC1=SDA, PC2=SCL, I2C_SCL_HZ при SYSCLK_HZ)
  *
  * Параметр bound сохранён для совместимости сигнатур, фактически
- * скорость фиксирована константами под SYSCLK 48 МГц.
+ * скорость задаётся константами, выведенными из SYSCLK_HZ.
  *
  * @param bound Требуемая скорость (игнорируется; см. описание)
  * @return I2C_OK
@@ -81,8 +109,8 @@ uint8_t i2c_init(uint32_t bound)
     I2C1->CTLR1 |= I2C_CTLR1_SWRST;     /* Программный сброс */
     I2C1->CTLR1 &= (uint16_t)~I2C_CTLR1_SWRST;
 
-    I2C1->CTLR2  = 48u;                 /* PCLK1 в МГц */
-    I2C1->CKCFGR = I2C_CKCFGR_FS | 40u; /* Fast mode, 48М/(400к*3) = 40 */
+    I2C1->CTLR2  = (uint16_t)I2C_FREQ_MHZ;              /* PCLK1 в МГц */
+    I2C1->CKCFGR = (uint16_t)(I2C_CKCFGR_FS | I2C_CCR); /* Fast mode + CCR */
     I2C1->OADDR1 = (1u << 14);          /* Обязательный бит 14 (WCH) */
 
     I2C1->CTLR1 |= (I2C_CTLR1_PE | I2C_CTLR1_ACK);

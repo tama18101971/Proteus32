@@ -8,8 +8,10 @@
  * Чтение, Repeated START, буферы, сканер и bus-recovery отсутствуют.
  *
  * Пин-конфигурация: PC1 — SDA, PC2 — SCL (AF Open-Drain).
- * Тактирование: фиксировано под SYSCLK = 48 МГц, SCL = 400 кГц
- * (CTLR2=48, CKCFGR=FS|40, TRISE=49) — без делений в рантайме.
+ * Тактирование: FREQ/CCR выводятся из SYSCLK_HZ (proteus_config.h) под
+ * целевую SCL = I2C_SCL_HZ (400 кГц, Fast mode) — без делений в рантайме.
+ * Инварианты (точность SCL, границы полей, тайминги Fast I2C по даташиту)
+ * закрыты _Static_assert в i2c.c.
  *
  * Коды возврата: I2C_OK (0) или I2C_NACK (1). Любая ошибка — NACK,
  * адрес не подтверждён (DAC обесточен/отсутствует), таймаут или
@@ -35,7 +37,7 @@ extern "C" {
 #define I2C_DIR_RX  1   /* Master Receiver (не используется, оставлено для совместимости) */
 
 /* Основное API */
-uint8_t i2c_init(uint32_t bound);       /* Инициализация I2C1 (скорость фиксирована 400 кГц @ 48 МГц) */
+uint8_t i2c_init(uint32_t bound);       /* Инициализация I2C1 (скорость выводится из SYSCLK_HZ) */
 void i2c_deinit(void);                  /* Отключение I2C1, линии PC1/PC2 в Hi-Z */
 uint8_t i2c_start(void);                /* START с ожиданием SB */
 uint8_t i2c_stop(void);                 /* STOP с ожиданием освобождения шины */

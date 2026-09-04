@@ -150,7 +150,7 @@ int main(void)
     wait_ms(250);
 
 #ifdef UART_DEBUG
-    uart_init(460800);
+    uart_init(UART_DEBUG_BAUD);
 #endif
 
     EE_PRINTF("\r\nBoot...\r\n");
@@ -232,7 +232,7 @@ int main(void)
                  * ожидание LSIRDY в AWU_init() завершается сразу. */
                 AWU_init();
 #ifdef UART_DEBUG
-                uart_init(460800);
+                uart_init(UART_DEBUG_BAUD);
 #endif
                 is_sleep_mode = false;
                 need_sleep = false;
