@@ -10,3 +10,5 @@ compile_commands.json
 # clangd
 .clangd
 
+#serena
+.serena

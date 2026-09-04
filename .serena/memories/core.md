@@ -1,4 +1,4 @@
-# Proteus32 — CH32V003F4U6 flashlight firmware (RISC-V RV32EC, 48 MHz, 16 KB Flash, 2 KB RAM)
+# Proteus32 — CH32V003F4U6 flashlight firmware (RISC-V RV32EC, 24 MHz native HSI, 16 KB Flash, 2 KB RAM)
 
 ## Hard invariants
 - Flash cap 16128 bytes; builds run near 98–100% with LTO. Always check size after `pio run`. On overflow temporarily disable flags in include/proteus_config.h: USE_STROBE, USE_BLOCK, USE_BATTIND, USE_MENU.

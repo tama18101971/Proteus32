@@ -28,7 +28,9 @@ CompileFlags:
     - -DCH32V00X
     - -DCH32V00x
     - -DCH32V003F4
-    - -DSYSCLK_FREQ_48MHz_HSI=48000000
+    - -DWL_FORMAT_VERSION=2
+    - -DSYSCLK_FREQ_24MHz_HSI=24000000
+    - -DSYSCLK_FREQ_24MHZ_HSI=24000000
 Diagnostics:
   UnusedIncludes: None
   MissingIncludes: None
