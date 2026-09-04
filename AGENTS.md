@@ -29,7 +29,7 @@ pio device monitor               460800 8N1
 | 160 Hz | 6 ms | `button_tick() + ui_process() + ss_scan()` |
 | 30 Hz | 33 ms | `adc_read() + scan_limiters() + scan_voltage()` |
 | 2 Hz | 500 ms | debug UART log (`[NORMAL] T=... F=... I=... L=... P=... S=... V=...`) |
-| 5 s | 5 s | `ob_Flush()` + EE shadow-diff → `handle_ee()` if changed; then sleep |
+| 5 s | 5 s | `ob_Flush()` + payload shadow-diff → `wl_commit_if_dirty()` if changed; then sleep |
 
 ### Sleep model
 
@@ -57,7 +57,7 @@ Two layers: **`tc`** (Option Bytes, `ob_GetTc/SetTc`, int8_t HW ADC correction, 
 
 ### Data storage
 
-WL_FLASH: wear-leveling EEPROM over flash, `EE.fieldname` via `app_data.h` overlay on `ee_data` (`WL_FLASH_LIGHT` variant).
+WL_FLASH v2.0.1: wear-leveling record ring over flash (record 16 B, CRC-32, 4 pages → region `0x08003F00..0x08004000`). Payload is `app_cfg_t` (7 B) in `app_data.h`; `EE.fieldname` = `(*WL_DATA_AS(app_cfg_t))`. Boot: `wl_load()` → on failure `wl_init() + ee_defaults()`; 5 s tick: payload shadow-diff → `wl_mark_dirty() + wl_commit_if_dirty()` (bounded by `WL_MAX_COMMIT_RETRY=3`, latches `WL_RETRY_EXHAUSTED` until reload). On-flash format version pinned by `-DWL_FORMAT_VERSION=2` in `platformio.ini` — bump when payload layout changes. `build.extraScript` (`reserve_eeprom.py`) verifies `board_upload.maximum_size = 16128` on every build. `WL_FLASH_LIGHT` removed upstream.
 - **Option Bytes** (`ob.c/h`): cached in RAM, flushed via `ob_Flush()`. 10 slots + counters (ml, tc, vc).
 
 ### AUX LEDs / strobes (`aux_leds.c/h`)

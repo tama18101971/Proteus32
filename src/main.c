@@ -42,17 +42,11 @@ volatile wakeup_source_t wakeup_source = WS_NONE; /* Источник после
 
 volatile uint8_t need_sleep = false; /* Флаг необходимости перейти в режим сна */
 
-/* Тень последнего сохранённого в flash состояния EE. Запись выполняется только
- * при реальном отличии текущих данных от тени — "чётные" переключения настроек
- * в пределах 5-сек окна отката не приводят к лишней записи в flash. */
-static struct ee_data ee_shadow;
-
-static inline bool ee_changed(const struct ee_data *a, const struct ee_data *b)
-{
-    const uint32_t *p1 = (const uint32_t *)a;
-    const uint32_t *p2 = (const uint32_t *)b;
-    return (p1[0] != p2[0]) || (p1[1] != p2[1]) || (p1[2] != p2[2]) || (p1[3] != p2[3]);
-}
+/* Тень последнего сохранённого в flash полезного груза настроек. Запись
+ * выполняется только при реальном отличии текущих данных от тени — "чётные"
+ * переключения настроек в пределах 5-сек окна отката не приводят к лишней
+ * записи в flash. Служебные поля записи (seq/version/crc) хранит библиотека. */
+static app_cfg_t cfg_shadow;
 
 /* getBright_CRT_9to12Bit(322) = 1018, or 24.86% of DAC_MAX_VALUE.
  * The strict '>' below therefore enters fast supervision at step 323:
@@ -180,12 +174,12 @@ int main(void)
          * однократного обновления на валидной выборке. */
         (void)beacon_low_voltage_update();
     }
-    if (!read_ee())
+    if (wl_load() != WL_OK)
     {
-        init_ee();
+        wl_init();
         ee_defaults();
     }
-    ee_shadow = ee;
+    cfg_shadow = EE;
 
     /* Инициализация FSM кнопки и UI */
     static const btn_config_t btn_cfg = {
@@ -402,17 +396,16 @@ int main(void)
              * last-persisted shadow — an even number of toggles within the
              * window restores the old value and produces no flash write. */
             ob_Flush();
-            if (ee_changed(&ee_shadow, &ee))
+            if (memcmp(&cfg_shadow, WL_DATA_AS(app_cfg_t), sizeof(app_cfg_t)))
             {
-                need_save = 1;
-                handle_ee();                      /* успех → need_save = 0 */
-                if (!need_save)
-                    ee_shadow = ee;
-                /* сбой: need_save остаётся 1 → ретрай на следующем тике */
-            }
-            else
-            {
-                need_save = 0;
+                /* Сбой записи: dirty-флаг библиотеки остаётся → ретрай на
+                 * следующем тике. После WL_MAX_COMMIT_RETRY неудач подряд
+                 * коммит защёлкивается в WL_RETRY_EXHAUSTED до wl_load()
+                 * или wl_init() — в отличие от OB_FLUSH_MAX_FAILS, сброса
+                 * по новому изменению настроек здесь нет. */
+                wl_mark_dirty();
+                if (wl_commit_if_dirty() == WL_OK)
+                    cfg_shadow = EE;
             }
             if (driver_is_active())
             {

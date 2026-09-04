@@ -18,14 +18,14 @@
 - adc.h — REF_TEMP_ADC, REF_VOLTAGE_MV, ADC_MIN/MAX_VAL
 - aux_leds.c — FSM driven by AWU wakes, ONE transition per wake then sleep; commands via MAKE_CMD/MAKE_CMD_MS (never raw psc/win); HBL brightness via get_stepi(), NEVER set_current()
 - ob.c — Option Bytes RAM cache (10 slots + counters ml/tc/vc), flushed via ob_Flush(); calibration() writes Option Bytes, NOT WL_FLASH
-- app_data.h — WL_FLASH EEPROM overlay: EE.fieldname over ee_data; WL_FLASH_LIGHT/WL_FLASH_DEBUG defines live in platformio.ini (commented out by default)
+- app_data.h — WL_FLASH v2.0.1 payload: app_cfg_t (7 B, packed); EE.fieldname = (*WL_DATA_AS(app_cfg_t)); -DWL_FORMAT_VERSION=2 pinned in platformio.ini
 - mini_printf.c — compact printf for UART debug 460800 8N1
 
 ## Poll schedule (TIM2 1 ms tick)
 - 160 Hz (6 ms): button_tick + ui_process + ss_scan
 - 30 Hz (33 ms): adc_read + scan_limiters + scan_voltage
 - 2 Hz: debug log `[NORMAL] T=.. F=.. I=.. L=.. P=.. S=.. V=..`
-- 5 s: ob_Flush + EE shadow-diff → handle_ee, then sleep
+- 5 s: ob_Flush + payload shadow-diff → wl_mark_dirty + wl_commit_if_dirty, then sleep
 
 ## In-repo docs
 AGENTS.md (architecture + gotchas), TUNING.md (thermal limiter tuning), USER_MANUAL.md (UI gestures/slots)

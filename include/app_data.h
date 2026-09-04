@@ -26,22 +26,25 @@ struct __attribute__((packed)) ui_flags {
     uint8_t reserved       : 3;
 };
 
-union ee_view {
-    struct ee_data raw;
-    struct __attribute__((packed)) {
-        uint32_t seq;
-        uint8_t  version;
-        uint16_t default_ui1;
-        struct ui_flags  uif;
-        struct aux_flags aux;
-        struct usr_flags usr;
-        uint8_t default_ui2;
-        uint8_t default_ui3;
-        ee_crc_t crc;
-    };
-};
+/*
+ * Полезный груз записи WL_FLASH (WL_DATA_SIZE байт при WL_RECORD_SIZE=16 и
+ * CRC-32). Служебный заголовок записи — seq(4), version(1), crc(4) — хранит
+ * сама библиотека, дублировать его здесь не нужно.
+ *
+ * packed обязателен: uint16_t в начале иначе округляет sizeof до 8 из-за
+ * выравнивания, а груз должен уложиться ровно в WL_DATA_SIZE (7 байт).
+ * Побайтовый доступ к default_ui1 при этом не хуже прежнего — в union ee_view
+ * v1.x поле лежало по нечётному смещению 5.
+ */
+typedef struct __attribute__((packed)) {
+    uint16_t         default_ui1;
+    struct ui_flags  uif;
+    struct aux_flags aux;
+    struct usr_flags usr;
+    uint8_t          default_ui2;
+    uint8_t          default_ui3;
+} app_cfg_t;
 
-_Static_assert(sizeof(union ee_view) == EE_STRUCT_SIZE,
-               "ee_view overlay size mismatch");
+WL_ASSERT_PAYLOAD_FITS(app_cfg_t);
 
-#define EE  (*(union ee_view *)&ee)
+#define EE  (*WL_DATA_AS(app_cfg_t))

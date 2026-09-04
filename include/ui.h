@@ -21,8 +21,6 @@
 #include "button.h"
 #include "aux_leds.h"
 
-struct ee_data;
-
 /*******************************************************************************
  *  PWM / step globals
  ******************************************************************************/
@@ -38,9 +36,6 @@ extern uint16_t step_tc;
 
 /** @brief Maximum allowed step (511 for 9-bit DAC). */
 extern uint16_t max_step;
-
-/** @brief Flag indicating EEPROM save is pending. */
-extern uint8_t need_save;
 
 /*******************************************************************************
  *  Turbo-toggle memory

@@ -52,8 +52,6 @@ RUMP_Dir_t direction = DIR_UP;
 
 PSTEP_t ps;
 
-uint8_t need_save = false;
-
 uint8_t clicks_count = 0;
 uint8_t ui_table_idx = 1;        // runtime selector for dispatch tables
 uint8_t ui_save = 0;
@@ -1408,7 +1406,6 @@ void ui_init(void)
 {
     memset(&ps, 0, sizeof(ps));
     stop_bit = false;
-    need_save = 0;
     direction = DIR_UP;
     ui1_was_pressed = false;
     ui_select_from_slot = false;
