@@ -7,7 +7,7 @@ PROVIDE( _stack_size = __stack_size );
 MEMORY
 {
     FLASH (rx) : ORIGIN = 0x0, LENGTH = FLASH_SIZE
-    RAM (xrw) : ORIGIN = 0x20000000, LENGTH = 2K
+    RAM (xrw) : ORIGIN = 0x20000000, LENGTH = RAM_SIZE
 }
 
 SECTIONS
@@ -140,4 +140,6 @@ SECTIONS
         PROVIDE( _eusrstack = .);
         __freertos_irq_stack_top = .;
     } >RAM
+
+    ASSERT(_ebss <= ORIGIN(RAM) + LENGTH(RAM) - __stack_size, "RAM overflow into stack")
 }

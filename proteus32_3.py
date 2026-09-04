@@ -17,6 +17,7 @@ CMD_IAP_VERIFY = 0x82
 CMD_IAP_END    = 0x83
 
 FLASH_BASE = 0x08000000
+MAX_FLASH_SIZE = 0x3F00  # 16128 байт, граница региона настроек WL_FLASH
 BLOCK_SIZE = 64
 MAX_RETRIES = 3  # Количество попыток при ошибке передачи
 
@@ -50,7 +51,7 @@ def make_packet(cmd, addr=None, data=None):
     ])
 
 
-def wait_response(ser, timeout=2.0):
+def wait_response(ser, expected_cmd=None, timeout=2.0):
     """Оптимизированное чтение ответа (чтением массивом, а не по 1 байту)."""
     expected_len = 6
     response = bytearray()
@@ -65,16 +66,25 @@ def wait_response(ser, timeout=2.0):
                 break
         time.sleep(0.001)
 
-    return (
-        len(response) >= expected_len and
-        response[0] == SYNC_HEAD1 and
-        response[1] == SYNC_HEAD2 and
-        response[3] == 0
-    )
+    if (
+        len(response) < expected_len or
+        response[0] != SYNC_HEAD1 or
+        response[1] != SYNC_HEAD2 or
+        response[3] != 0
+    ):
+        return False
+
+    if expected_cmd is not None and response[2] != expected_cmd:
+        return False
+
+    return True
 
 
-def send_packet(ser, packet, expect_response=True):
+def send_packet(ser, packet, expect_response=True, expected_cmd=None):
     """Отправка пакета с механизмом повторных попыток."""
+    if expect_response and expected_cmd is None and len(packet) > 2:
+        expected_cmd = packet[2]
+
     for attempt in range(MAX_RETRIES):
         ser.write(packet)
         ser.flush()
@@ -82,7 +92,7 @@ def send_packet(ser, packet, expect_response=True):
         if not expect_response:
             return True
             
-        if wait_response(ser):
+        if wait_response(ser, expected_cmd=expected_cmd):
             return True
             
         # Если ответ не получен, очищаем буфер от мусора перед следующей попыткой
@@ -91,9 +101,15 @@ def send_packet(ser, packet, expect_response=True):
     return False
 
 
-def flash_firmware(port, filepath, baudrate):
+def flash_firmware(port, filepath, baudrate, force=False):
     with open(filepath, "rb") as f:
         data = f.read()
+
+    if len(data) > MAX_FLASH_SIZE and not force:
+        print(f"ERROR: Firmware size ({len(data)} B) exceeds maximum limit of {MAX_FLASH_SIZE} B (16128 B).")
+        print("Aborting to prevent overwriting WL-storage at 0x08003F00..0x08004000.")
+        print("Use --force to override if this is intentional.")
+        return False
 
     # Выводим красивый заголовок ДО попытки открыть порт
     print("=" * 56)
@@ -228,6 +244,12 @@ def main():
     )
 
     parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Force flashing even if firmware size exceeds 0x3F00 (16128) bytes",
+    )
+
+    parser.add_argument(
         "--version",
         action="version",
         version=f"%(prog)s {VERSION}"
@@ -244,6 +266,7 @@ def main():
             args.port,
             args.firmware,
             args.baudrate,
+            force=args.force,
         ) else 1
 
     except serial.SerialException as e:

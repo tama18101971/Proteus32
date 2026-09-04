@@ -12,3 +12,7 @@ compile_commands.json
 
 #serena
 .serena
+
+# python
+__pycache__/
+*.pyc

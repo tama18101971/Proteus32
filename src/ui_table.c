@@ -42,7 +42,7 @@ static bool has_block_click_slot(void)
 #ifdef USE_MAGIC_SLOTS
     for (uint8_t slot = 2u; slot < SLOTS_COUNT; slot += 2u)
     {
-        if (ob_GetSlot(slot) == SLOT_BLOCK)
+        if (slot_get(slot) == SLOT_BLOCK)
             return true;
     }
 #endif
@@ -168,7 +168,7 @@ static const dispatch_t usr_table[] = {
     { MODE_OFF, 2, 0, false, true,  ENTER_BT_MODE },        /* 2 клика: цвет маяка  (EE.aux.beacon_type, 1..3) */
     { MODE_OFF, 3, 0, false, true,  ENTER_BL_MODE },        /* 3 клика: цвет подсветки (EE.aux.bcklight_color, 1..2) */
     { MODE_OFF, 4, 0, false, true,  ENTER_UIS_MODE },       /* 4 клика: выбор UI (EE.uif.ui_index, 1..3) */
-    { MODE_OFF, 5, 0, false, true,  ENTER_MAGIC_MODE },     /* 5 кликов: настройка magic-слотов (ob_SetSlot, 1..12) */
+    { MODE_OFF, 5, 0, false, true,  ENTER_MAGIC_MODE },     /* 5 кликов: настройка magic-слотов (slot_set, 1..12) */
     { MODE_OFF, 6, 0, false, true,  ENTER_LM_EN_MODE },     /* 6 кликов: вкл/выкл подсветки блокировки (1..2) */
     { MODE_OFF, 7, 0, false, true,  ENTER_LM_TIME_MODE },   /* 7 кликов: время подсветки блокировки (1..4) */
     { MODE_OFF, 8, 0, false, true,  ENTER_CHTK_MODE },      /* 8 кликов: калибровка температуры (EE.usr.t_calibr, 1..15) */
@@ -223,7 +223,7 @@ static const uint8_t ui_table_size[7] = {
 static uint8_t execute_slot(uint8_t slot)
 {
 #ifdef USE_MAGIC_SLOTS
-    uint8_t op_idx = ob_GetSlot(slot);
+    uint8_t op_idx = slot_get(slot);
     if (op_idx < SLOT_OP_FIRST || op_idx > SLOT_OP_LAST)
         op_idx = SLOT_OP_EMPTY;
 
@@ -279,7 +279,7 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout)
         {
             if (timeout && evt->type == BTN_EVT_CLICK_SEQ && evt->clicks == 1u)
             {
-                if (EE.usr.lock_min_en)
+                if (USRF_GET_LOCK_MIN_EN(EE.usr))
                 {
                     lock_light_on((DRIVER_Mode_t)mode);
                     return 1;

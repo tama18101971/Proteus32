@@ -13,7 +13,7 @@ CompileFlags:
     - -isystem
     - C:/.platformio/packages/toolchain-riscv/riscv-wch-elf/include
     - -isystem
-    - C:/Sonet5/Proteus32/.pio/libdeps/genericCH32V003F4U6/WL_FLASH/src
+    - C:/Sonet5/Proteus32/libs/WL_FLASH/src
     - -isystem
     - C:/.platformio/packages/framework-wch-noneos-sdk/Core/ch32v00x
     - -isystem
@@ -28,9 +28,12 @@ CompileFlags:
     - -DCH32V00X
     - -DCH32V00x
     - -DCH32V003F4
-    - -DWL_FORMAT_VERSION=2
+    - -DWL_FORMAT_VERSION=3
+    - -DWL_RECORD_SIZE=20
+    - -DWL_CRC_BITS=16
     - -DSYSCLK_FREQ_24MHz_HSI=24000000
     - -DSYSCLK_FREQ_24MHZ_HSI=24000000
+    - -Wno-ignored-attributes
 Diagnostics:
   UnusedIncludes: None
   MissingIncludes: None

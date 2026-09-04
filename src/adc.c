@@ -87,7 +87,7 @@ static const uint16_t ex_lvls[3] = {
  */
 static void exaux(int32_t eff_vcode)
 {
-    if (!EE.uif.eaux_onoff || (driver_mode != MODE_ON))
+    if (!UIF_GET_EAUX_ONOFF(EE.uif) || (driver_mode != MODE_ON))
     {
         if (vwarning != VWARNING_NONE)
         {

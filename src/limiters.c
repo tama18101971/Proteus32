@@ -90,7 +90,7 @@ static const uint8_t t_calibr_offsets[16] = {
  */
 uint16_t get_thermal_setpoint(void)
 {
-    return TCALIBR_BASE_ADC + (uint16_t)t_calibr_offsets[EE.usr.t_calibr];
+    return TCALIBR_BASE_ADC + (uint16_t)t_calibr_offsets[USRF_GET_TCALIBR(EE.usr)];
 }
 
 /**

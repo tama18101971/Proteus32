@@ -176,12 +176,12 @@ static void start_aux_array(const uint32_t *pArray, awu_tick_t delay) {
  * Если подсветка выключена — полное выключение.
  */
 void smart_off_leds(LED_Bits_t channel) {
-	uint8_t bck_on = (EE.aux.bcklight_type == BCK_TYPE_ON);
+	uint8_t bck_on = (AUXF_GET_BCKLIGHT_TYPE(EE.aux) == BCK_TYPE_ON);
 	if (channel & RED_LED) {
-		(bck_on && EE.aux.bcklight_color == BCK_COLOR_RED) ? on_red_l() : off_red();
+		(bck_on && AUXF_GET_BCKLIGHT_COLOR(EE.aux) == BCK_COLOR_RED) ? on_red_l() : off_red();
 	}
 	if (channel & GRN_LED) {
-		(bck_on && EE.aux.bcklight_color == BCK_COLOR_GRN) ? on_grn_l() : off_grn();
+		(bck_on && AUXF_GET_BCKLIGHT_COLOR(EE.aux) == BCK_COLOR_GRN) ? on_grn_l() : off_grn();
 	}
 }
 
@@ -288,7 +288,7 @@ static uint32_t set_aux_count(uint8_t count) {
 		flashes = count;
 	}
 
-	if (EE.usr.id_plus_sid)
+	if (USRF_GET_ID_PLUS_SID(EE.usr))
 	{
 		device |= HBL_LED;
 		uint16_t hbl = step_user ? step_user : step_default;
@@ -642,7 +642,7 @@ void beacon_battery_check(void)
  * Двойная вспышка при пониженном напряжении (< 3.1 В).
  */
 void start_aux_beacon(void) {
-	if (!EE.aux.beacon_on) return;
+	if (!AUXF_GET_BEACON_ON(EE.aux)) return;
 	if (menu_beacon_mute) return;   /* сессионный мьют во время меню */
 	if (aux_is_active()) return;
 
@@ -654,9 +654,9 @@ void start_aux_beacon(void) {
 	static const uint8_t bcon_psc1[] = {AWU_PSC_2048, AWU_PSC_10240, AWU_PSC_10240, AWU_PSC_61440};
 	static const uint8_t bcon_win1[] = {63,           25,            50,            17};
 
-	uint8_t mode = EE.aux.beacon_mode & 0x03;
-	uint8_t br0 = (EE.aux.beacon_type & HBL_LED) ? CMODE_MIN : 1;
-	LED_Bits_t dev = (LED_Bits_t)EE.aux.beacon_type;
+	uint8_t mode = AUXF_GET_BEACON_MODE(EE.aux) & 0x03;
+	uint8_t br0 = (AUXF_GET_BEACON_TYPE(EE.aux) & HBL_LED) ? CMODE_MIN : 1;
+	LED_Bits_t dev = (LED_Bits_t)AUXF_GET_BEACON_TYPE(EE.aux);
 
 	if (beacon_low_voltage) {
 		/* Двойная вспышка: 50 мс ON / 150 мс OFF, затем 50 мс ON / период OFF
@@ -724,14 +724,14 @@ void slot_batt_ind(void) {
 #ifdef USE_BATTIND
 	/* ID+SID uses the DAC as an AUX waveform.  Do not start it over the
 	 * normal driver output; on_driver() handles the opposite transition. */
-    if (driver_is_active() && EE.usr.id_plus_sid)
+    if (driver_is_active() && USRF_GET_ID_PLUS_SID(EE.usr))
 		return;
 	stop_aux_if(IDM_BEACON, false);
 	uint8_t flashes = bat_get_flashes();
 	uint32_t cmd = set_aux_count(flashes);
 	/* The HBL battery indication can be requested immediately after the
 	 * flashlight was switched off, before STANDBY restores the DAC path. */
-	if (EE.usr.id_plus_sid)
+	if (USRF_GET_ID_PLUS_SID(EE.usr))
 		ON_POWER();
 	start_aux_cmd(cmd, IDM_OTHER, AWU_120MS);
 #endif

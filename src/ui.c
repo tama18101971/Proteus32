@@ -108,28 +108,33 @@ void OFF_POWER(void)
 /** @brief Set EEPROM defaults for all application parameters. */
 void ee_defaults(void)
 {
-    EE.uif.ui_index = 1;
-    EE.uif.use_memory = 0;
+    EE.uif = 0;
+    UIF_SET_UI_INDEX(EE.uif, 1);
+    UIF_SET_OFF_BCKL(EE.uif, 1);
 
-    EE.aux.bcklight_color = BCK_COLOR_RED;
-    EE.aux.bcklight_type = BCK_TYPE_ON;
+    EE.aux = 0;
+    AUXF_SET_BCKLIGHT_COLOR(EE.aux, BCK_COLOR_RED);
+    AUXF_SET_BCKLIGHT_TYPE(EE.aux, BCK_TYPE_ON);
+    AUXF_SET_BEACON_MODE(EE.aux, BCON_1S);
+    AUXF_SET_BEACON_ON(EE.aux, 1);
+    AUXF_SET_BEACON_TYPE(EE.aux, GRN_LED);
 
-    EE.aux.beacon_mode = BCON_1S;
-    EE.aux.beacon_on = true;
-    EE.aux.beacon_type = GRN_LED;
-
-    EE.usr.id_plus_sid = false;
-    EE.usr.lock_min_en = 1;
-    EE.usr.lock_min_time = 0;
-    EE.usr.t_calibr = TCALIBR_DEFAULT;
+    EE.usr = 0;
+    USRF_SET_LOCK_MIN_EN(EE.usr, 1);
+    USRF_SET_TCALIBR(EE.usr, TCALIBR_DEFAULT);
 
     EE.default_ui1 = DEFAULT_STEP;
     EE.default_ui2 = DEFAULT_MODE;
+    EE.default_ui3 = 0;
+    EE.reserved = 0;
 
-    EE.uif.off_bckl       = true;
-#ifdef USE_EX_AUX
-    EE.uif.eaux_onoff     = 0;
-#endif
+    static const uint8_t def_slots[SLOTS_COUNT] = {
+        SLOT_DEFAULT_1CH, SLOT_DEFAULT_2CH, SLOT_DEFAULT_3C, SLOT_DEFAULT_3CH,
+        SLOT_DEFAULT_4C,  SLOT_DEFAULT_4CH, SLOT_DEFAULT_5C, SLOT_DEFAULT_5CH,
+        SLOT_DEFAULT_6C,  SLOT_DEFAULT_6CH
+    };
+    for (uint8_t i = 0; i < SLOTS_COUNT; i++)
+        slot_set(i, def_slots[i]);
 }
 
 /**
@@ -256,7 +261,7 @@ void off_driver(uint8_t reset_step, SoftStartSpeed_t ss_speed)
      * память, а при !ps.start блок выше откатил step_default/mode_default
      * на pr_step. Реальную запись решает сравнение с тенью на 5-сек тике
      * (main.c). */
-    if (EE.uif.use_memory)
+    if (UIF_GET_USE_MEMORY(EE.uif))
     {
         EE.default_ui1 = step_default;
         EE.default_ui2 = mode_default;
@@ -365,7 +370,7 @@ void on_xmode_ui1(void)
 {
     ps.use_prev = false;
     on_driver();
-    set_current(EE.uif.use_memory ? (step_user ? step_user : step_default) : EE.default_ui1, SS_FAST);
+    set_current(UIF_GET_USE_MEMORY(EE.uif) ? (step_user ? step_user : step_default) : EE.default_ui1, SS_FAST);
 }
 
 /** @brief Toggle turbo mode (max brightness) with prev-step recall (UI1). */
@@ -453,25 +458,23 @@ void slot_tactical(void)
 /** @brief Toggle backlight type (slot). */
 void slot_backlight(void)
 {
-    /* Поля — 1-битные члены packed-структур: инверсия только через
-     * присваивание члену, взятие адреса байта непортабельно. */
-    EE.aux.bcklight_type ^= 1;
-    clr_indicator((ind_clr_t)EE.aux.bcklight_type);
+    EE.aux ^= AUXF_BCKLIGHT_TYPE_MASK;
+    clr_indicator((ind_clr_t)AUXF_GET_BCKLIGHT_TYPE(EE.aux));
     aux_refresh_backlight();
 }
 
 /** @brief Toggle beacon on/off (slot). */
 void slot_beacon(void)
 {
-    EE.aux.beacon_on ^= 1;
-    clr_indicator((ind_clr_t)EE.aux.beacon_on);
+    EE.aux ^= AUXF_BEACON_ON_MASK;
+    clr_indicator((ind_clr_t)AUXF_GET_BEACON_ON(EE.aux));
 }
 
 /** @brief Toggle memory recall (slot). */
 void slot_memory(void)
 {
-    EE.uif.use_memory ^= 1;
-    clr_indicator((ind_clr_t)EE.uif.use_memory);
+    EE.uif ^= UIF_USE_MEMORY_MASK;
+    clr_indicator((ind_clr_t)UIF_GET_USE_MEMORY(EE.uif));
 }
 
 /** @brief Empty slot — no operation. */
@@ -566,7 +569,7 @@ void lock_light_on(DRIVER_Mode_t prev_mode)
     direction = DIR_UP;
     mode_current = CMODE_MIN;
     set_curri(CMODE_MIN);
-    lock_light_ticks = (uint16_t)(((uint16_t)(EE.usr.lock_min_time & 0x03u) + 1u) * 2400u);
+    lock_light_ticks = (uint16_t)(((uint16_t)(USRF_GET_LOCK_MIN_TIME(EE.usr) & 0x03u) + 1u) * 2400u);
 #endif
 }
 
@@ -589,8 +592,8 @@ void lock_light_off(void)
 void reset2def(void)
 {
     ee_defaults();
-    ob_ResetToDefaults();   /* also reset OB calibration (tc/vc) and slots */
-    ui_save = EE.uif.ui_index;
+    ob_ResetToDefaults();   /* also reset OB calibration (tc/vc) */
+    ui_save = UIF_GET_UI_INDEX(EE.uif);
     ui_table_idx = ENG_MENU_IND;
     clr_indicator(IND_GRN);
 }
@@ -687,7 +690,7 @@ void calibration(void)
 static void save_def_blink(void)
 {
     off_auto_repeat();
-    if (EE.uif.off_bckl)
+    if (UIF_GET_OFF_BCKL(EE.uif))
     {
         out_set_stc(0); wait_ms(30);
         out_set_stc(get_step_tc(step_user));
@@ -819,7 +822,7 @@ void menu_exit(void)
 #ifdef USE_MENU
     ui_select_from_slot = false;
     ui_save = ui_index_clamp(ui_save);
-    EE.uif.ui_index = ui_save;
+    UIF_SET_UI_INDEX(EE.uif, ui_save);
     ui_table_idx = ui_save;
     menu_beacon_mute = false;
     driver_mode = MODE_OFF;
@@ -892,7 +895,7 @@ void enter_menu_at_boot(void)
 
     if (!Pressed) return;
 
-    ui_save = EE.uif.ui_index;
+    ui_save = UIF_GET_UI_INDEX(EE.uif);
     menu_beacon_mute = true;
     stop_aux_if(IDM_BEACON, true);
 
@@ -913,7 +916,7 @@ void enter_menu_at_boot(void)
 void enter_chtk_mode(void)
 {
 #ifdef USE_MENU
-    enter_submode(MODE_CTK_H, EE.usr.t_calibr);
+    enter_submode(MODE_CTK_H, USRF_GET_TCALIBR(EE.usr));
 #endif
 }
 
@@ -935,7 +938,7 @@ void chtk_clickX(void)
 #ifdef USE_MENU
     if (menu_clicks_valid(1u, 15u))
     {
-        EE.usr.t_calibr = clicks_count;
+        USRF_SET_TCALIBR(EE.usr, clicks_count);
         menu_submode_done();
     }
     driver_mode = MODE_OFF;
@@ -950,8 +953,8 @@ void chtk_clickX(void)
 void slot_eauxmode(void)
 {
 #ifdef USE_EX_AUX
-    EE.uif.eaux_onoff ^= 1;
-    clr_indicator((ind_clr_t)EE.uif.eaux_onoff);
+    EE.uif ^= UIF_EAUX_ONOFF_MASK;
+    clr_indicator((ind_clr_t)UIF_GET_EAUX_ONOFF(EE.uif));
 #endif
 }
 
@@ -959,8 +962,8 @@ void slot_eauxmode(void)
 void slot_ipsmode(void)
 {
 #ifdef USE_MENU
-    EE.usr.id_plus_sid ^= 1;
-    clr_indicator((ind_clr_t)EE.usr.id_plus_sid);
+    EE.usr ^= USRF_ID_PLUS_SID_MASK;
+    clr_indicator((ind_clr_t)USRF_GET_ID_PLUS_SID(EE.usr));
 #endif
 }
 
@@ -968,7 +971,7 @@ void slot_ipsmode(void)
 void enter_bm_mode(void)
 {
 #ifdef USE_MENU
-    enter_submode(MODE_BM, (uint8_t)(EE.aux.beacon_mode + 1u));
+    enter_submode(MODE_BM, (uint8_t)(AUXF_GET_BEACON_MODE(EE.aux) + 1u));
 #endif
 }
 
@@ -978,7 +981,7 @@ void bm_clickX(void)
 #ifdef USE_MENU
     if (menu_clicks_valid(1u, 4u))
     {
-        EE.aux.beacon_mode = clicks_count - 1u;
+        AUXF_SET_BEACON_MODE(EE.aux, clicks_count - 1u);
         menu_submode_done();
     }
     driver_mode = MODE_OFF;
@@ -989,7 +992,7 @@ void bm_clickX(void)
 void enter_bt_mode(void)
 {
 #ifdef USE_MENU
-    enter_submode(MODE_BT, (uint8_t)((EE.aux.beacon_type >> 1) + 1u));
+    enter_submode(MODE_BT, (uint8_t)((AUXF_GET_BEACON_TYPE(EE.aux) >> 1) + 1u));
 #endif
 }
 
@@ -999,7 +1002,7 @@ void bt_clickX(void)
 #ifdef USE_MENU
     if (menu_clicks_valid(1u, 3u))
     {
-        EE.aux.beacon_type = (uint8_t)(1u << (clicks_count - 1u));
+        AUXF_SET_BEACON_TYPE(EE.aux, (uint8_t)(1u << (clicks_count - 1u)));
         menu_submode_done();
     }
     driver_mode = MODE_OFF;
@@ -1010,7 +1013,7 @@ void bt_clickX(void)
 void enter_bl_mode(void)
 {
 #ifdef USE_MENU
-    enter_submode(MODE_BL, (uint8_t)(EE.aux.bcklight_color + 1u));
+    enter_submode(MODE_BL, (uint8_t)(AUXF_GET_BCKLIGHT_COLOR(EE.aux) + 1u));
 #endif
 }
 
@@ -1020,7 +1023,7 @@ void bl_clickX(void)
 #ifdef USE_MENU
     if (menu_clicks_valid(1u, 2u))
     {
-        EE.aux.bcklight_color = clicks_count - 1u;
+        AUXF_SET_BCKLIGHT_COLOR(EE.aux, clicks_count - 1u);
         menu_submode_done();
     }
     driver_mode = MODE_OFF;
@@ -1058,7 +1061,7 @@ void uis_clickX(void)
         /* A slot selection is not inside the user menu, so apply the choice
          * immediately instead of waiting for menu_exit().  The normal
          * 5-second persistence path will save the EE shadow diff. */
-        EE.uif.ui_index = clicks_count;
+        UIF_SET_UI_INDEX(EE.uif, clicks_count);
         ui_table_idx = clicks_count;
         ui_select_from_slot = false;
     }
@@ -1070,7 +1073,7 @@ void uis_clickX(void)
 void enter_lm_en_mode(void)
 {
 #ifdef USE_MENU
-    enter_submode(MODE_LM_EN, EE.usr.lock_min_en ? 2u : 1u);
+    enter_submode(MODE_LM_EN, USRF_GET_LOCK_MIN_EN(EE.usr) ? 2u : 1u);
 #endif
 }
 
@@ -1080,7 +1083,7 @@ void lm_en_clickX(void)
 #ifdef USE_MENU
     if (menu_clicks_valid(1u, 2u))
     {
-        EE.usr.lock_min_en = (clicks_count == 2u);
+        USRF_SET_LOCK_MIN_EN(EE.usr, (clicks_count == 2u));
         menu_submode_done();
     }
     driver_mode = MODE_OFF;
@@ -1091,7 +1094,7 @@ void lm_en_clickX(void)
 void enter_lm_time_mode(void)
 {
 #ifdef USE_MENU
-    enter_submode(MODE_LM_TIME, (uint8_t)(EE.usr.lock_min_time + 1u));
+    enter_submode(MODE_LM_TIME, (uint8_t)(USRF_GET_LOCK_MIN_TIME(EE.usr) + 1u));
 #endif
 }
 
@@ -1101,7 +1104,7 @@ void lm_time_clickX(void)
 #ifdef USE_MENU
     if (menu_clicks_valid(1u, 4u))
     {
-        EE.usr.lock_min_time = clicks_count - 1u;
+        USRF_SET_LOCK_MIN_TIME(EE.usr, clicks_count - 1u);
         menu_submode_done();
     }
     driver_mode = MODE_OFF;
@@ -1113,7 +1116,7 @@ void lm_time_clickX(void)
 void enter_eaux_mode(void)
 {
 #ifdef USE_MENU
-    enter_submode(MODE_EAUX, EE.uif.eaux_onoff ? 2u : 1u);
+    enter_submode(MODE_EAUX, UIF_GET_EAUX_ONOFF(EE.uif) ? 2u : 1u);
 #endif
 }
 
@@ -1123,7 +1126,7 @@ void eaux_clickX(void)
 #ifdef USE_MENU
     if (menu_clicks_valid(1u, 2u))
     {
-        EE.uif.eaux_onoff = (clicks_count == 2u);
+        UIF_SET_EAUX_ONOFF(EE.uif, (clicks_count == 2u));
         menu_submode_done();
     }
     driver_mode = MODE_OFF;
@@ -1162,7 +1165,7 @@ void select_slot(void)
 {
 #ifdef USE_MAGIC_SLOTS
     uint8_t slot = clicks_count - 1u;
-    enter_submode((DRIVER_Mode_t)(MODE_SLOT01 + slot), ob_GetSlot(slot));
+    enter_submode((DRIVER_Mode_t)(MODE_SLOT01 + slot), slot_get(slot));
 #else
     (void)0;
 #endif
@@ -1182,7 +1185,7 @@ void slotN_clickX(void)
     }
 
     aux_count(clicks_count);
-    ob_SetSlot(slot, clicks_count);
+    slot_set(slot, clicks_count);
     driver_mode = MODE_MAGIC;
 #else
     (void)0;
@@ -1262,7 +1265,7 @@ void on_min_ui2(void)
 /** @brief Go to memorised/default mode (UI2, voltage-clamped). */
 void on_xmode_ui2(void)
 {
-    uint8_t req = EE.uif.use_memory ? mode_default : EE.default_ui2;
+    uint8_t req = UIF_GET_USE_MEMORY(EE.uif) ? mode_default : EE.default_ui2;
     uint8_t clamped = get_up_mode(req);
     if (clamped < req)                /* запрошенный режим урезан по напряжению */
         aux_err(AWU_IMMEDIATELY);
@@ -1411,7 +1414,7 @@ void ui_init(void)
     ui_select_from_slot = false;
     hold_guard = false;
     mode_current = CMODE_OFF;
-    ui_table_idx = ui_index_clamp(EE.uif.ui_index);
+    ui_table_idx = ui_index_clamp(UIF_GET_UI_INDEX(EE.uif));
     step_default = EE.default_ui1;   // восстановить сохранённую яркость
     mode_default = EE.default_ui2;   // восстановить сохранённый режим
     aux_refresh_backlight();

@@ -167,7 +167,7 @@ int main(void)
     dac7571_set_voltage(0);
     OFF_POWER();
 
-    ob_Init();
+    bool ob_ok = ob_Init();
     if (adc_read())
     {
         /* Гистерезисный флаг низкого заряда: при загрузке достаточно
@@ -178,6 +178,17 @@ int main(void)
     {
         wl_init();
         ee_defaults();
+        if (ob_ok)
+        {
+            for (uint8_t i = 0; i < SLOTS_COUNT; i++)
+            {
+                uint8_t legacy = ob_ReadLegacySlot(i);
+                if (legacy <= 12u)
+                    slot_set(i, legacy);
+            }
+        }
+        wl_mark_dirty();
+        (void)wl_commit_if_dirty();
     }
     cfg_shadow = EE;
 

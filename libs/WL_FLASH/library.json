@@ -1,0 +1,70 @@
+{
+  "name": "WL_FLASH",
+  "version": "2.0.1",
+  "description": "Wear-levelling EEPROM emulation for WCH CH32V003: record ring over 64-byte Flash pages with CRC integrity checking, power-loss-safe writes, and a host-testable HAL seam",
+  "keywords": ["eeprom", "flash", "wear-leveling", "ch32v003", "wch", "risc-v"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tama18101971/WL_FLASH.git"
+  },
+  "authors": [
+    {
+      "name": "Dmitriy Gorin",
+      "maintainer": true
+    }
+  ],
+  "license": "MIT",
+  "frameworks": "noneos-sdk",
+  "platforms": "ch32v",
+  "headers": ["wl_flash.h", "wl_flash_config.h"],
+  "build": {
+    "extraScript": "scripts/reserve_eeprom.py"
+  },
+  "export": {
+    "include": [
+      "src/*",
+      "scripts/*",
+      "examples/*",
+      "library.json",
+      "README.md",
+      "CHANGELOG.md",
+      "LICENSE"
+    ],
+    "exclude": [
+      ".git",
+      ".github",
+      ".pio",
+      ".vscode",
+      "test"
+    ]
+  },
+  "examples": [
+    {
+      "name": "basic - 16-byte record, CRC-32, 7 payload bytes",
+      "base": "examples/basic",
+      "files": [
+        "src/main.c",
+        "src/main.h",
+        "platformio.ini"
+      ]
+    },
+    {
+      "name": "basic8 - 8-byte record, CRC-16, minimum footprint",
+      "base": "examples/basic8",
+      "files": [
+        "src/main.c",
+        "src/main.h",
+        "platformio.ini"
+      ]
+    },
+    {
+      "name": "basic12 - 12-byte record, page with unused tail bytes",
+      "base": "examples/basic12",
+      "files": [
+        "src/main.c",
+        "src/main.h",
+        "platformio.ini"
+      ]
+    }
+  ]
+}
