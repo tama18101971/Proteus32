@@ -16,3 +16,5 @@ compile_commands.json
 # python
 __pycache__/
 *.pyc
+
+dist/

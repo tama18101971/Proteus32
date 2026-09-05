@@ -51,8 +51,13 @@ def make_packet(cmd, addr=None, data=None):
     ])
 
 
-def wait_response(ser, expected_cmd=None, timeout=2.0):
-    """Оптимизированное чтение ответа (чтением массивом, а не по 1 байту)."""
+def wait_response(ser, timeout=2.0):
+    """Чтение ответа загрузчика (массивом, а не по 1 байту).
+
+    Формат ответа WCH IAP: AA 55 00 <status> 55 AA — байт [2] является
+    константой 0x00 (загрузчик НЕ эхоирует байт команды), байт [3] —
+    статус (0x00 = OK, 0x01 = ERR).
+    """
     expected_len = 6
     response = bytearray()
     start = time.time()
@@ -66,25 +71,17 @@ def wait_response(ser, expected_cmd=None, timeout=2.0):
                 break
         time.sleep(0.001)
 
-    if (
-        len(response) < expected_len or
-        response[0] != SYNC_HEAD1 or
-        response[1] != SYNC_HEAD2 or
-        response[3] != 0
-    ):
-        return False
-
-    if expected_cmd is not None and response[2] != expected_cmd:
-        return False
-
-    return True
+    return (
+        len(response) >= expected_len and
+        response[0] == SYNC_HEAD1 and
+        response[1] == SYNC_HEAD2 and
+        response[2] == 0 and
+        response[3] == 0
+    )
 
 
-def send_packet(ser, packet, expect_response=True, expected_cmd=None):
+def send_packet(ser, packet, expect_response=True):
     """Отправка пакета с механизмом повторных попыток."""
-    if expect_response and expected_cmd is None and len(packet) > 2:
-        expected_cmd = packet[2]
-
     for attempt in range(MAX_RETRIES):
         ser.write(packet)
         ser.flush()
@@ -92,7 +89,7 @@ def send_packet(ser, packet, expect_response=True, expected_cmd=None):
         if not expect_response:
             return True
             
-        if wait_response(ser, expected_cmd=expected_cmd):
+        if wait_response(ser):
             return True
             
         # Если ответ не получен, очищаем буфер от мусора перед следующей попыткой
