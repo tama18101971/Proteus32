@@ -4,6 +4,14 @@
 
 Proteus32 firmware for CH32V003F4U6 (RISC-V RV32EC, 24 MHz, 16 KB Flash, 2 KB RAM) flashlight.
 
+## UART bootloader (protocol rev 2)
+
+- Bootloader repo: `E:\GitProjects\Preteus32-BL` (or `Proteus32-BootLoader`), spec: `BOOTLOADER_TZ.md` (protocol v2, WL_FLASH-safe). Boot area is a **separate 1920-B flash at 0x00000000** (mapped only in BOOT start); user code at 0x08000000 is untouched by it.
+- **Script `proteus32_3.py` is protocol rev 2 (v2.1) and ONLY pairs with bootloader rev 2.** Old script/bootloader pairs are incompatible (VERIFY-with-data, READ 0x84, statuses 0x02/0x03). `PROTOCOL_REV = 2` in the script; pytest protocol vectors in `test/test_protocol_v2.py` (TZ 3.5.4, byte-exact).
+- Bootloader write window is **only** `[0x08000000, 0x08003F00)`. WL_FLASH settings region `0x08003F00..0x08004000` is **never** written/erased by the bootloader or the script; no `--force` exists. Firmware image must be ≤ 16128 B (checked in script + guarded on the bootloader side).
+- Update entry: power on with the button held (PC3 to GND). END (0x83) → bootloader ACKs, drains UART ≥100 ms, resets into the app.
+- ERASE timeout in script: 10 s; others 3 s; 3 retries per frame.
+
 ## Build & flash
 
 ```
@@ -78,6 +86,8 @@ AWU-sleep-driven FSM: `handle_aux()` runs **one** transition per AWU wake, then 
 | `src/limiters.c` | `config` struct (thermal tuning) |
 | `TUNING.md` | Practical step-by-step thermal limiter tuning guide |
 | `USER_MANUAL.md` | UI gestures, click sequences, and slot configuration |
+| `proteus32_3.py` | PC flasher v2.1 (protocol rev 2): write / `--erase-only` / `--dump` / `--go`; pairs ONLY with bootloader rev 2 |
+| `test/test_protocol_v2.py` | pytest protocol vectors (TZ 3.5.4) — run `python -m pytest test/test_protocol_v2.py -v` |
 
 ## Style
 

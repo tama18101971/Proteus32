@@ -18,3 +18,5 @@ __pycache__/
 *.pyc
 
 dist/
+build/
+Proteus32Flasher.spec
