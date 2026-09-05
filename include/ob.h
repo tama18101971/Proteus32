@@ -86,16 +86,6 @@ void ob_SetVc(int8_t value);
 void ob_SetMl(uint8_t value);
 
 /**
- * @brief Чтение устаревшего слота из физической памяти Option Bytes
- *
- * Используется исключительно при однократной миграции v2 -> v3 на первом старте.
- *
- * @param index Индекс слота (0..9)
- * @return Значение слота из OB flash
- */
-uint8_t ob_ReadLegacySlot(uint8_t index);
-
-/**
  * @brief Сброс кэша Option Bytes к заводским значениям
  *
  * Помечает кэш грязным; запись в flash выполняется при
