@@ -95,7 +95,10 @@ void AWU_set_raw(uint8_t psc_idx, uint8_t win);
 void AWU_stop(bool stop_lsi);
 
 /**
- * @brief Configure AWU and enter STANDBY immediately.
+ * @brief Enter STANDBY and wait for wake-up.
+ *
+ * Wake-up source is returned through the global `wakeup_source`
+ * (WS_NONE, WS_BUTTON or WS_AWU).
  */
 void AWU_Sleep_Now(void);
 
