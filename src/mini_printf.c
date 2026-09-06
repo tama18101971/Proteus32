@@ -40,7 +40,10 @@ void uart_init(uint32_t baudrate)
 {
     RCC->APB2PCENR |= RCC_APB2Periph_GPIOD | RCC_APB2Periph_USART1;
 
-    GPIOD->CFGLR = (GPIOD->CFGLR & ~(0xF << 20)) | (0xE << 20); // PD5 AF-PP 50MHz
+    /* PD5: AF push-pull 50 MHz. Код 0xE давал AF Open-Drain 2 MHz
+     * (CNF=11b, MODE=10b) — фронт 460800 бод на OD без внешней подтяжки
+     * завален; 0xB = CNF=10b (AF-PP), MODE=11b (50 MHz). */
+    GPIOD->CFGLR = (GPIOD->CFGLR & ~(0xFu << 20)) | (0xBu << 20);
 
     uint32_t div = (SYSCLK_HZ + (baudrate >> 1)) / baudrate;
     USART1->BRR = (uint16_t)div;
@@ -95,8 +98,22 @@ static void out_unsigned(uint32_t val, uint8_t base, uint8_t width, char pad)
         }
     } else {
         while (val) {
-            uint32_t q = (val * 52429u) >> 19;
-            uint8_t rem = (uint8_t)(val - q * 10u);
+            /* Точное целочисленное деление на 10 сдвигово-аддитивной
+             * цепочкой (Hacker's Delight), без 32-битного умножения:
+             * прежний магический вариант (val * 52429u) >> 19 переполнял
+             * uint32_t при val >= 81920 и печатал мусорные разряды.
+             * Корректность цепочки подтверждена хост-тестом на полном
+             * диапазоне границ uint32_t. */
+            uint32_t q = (val >> 1) + (val >> 2);
+            q += q >> 4;
+            q += q >> 8;
+            q += q >> 16;
+            q >>= 3;
+            uint8_t rem = (uint8_t)(val - ((q << 3) + (q << 1)));
+            if (rem > 9u) {
+                rem = (uint8_t)(rem - 10u);
+                q++;
+            }
             buf[i++] = (char)('0' + rem);
             val = q;
         }
@@ -118,11 +135,12 @@ static void out_unsigned(uint32_t val, uint8_t base, uint8_t width, char pad)
  */
 static void out_signed(int32_t val)
 {
+    uint32_t mag = (uint32_t)val;
     if (val < 0) {
         out_char('-');
-        val = -val;
+        mag = 0u - mag; /* без UB и для INT32_MIN */
     }
-    out_unsigned((uint32_t)val, 10, 0, '0');
+    out_unsigned(mag, 10, 0, '0');
 }
 
 /**

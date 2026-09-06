@@ -112,10 +112,13 @@ void tim2_start(void)
     NVIC->IPRIOR[38] = (1 << 7) | (1 << 6);
 
     TIM2->CTLR1 = 0;
-    TIM2->INTFR = 0;
     TIM2->PSC = TIM2_PSC;
     TIM2->ATRLR = TIM2_ARR;
     TIM2->SWEVGR = TIM_PSCReloadMode_Immediate;
+    /* INTFR — rc_w0: UG-событие выше взвело флаг UIF; сбрасываем его
+     * ДО разрешения прерывания, иначе первый тик срабатывает паразитно
+     * сразу после пуска счётчика. */
+    TIM2->INTFR = 0;
     TIM2->DMAINTENR = TIM_IT_Update;
 
     TIM2->CNT = 0;

@@ -62,6 +62,29 @@ typedef enum
 static sleep_owner_t sleep_owner = SLEEP_OWNER_NORMAL;
 
 /**
+ * @brief Обработчик аппаратной ошибки ядра (HardFault).
+ *
+ * Штатный слабый обработчик SDK зациклен (startup_ch32v00x.S), при этом
+ * силовая часть остаётся включённой до разряда АКБ. Здесь нагрузка
+ * безусловно гасится: выводы светодиодов переводятся в аналоговый Hi-Z
+ * (GPIO_PinConfig inline, стек не используется сверх пролога), питание
+ * DAC (PD0) активно притягивается к 0, затем выполняется программный
+ * сброс через PFIC. Функция управления не возвращает.
+ */
+void HardFault_Handler(void) __attribute__((noreturn));
+void HardFault_Handler(void)
+{
+    GPIO_PinConfig(GPIOC, GPIO_Pin_4, CFG_IN_ANALOG);
+    GPIO_PinConfig(GPIOC, GPIO_Pin_6, CFG_IN_ANALOG);
+    GPIO_PinConfig(GPIOC, GPIO_Pin_7, CFG_IN_ANALOG);
+    GPIOC->BCR = GPIO_Pin_4 | GPIO_Pin_6 | GPIO_Pin_7;
+    GPIOD->BCR = (1u << 0); /* PD0: питание DAC off */
+    NVIC_SystemReset();     /* Программный сброс ядра (core_riscv.h) */
+    for (;;)
+        ;
+}
+
+/**
  * @brief Check whether frequent thermal supervision is required.
  * @return true for high applied brightness or an active thermal reduction.
  */
@@ -210,12 +233,21 @@ int main(void)
     {
         /* 1./2. Обработка пробуждения: снапшот и очистка выполняются ДО
          * ветвления. Прерывание, вклинившееся между проверкой флага и его
-         * сбросом, иначе теряется (гонка кнопка/AWU). При совместном
-         * пробуждении кнопка приоритетна, AWU-тик просто пропускается. */
+         * сбросом, иначе теряется (гонка кнопка/AWU). Пара "прочитал-
+         * очистил" выполняется при замаскированном MIE: ISR, вклинившийся
+         * в окно, не затирается записью WS_NONE и будет обработан на
+         * следующей итерации. При совместном пробуждении кнопка
+         * приоритетна, AWU-тик просто пропускается. */
         if (wakeup_source != WS_NONE)
         {
+            uint32_t mie_save;
+            __asm volatile("csrrci %0, mstatus, 8" : "=r"(mie_save) :: "memory");
             wakeup_source_t ws = wakeup_source;
             wakeup_source = WS_NONE;
+            if (mie_save & 0x08u)
+            {
+                __asm volatile("csrsi mstatus, 8" ::: "memory");
+            }
 
             /* 1. Пробуждение по кнопке: восстанавливаем периферию */
             if (ws == WS_BUTTON && is_sleep_mode)

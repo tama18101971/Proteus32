@@ -64,13 +64,24 @@ uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
     int16_t delta_i = 0;
 
     if (t_cur_fp >= t_set_fp) {
-        /* Overheat zone: proportional braking + integral accumulation */
+        /* Overheat zone: proportional braking + integral accumulation.
+         * P-терм активен только выше зоны нечувствительности p_deadband
+         * (в кодах АЦП): шум ±1..2 LSB возле уставки больше не меняет
+         * яркость на полные шаги с частотой опроса — мерцание подавлено,
+         * установившийся режим регулируется исключительно интегратором
+         * (субшаг 1/64, монотонный, ~2 с на шаг). Интегратор учитывает
+         * ПОЛНУЮ ошибку (без вычета deadband), чтобы точно удерживать
+         * t_set, а не t_set + deadband. */
         int16_t error_fp = (int16_t)(t_cur_fp - t_set_fp);
-        int32_t p_wide = ((int32_t)error_fp << config->kp_left_shift) >> THERMAL_TEMP_FP_SHIFT;
-        if (p_wide > (int32_t)user_pwm) {
-            p_wide = (int32_t)user_pwm;
+        int16_t p_deadband_fp = (int16_t)((int16_t)config->p_deadband << THERMAL_TEMP_FP_SHIFT);
+        if (error_fp > p_deadband_fp) {
+            int16_t active_error_fp = (int16_t)(error_fp - p_deadband_fp);
+            int32_t p_wide = ((int32_t)active_error_fp << config->kp_left_shift) >> THERMAL_TEMP_FP_SHIFT;
+            if (p_wide > (int32_t)user_pwm) {
+                p_wide = (int32_t)user_pwm;
+            }
+            p_term = (int16_t)p_wide;
         }
-        p_term = (int16_t)p_wide;
         int16_t error = (int16_t)(error_fp >> THERMAL_TEMP_FP_SHIFT);
         delta_i = (int16_t)(error >> config->ki_decimation_shift);
         if (delta_i == 0 && error_fp > 0) {

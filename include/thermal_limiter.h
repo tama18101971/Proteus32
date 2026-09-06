@@ -9,7 +9,9 @@
  *  ------------------------------------------------------------------------
  *  Provides continuous, oscillation-free thermal regulation:
  *    - Proportional term (P): instantaneous braking on temperature spikes
- *      when t_cur >= t_set.
+ *      when t_cur >= t_set + p_deadband. Inside the deadband P stays at 0,
+ *      so ADC noise near the setpoint cannot cause visible flicker; the
+ *      integral term alone performs the fine steady-state regulation.
  *    - Integral term (I): fixed-point accumulator (6 fractional bits)
  *      representing the steady-state limiter required to balance heat
  *      generation and dissipation at t_set.
@@ -65,6 +67,7 @@ typedef struct {
     uint8_t  ki_recov_shift;       /**< Integral cool scale: delta_I = -max(1, cool_error >> ki_recov_shift) */
     uint16_t t_anticipate_offset;  /**< Hold band (ADC counts): t_threshold = t_set - offset */
     uint8_t  filter_shift;         /**< EMA filter shift: filtered += (raw - filtered) >> filter_shift */
+    uint8_t  p_deadband;           /**< P-term deadband (ADC counts above t_set): P stays 0 while error_fp <= deadband << THERMAL_TEMP_FP_SHIFT */
     uint16_t max_drop_rate;        /**< Max limiter increase per tick (brightness cut speed) */
     uint16_t max_recovery_rate;    /**< Max limiter decrease per tick (brightness restore speed) */
     uint16_t max_limiter;          /**< Hard ceiling on the Limiter output (0..512) */

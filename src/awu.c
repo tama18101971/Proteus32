@@ -164,6 +164,10 @@ void AWU_stop(bool stop_lsi)
  * Устанавливает PDDS=1 для STANDBY, выполняет WFI.
  * Пробуждение происходит по EXTI (кнопка) или AWU-событию.
  * После пробуждения сбрасывает PDDS и SLEEPDEEP.
+ * Защита от lost wakeup: прерывания маскируются на время проверки
+ * wakeup_source/__WFI(), поэтому нажатие кнопки в окне входа в сон
+ * либо не даёт уснуть (событие уже в wakeup_source), либо остаётся
+ * pending и будит ядро из WFI.
  * Если UART_DEBUG включён — ждёт завершения UART перед сном
  * и переинициализирует UART после пробуждения.
  */
@@ -185,27 +189,30 @@ void AWU_Sleep_Now(void)
     /* Барьер: убедиться, что все записи завершены */
     __NOP(); __NOP(); __NOP();
 
-    /* 4. WFI — войти в Standby.
-     *    Пробуждение: EXTI прерывание (кнопка) → EXTI7_0_IRQHandler
-     *                 AWU событие              → AWU_IRQHandler
-     *    Сброса не происходит (если STANDBY_RST в option bytes = 0) */
-    __WFI();
+    /* 4. WFI — войти в Standby, но без потери нажатия (lost wakeup race).
+     *    Пока MIE=1, прерывание кнопки, пришедшее в окне подготовки сна,
+     *    успевает исполнить EXTI7_0_IRQHandler и снять свой pending-бит:
+     *    __WFI() заснул бы уже без единого источника пробуждения.
+     *    Поэтому маскируем MIE и проверяем wakeup_source атомарно:
+     *    событие, пришедшее до маскирования, не даст уснуть, а пришедшее
+     *    после — остаётся pending в PFIC и будит ядро из WFI (wfi выходит
+     *    по pending разрешённого прерывания независимо от MIE); ISR
+     *    исполнится сразу после повторного разрешения MIE ниже. */
+    __asm volatile("csrci mstatus, 8" ::: "memory");
 
-    /* AWU and button can become pending together.  A physically held button
-     * is the user-visible wake source and must win over the periodic wake. */
-    if (!(GPIOC->INDR & GPIO_Pin_3))
-        wakeup_source = WS_BUTTON;
+    if (wakeup_source == WS_NONE)
+    {
+        __WFI();
+    }
 
-    /*
-     * Сюда выполнение попадёт ТОЛЬКО если пробуждение произошло,
-     * но прерывание уже обработано. В нормальном сценарии
-     * управление передаётся прямо в IRQ-обработчик.
-     * После обработчика — возврат сюда, затем снова в Standby.
-     */
-
-    /* Снимаем SLEEPDEEP и PDDS — на случай если хотим продолжить работу */
+    /* Снимаем SLEEPDEEP и PDDS ДО повторного разрешения прерываний, чтобы
+     * ISR, исполненный сразу после csrsi, не застал ядро в состоянии
+     * "готов к Standby" (иначе паразитный WFI из главного цикла заснул бы
+     * насмерть вместо Light Sleep). */
     PFIC->SCTLR &= ~(1 << 2);
     PWR->CTLR &= ~PWR_CTLR_PDDS;
+
+    __asm volatile("csrsi mstatus, 8" ::: "memory");
 
 #ifdef UART_DEBUG
     uart_init(UART_DEBUG_BAUD);
@@ -218,9 +225,15 @@ void AWU_Sleep_Now(void)
  * @brief Обработчик прерывания AWU (вектор 21).
  *
  * Вызывается при пробуждении от AWU-события (EXTI Line9).
- * Если MCU был в STANDBY (is_sleep_mode), восстанавливает системные часы.
  * Устанавливает wakeup_source = WS_AWU и очищает флаг EXTI9 прямой записью
  * в регистр EXTI->INTFR, без вызовов SDK.
+ *
+ * Восстановление системных часов здесь НЕ выполняется: при выходе из
+ * STANDBY аппаратура сама возвращает SYSCLK на HSI 24 МГц — ровно ту
+ * конфигурацию, с которой работает прошивка (HPRE=DIV1, PLL выключен).
+ * Прежний вызов SystemInit() из ISR попутно сбрасывал поле ADCPRE в
+ * RCC->CFGR0, настроенное adc_init(); тактирование АЦП корректно
+ * восстанавливается adc_init() в main до первого измерения.
  */
 void AWU_IRQHandler(void) __attribute__((interrupt("WCH-Interrupt-fast")));
 void AWU_IRQHandler(void)
@@ -228,9 +241,6 @@ void AWU_IRQHandler(void)
     /* EXTI_GetITStatus(): pending flag AND interrupt mask for AWU line 9. */
     if ((EXTI->INTFR & EXTI->INTENR & (1U << 9)) != 0U)
     {
-        if (is_sleep_mode) {
-            SystemInit();            /* Восстанавливаем системные часы после пробуждения */
-        }
         /* Кнопка и AWU могут стать pending одновременно сразу после __WFI().
          * Не затираем уже установленный WS_BUTTON: нажатие — видимый
          * пользователю источник пробуждения и имеет приоритет над тиком. */

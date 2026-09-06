@@ -166,10 +166,24 @@ static flash_status_t _write_option_bytes(uint32_t addr, const uint8_t *data, ui
  * Стандартные регистры перезаписываются «как есть» для сохранения
  * текущих настроек (защита от стирания при программировании).
  *
+ * Глобальные прерывания маскируются на время всей операции, чтобы
+ * обработчики не вклинивались между стиранием и перепрограммированием
+ * страницы Option Bytes.
+ *
  * @return FLASH_OK — всё записано, FLASH_TIMEOUT — ошибка
  */
 static flash_status_t _program(void) {
     flash_status_t status;
+
+    /* На весь цикл "разблокировка -> стирание -> программирование ->
+     * блокировка" маскируются глобальные прерывания (аналогично
+     * wl_flash_hal_ch32v.c): операция стирания страницы Option Bytes
+     * должна выполняться без вклинений, а чтение кода ISR из Flash при
+     * занятом контроллере в любом случае приводит к остановке конвейера.
+     * Функция имеет единственный путь выхода, поэтому восстановление MIE
+     * выполняется непосредственно перед возвратом. */
+    uint32_t mie_save;
+    __asm volatile("csrrci %0, mstatus, 8" : "=r"(mie_save) :: "memory");
 
     /* Шаг 1: Разблокировка flash-контроллера */
     FLASH->KEYR = FLASH_KEY1;
@@ -211,6 +225,11 @@ static flash_status_t _program(void) {
     }
     /* Блокировка flash-контроллера */
     FLASH->CTLR |= FLASH_CTLR_LOCK;
+
+    if (mie_save & 0x08u)
+    {
+        __asm volatile("csrsi mstatus, 8" ::: "memory");
+    }
     return status;
 }
 

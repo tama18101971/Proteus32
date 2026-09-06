@@ -42,7 +42,9 @@
 static inline void GPIO_PinConfig(GPIO_TypeDef* port, uint16_t pin_mask, uint8_t cfg) {
     uint8_t pin = PIN_NUM(pin_mask);
     uint32_t shift = pin * 4;
-    uint32_t mask = ~(0xF << shift);
+    /* 0x0F << 28 для пина 7 переполняет знаковый int — только беззнаковая
+     * арифметика (UB в противном случае при LTO-оптимизации). */
+    uint32_t mask = ~((uint32_t)0x0Fu << shift);
     port->CFGLR = (port->CFGLR & mask) | ((uint32_t)cfg << shift);
 }
 
