@@ -62,6 +62,7 @@ static uint8_t bt_r_time = 0;    // direction timeout counter
 static bool ui1_was_pressed;
 static bool ui_select_from_slot;
 static bool hold_guard;          // suppress HOLD repeats until the button is released
+static uint16_t step_tactic;     // яркость моментарки: турбо-память (как в Proteus-IID)
 static uint8_t ui_cfg_idx = 0xFF; // last ui_table_idx the button timing was applied for
 #ifdef USE_BLOCK
 static DRIVER_Mode_t saved_block_mode = MODE_BLOCK;
@@ -200,6 +201,12 @@ void out_set_stc(uint16_t step)
  */
 uint8_t on_driver(void)
 {
+    /* Обычное включение в не-тактическом UI возвращает моментарку на
+     * сохранённый уровень; в тактическом UI (ui_table_idx == 0) сброса нет —
+     * уровень, набранный турбо-сессией, держится до перезагрузки. */
+    if (ui_table_idx)
+        step_tactic = 0;
+
     if (driver_mode < MODE_BLOCK_C)
     {
         return 0;
@@ -250,6 +257,12 @@ void off_driver(uint8_t reset_step, SoftStartSpeed_t ss_speed)
             else
                 mode_default = ps.pr_step;
         }
+
+        /* Турбо-сессия завершилась выключением: следующая моментарка должна
+         * ударить на максимум.  В step_default уровень турбо намеренно не
+         * пишется (память хранит до-сессионный уровень), поэтому «max»
+         * переносится отдельной переменной. */
+        step_tactic = MAX_STEP;
     }
 
     stop_aux_if(IDM_VWARNING, false);
@@ -1218,8 +1231,12 @@ void slot_ui_select(void)
  *  UI2 helpers and actions
  ******************************************************************************/
 
-/** @brief Convert UI2 mode index to brightness step. */
-uint16_t get_stepi(uint8_t index)
+/** @brief Convert UI2 mode index to brightness step.
+ *
+ * noinline: вызывается из нескольких горячих путей (тактический кламп,
+ * set_curri, adc/aux); одиночная копия с jal дешевле, чем встроенные
+ * копии индексации modes[] — LTO иначе дублирует их по месту. */
+__attribute__((noinline)) uint16_t get_stepi(uint8_t index)
 {
     return modes[index];
 }
@@ -1395,7 +1412,19 @@ static void handle_tactical(void)
         if (driver_mode != MODE_ON)
         {
             on_driver();
-            set_current(step_default, SS_NO);
+
+            /* Разовый пересчёт термолимитера на свежем показании: off_driver()
+             * обнулил limiter, и первый тик 30 Гц придёт только через 33 мс. */
+            scan_limiters();
+
+            /* Потолки применяются ДО первой записи DAC, иначе моментарка
+             * вспыхивает на полном уровне и лишь затем проседает.  Термочасть
+             * учтётся внутри set_current() через get_step_tc(). */
+            uint16_t tgt = step_tactic ? step_tactic : step_default;
+            uint16_t cap = get_stepi(volt_max_mode);
+            if (tgt > cap)
+                tgt = cap;
+            set_current(tgt, SS_NO);
         }
     }
     else if (driver_mode != MODE_OFF)
@@ -1417,6 +1446,7 @@ void ui_init(void)
     ui_table_idx = ui_index_clamp(UIF_GET_UI_INDEX(EE.uif));
     step_default = EE.default_ui1;   // восстановить сохранённую яркость
     mode_default = EE.default_ui2;   // восстановить сохранённый режим
+    step_tactic = 0;                 // турбо-память моментарки не переживает сброс
     aux_refresh_backlight();
 }
 
