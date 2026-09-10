@@ -702,7 +702,7 @@ void scan_voltage(void)
             static uint16_t v_max_prev = MAX_STEP;
             uint16_t v_max = ratchet_max_step();
             if (v_max < v_max_prev)
-                aux_err(AWU_IMMEDIATELY);
+                aux_err_now();
             v_max_prev = v_max;
 
             uint16_t cap = (v_max > limiter) ? (uint16_t)(v_max - limiter) : 1u;
@@ -743,7 +743,7 @@ void scan_voltage(void)
                 if (mode_current)
                 {
                     set_current(get_stepi(mode_current), SS_SLOW);
-                    aux_err(AWU_IMMEDIATELY);       // сигнализируем о сбросе
+                    aux_err_now();       // сигнализируем о сбросе
                 }
             }
             return;

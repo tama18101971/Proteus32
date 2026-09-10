@@ -346,7 +346,7 @@ void step_up_ui1(void)
     if (step_user < max_step)
         set_current(step_user + 1u, SS_SLOW);
     else if ((volt_step_ratchet < MAX_STEP) && !aux_is_active())
-        aux_err(AWU_IMMEDIATELY);
+        aux_err_now();
 }
 
 /**
@@ -404,7 +404,7 @@ void on_turbo_ui1(void)
          * pr_step >= max_step флипало после автоснижения яркости
          * по просадке АКБ). */
         if (volt_step_ratchet < MAX_STEP)
-            aux_err(AWU_IMMEDIATELY);
+            aux_err_now();
         set_current(max_step, SS_FAST);
     }
     else
@@ -1274,7 +1274,7 @@ void on_min_ui2(void)
 {
     uint8_t clamped = get_up_mode(CMODE_MIN);
     if (clamped < CMODE_MIN)          /* даже MIN урезан по напряжению */
-        aux_err(AWU_IMMEDIATELY);
+        aux_err_now();
     mode_current = clamped;
     on_mode(mode_current);
 }
@@ -1285,7 +1285,7 @@ void on_xmode_ui2(void)
     uint8_t req = UIF_GET_USE_MEMORY(EE.uif) ? mode_default : EE.default_ui2;
     uint8_t clamped = get_up_mode(req);
     if (clamped < req)                /* запрошенный режим урезан по напряжению */
-        aux_err(AWU_IMMEDIATELY);
+        aux_err_now();
     mode_current = clamped;
     on_mode(mode_current);
 }
@@ -1304,7 +1304,7 @@ void mode_up_ui2(void)
          * wrap на минимум, как раньше. Wrap при здоровой батарее
          * (up_mode == CMODE_MAX) остаётся беззвучным. */
         if (up_mode < CMODE_MAX)
-            aux_err(AWU_IMMEDIATELY);
+            aux_err_now();
         if (mode_current != CMODE_MOON)
             mode_current = CMODE_MIN;
     }
@@ -1353,7 +1353,7 @@ void step_down_ui2(void)
         {
             uint8_t top = get_up_mode(CMODE_MAX);
             if (top < CMODE_MAX)      /* wrap вверх урезан по напряжению */
-                aux_err(AWU_IMMEDIATELY);
+                aux_err_now();
             mode_current = top;
         }
         set_curri(mode_current);
@@ -1377,7 +1377,7 @@ void on_turbo_ui2(void)
          * турбо из OFF, а сравнение с pr_step не срабатывало, когда
          * предыдущим режимом был CMODE_OFF/MOON). */
         if (mode_current < CMODE_TURBO)
-            aux_err(AWU_IMMEDIATELY);
+            aux_err_now();
         set_curri(mode_current);
     }
     else

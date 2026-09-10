@@ -73,7 +73,7 @@ _Static_assert(SYSCLK_HZ >= 8000000u && SYSCLK_HZ <= 48000000u,
  * Отключение лишних флагов экономит Flash (лимит 16128 байт).      */
 
 #define USE_BATTIND         // Индикация уровня заряда батареи вспышками AUX-светодиодов (slot_batt_ind, aux_leds.c)
-#define USE_AUX_ERR         // Индикация ошибки — три короткие красные вспышки (aux_err, aux_leds.c)
+#define USE_AUX_ERR         // Индикация ошибки/блокировки: aux_err + aux_dang (aux_leds.c); включается битом exaux (EE.uif) в меню пользователя
 #define USE_EX_AUX          // Расширенные AUX-режимы: предупреждение о низком напряжении (start_exaux_voltage) и доп. команды в UI
 #define USE_STROBE          // Стробоскоп: режим MODE_STROB, профили strobe_sos[], переключение up_strobe (ui.c)
 #define USE_BLOCK           // Блокировка/лок-аут: MODE_BLOCK/MODE_BLOCK0, временный свет CMODE_MIN, разблокировка (ui.c)

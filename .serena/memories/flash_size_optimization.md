@@ -64,3 +64,23 @@ main_op 220, adc_init 220, adc_read 214, start_aux_beacon 208, slot_batt_ind 194
    нормализовать суффиксы `.constprop.N/.isra.N/.part.N`.
 3. Отсутствие символа функции в lst при живых вызовах = функция инлайнена во все вызовы.
 4. После экспериментов вернуть всё: правки источников, platformio.ini, _bare.py (обязательно!).
+
+## Обновление 2026-09-10 (гейтинг aux_err/aux_dang битом exaux)
+База перед фичей: 16120/16128 (8 Б запаса). Итог: **16124/16128 (4 Б)** — без
+оптимизаций было бы ~+20 Б (OVERFLOW на 12 Б). Проверенные приёмы:
+- **Сентинел в c.li-диапазон**: `AWU_IMMEDIATELY` 0xFF → 0x0C (include/awu.h) — все
+  14 сайтов `li …,255` (4 Б) стали `li …,12` (2 Б). `_Static_assert` держит значение
+  вне preset-enum и ≤31 (c.li range). Применимо только к значениям, которые не
+  сериализуются и не индексируют таблицы (сентинел перехватывается сравнением
+  `delay == AWU_IMMEDIATELY` в start_aux_cmd/start_aux_array, в AWU_set_delay не попадает).
+- **Прямая проверка маски** вместо `UIF_GET_EAUX_ONOFF(EE.uif)` в boolean-контексте:
+  аксессор генерит `srai+andi` (6 Б), `EE.uif & UIF_EAUX_ONOFF_MASK` — один `andi 0x10`
+  (2 Б): −4 Б на функцию.
+- **no-arg обёртка**: `__attribute__((noinline)) aux_err_now(void)` (4 Б вызов) вместо
+  `aux_err(AWU_IMMEDIATELY)` на 9 сайтах (8 Б/сайт) = −16 Б. `noinline` обязателен,
+  иначе GCC инлайнит обёртку и размножит константу; в header под `#else` обязательна
+  заглушка `#define aux_err_now() ((void)0)`, иначе вызовы не соберутся при выключенном флаге.
+- `-Wl,--icf=all`: **не поддержан** riscv-wch-elf ld 12.2.0 (unrecognized option).
+- `-mrelax` в build_flags: 0 Б (16124 → 16124), не включать.
+- Выключение `USE_AUX_ERR` (macro-заглушки aux_err/aux_err_now/aux_dang) даёт
+  **15832 Б** (−292 Б от включённой конфигурации).

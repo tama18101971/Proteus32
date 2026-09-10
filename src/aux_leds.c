@@ -755,18 +755,39 @@ void aux_off(void) {
 /**
  * @brief Индикация ошибки (три короткие красные вспышки)
  * @param delay начальная задержка перед первой вспышкой или AWU_IMMEDIATELY
+ *
+ * Выполняется только при включённом флаге exaux (UIF_EAUX_ONOFF в EE.uif,
+ * меню пользователя); при выключенном — последовательность не запускается.
  */
 void aux_err(awu_tick_t delay) {
-	start_aux_cmd(ERRO_RED, IDM_OTHER, delay);
+	/* Прямая проверка маски (без сдвига/расширения UIF_GET_EAUX_ONOFF):
+	 * на RV32EC это на 4 байта короче, результат тот же — «бит установлен». */
+	if (EE.uif & UIF_EAUX_ONOFF_MASK)
+		start_aux_cmd(ERRO_RED, IDM_OTHER, delay);
 }
-#endif
+
+/**
+ * @brief aux_err() без задержки (AWU_IMMEDIATELY), форма без аргумента.
+ *
+ * noinline: единая обёртка с константой дешевле, чем её материализация
+ * на каждом immediate-сайте вызова.
+ */
+__attribute__((noinline)) void aux_err_now(void) {
+	aux_err(AWU_IMMEDIATELY);
+}
 
 /**
  * @brief Индикация блокировки (одна короткая красная вспышка, DANG_RED)
+ *
+ * Выполняется только при включённом флаге exaux (UIF_EAUX_ONOFF в EE.uif,
+ * меню пользователя); при выключенном — последовательность не запускается.
  */
 void aux_dang(void) {
-	start_aux_cmd(DANG_RED, IDM_OTHER, AWU_IMMEDIATELY);
+	/* Маска напрямую — см. комментарий в aux_err() (экономия 4 Б). */
+	if (EE.uif & UIF_EAUX_ONOFF_MASK)
+		start_aux_cmd(DANG_RED, IDM_OTHER, AWU_IMMEDIATELY);
 }
+#endif
 
 /**
  * @brief Индикация числа (зелёные вспышки или одна красная)

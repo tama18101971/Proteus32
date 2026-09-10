@@ -49,10 +49,14 @@ typedef enum {
 /**
  * @brief Start an AUX command immediately, without an initial AWU delay.
  *
- * This is a sentinel value for start_aux_cmd(); it must not be passed to
- * AWU_set_delay() because it is not a hardware AWU interval.
+ * Sentinel value for start_aux_cmd()/start_aux_array(): it must not be
+ * passed to AWU_set_delay() because it is not a hardware AWU interval.
+ * Small and outside the preset enum on purpose: every `li` of it in call
+ * sites is emitted as a compressed c.li, saving Flash on RV32EC.
  */
-#define AWU_IMMEDIATELY ((awu_tick_t)0xFFU)
+#define AWU_IMMEDIATELY ((awu_tick_t)0x0CU)
+_Static_assert(((int)AWU_16S < (int)AWU_IMMEDIATELY) && ((int)AWU_IMMEDIATELY <= 31),
+               "AWU_IMMEDIATELY must stay outside the preset enum and fit c.li");
 
 //extern volatile uint8_t awu_event; /**< AWU event flag, set in ISR */
 extern volatile uint8_t is_sleep_mode; /**< Non-zero when MCU is in STANDBY */
