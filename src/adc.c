@@ -68,7 +68,7 @@ uint8_t volt_stop_mode = CMODE_TURBO;
  * подтверждённо восстановившимся напряжением (reset_max_step()). */
 uint16_t volt_step_ratchet = MAX_STEP;
 
-#ifdef USE_EX_AUX
+#if USE_EX_AUX
 /** @brief Voltage thresholds for extended aux warning (Vrefint codes, ascending).
  *  ex_lvls[0] = SLOW (3.4 V), [1] = MEDIUM (3.2 V), [2] = FAST (3.0 V). */
 static const uint16_t ex_lvls[3] = {
@@ -682,7 +682,7 @@ void scan_voltage(void)
     }
     voff_count_off = 0;
 
-#ifdef USE_EX_AUX
+#if USE_EX_AUX
     exaux(eff_vcode);
 #endif
 

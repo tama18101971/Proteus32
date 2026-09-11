@@ -64,7 +64,7 @@ static bool ui_select_from_slot;
 static bool hold_guard;          // suppress HOLD repeats until the button is released
 static uint16_t step_tactic;     // яркость моментарки: турбо-память (как в Proteus-IID)
 static uint8_t ui_cfg_idx = 0xFF; // last ui_table_idx the button timing was applied for
-#ifdef USE_BLOCK
+#if USE_BLOCK
 static DRIVER_Mode_t saved_block_mode = MODE_BLOCK;
 #endif
 static uint16_t lock_light_ticks = 0;
@@ -500,7 +500,7 @@ void slot_empty(void) {}
 /** @brief Enter strobe mode (slot). */
 void slot_strobe(void)
 {
-#ifdef USE_STROBE
+#if USE_STROBE
     uint8_t start = on_driver();
     driver_mode = MODE_STROB;
     ps.use_prev = true;
@@ -515,7 +515,7 @@ void slot_strobe(void)
 /** @brief Cycle to next strobe pattern. */
 void up_strobe(void)
 {
-#ifdef USE_STROBE
+#if USE_STROBE
     stop_aux_if(IDM_STROBE, false);
     if (++strobe_index == STROBE_COUNT) strobe_index = 0;
     start_aux_strobe(strobe_index);
@@ -525,7 +525,7 @@ void up_strobe(void)
 /** @brief Turn off strobe and driver. */
 void off_strobe(void)
 {
-#ifdef USE_STROBE
+#if USE_STROBE
     stop_aux_if(IDM_STROBE, false);
     off_driver(false, SS_NO);
     if (ps.use_prev) step_default = ps.pr_step;
@@ -536,7 +536,7 @@ void off_strobe(void)
 /** @brief Enter block (locator beacon) mode. */
 void slot_block(void)
 {
-#ifdef USE_BLOCK
+#if USE_BLOCK
     if (driver_mode == MODE_ON)
         driver_mode = MODE_BLOCK_ON;
     else
@@ -548,7 +548,7 @@ void slot_block(void)
 /** @brief Enter block + beacon combo mode. */
 void slot_block_beacon(void)
 {
-#ifdef USE_BLOCK
+#if USE_BLOCK
     driver_mode = MODE_BLOCK0;
     aux_off();
 #endif
@@ -557,7 +557,7 @@ void slot_block_beacon(void)
 /** @brief Exit block mode, return to normal. */
 void unblock_drv(void)
 {
-#ifdef USE_BLOCK
+#if USE_BLOCK
     lock_light_ticks = 0;
     if (driver_mode == MODE_BLOCK_ON || driver_mode == MODE_BLOCK_LIGHT)
         driver_mode = MODE_ON;
@@ -570,7 +570,7 @@ void unblock_drv(void)
 /** @brief Turn on temporary CMODE_MIN light in lockout mode. */
 void lock_light_on(DRIVER_Mode_t prev_mode)
 {
-#ifdef USE_BLOCK
+#if USE_BLOCK
     saved_block_mode = prev_mode;
     driver_mode = MODE_BLOCK_LIGHT;
     ps.use_prev = false;
@@ -589,7 +589,7 @@ void lock_light_on(DRIVER_Mode_t prev_mode)
 /** @brief Turn off temporary lockout light and restore locked mode. */
 void lock_light_off(void)
 {
-#ifdef USE_BLOCK
+#if USE_BLOCK
     lock_light_ticks = 0;
     off_driver(false, SS_FAST);
     driver_mode = saved_block_mode;
@@ -632,7 +632,7 @@ void reset2def(void)
  * (красная индикация), прежние значения vc/tc не трогаются. */
 void calibration(void)
 {
-#ifdef USE_MENU
+#if USE_MENU
     /* Блокирующая серия: только по клику из меню, вне действия таймерных
      * задач главного цикла (без WDT). 32 пары × (преобразование + 2 мс)
      * ≈ 96 мс — меньше уже существующих блокировок меню (menu_entry_flash
@@ -734,10 +734,10 @@ void save_def_ui2(void)
  *  Engineering menu
  *
  *  Функции объявлены всегда (main_op[]/usr_table ссылаются на них безусловно),
- *  #ifdef USE_MENU гейтит только тело — как slot_batt_ind()/calibration().
+ *  #if USE_MENU гейтит только тело — как slot_batt_ind()/calibration().
  ******************************************************************************/
 
-#ifdef USE_MENU
+#if USE_MENU
 /** @brief Helper to enter a menu sub-mode and flash current value. */
 static void enter_submode(DRIVER_Mode_t mode, uint8_t count)
 {
@@ -762,7 +762,7 @@ static void menu_submode_done(void)
  * Invalid input is reported before any assignment is made, so the previous
  * setting remains intact instead of being truncated by a bit-field.
  */
-#ifdef USE_MENU
+#if USE_MENU
 static bool menu_clicks_valid(uint8_t min_clicks, uint8_t max_clicks)
 {
     if (clicks_count >= min_clicks && clicks_count <= max_clicks)
@@ -776,23 +776,119 @@ static bool menu_clicks_valid(uint8_t min_clicks, uint8_t max_clicks)
 /** @brief Enter moonlight level setting mode (engineering menu). */
 void enter_ml_mode(void)
 {
-#ifdef USE_MENU
+#if USE_MENU
     enter_submode(MODE_MOON_LEVEL, ob_GetMl());
 #endif
 }
 
-/** @brief Set moon level from click count (engineering menu). */
-void ml_clickX(void)
+/**
+ * @brief Handle a click sequence in any settings sub-mode.
+ *
+ * Single handler for all menu sub-modes: each mode validates its click
+ * range, stores the value and finishes the sub-mode.  Invalid input keeps
+ * the previous value and only shows the error indication.
+ */
+void menu_clickX(void)
 {
-#ifdef USE_MENU
-    /* Validated like every other config handler: without the check an
-     * overlong sequence silently raised the moon floor for all outputs. */
-    if (menu_clicks_valid(1u, 15u))
+#if USE_MENU
+    /* Диапазоны допустимых кликов по подрежимам: индекс — смещение от
+     * MODE_MOON_LEVEL, 0 отсекает режимы без ввода этой формы. */
+    static const uint8_t click_max[] = {
+        15u, /* MODE_MOON_LEVEL */
+        0u,  /* MODE_CTK_A */
+        15u, /* MODE_CTK_H */
+        0u,  /* MODE_MAGIC */
+        3u,  /* MODE_UIS */
+        4u,  /* MODE_BM */
+        3u,  /* MODE_BT */
+        2u,  /* MODE_BL */
+        2u,  /* MODE_LM_EN */
+        4u,  /* MODE_LM_TIME */
+#if USE_EX_AUX
+        2u,  /* MODE_EAUX */
+#endif
+    };
+
+    /* The table is positional: keep the enum window and the table length in
+     * lockstep so inserting or reordering a sub-mode fails the build instead
+     * of silently mapping ranges onto the wrong setting. */
+#if USE_EX_AUX
+    _Static_assert(MODE_EAUX - MODE_MOON_LEVEL + 1u == sizeof(click_max),
+                   "click_max[] must cover MODE_MOON_LEVEL..MODE_EAUX");
+#else
+    _Static_assert(MODE_LM_TIME - MODE_MOON_LEVEL + 1u == sizeof(click_max),
+                   "click_max[] must cover MODE_MOON_LEVEL..MODE_LM_TIME");
+#endif
+
+    uint8_t rel = (uint8_t)(driver_mode - MODE_MOON_LEVEL);
+    uint8_t max = (rel < sizeof(click_max)) ? click_max[rel] : 0u;
+
+    if (!menu_clicks_valid(1u, max))
     {
-        ob_SetMl(clicks_count);
-        menu_submode_done();
+        /* The dispatch tables support only UI1=1 and UI2 variants=2/3.  Do not
+         * clamp a bad selection: that would silently choose a different UI. */
+        if (driver_mode == MODE_UIS && ui_select_from_slot)
+        {
+            ui_table_idx = ui_save;
+            ui_select_from_slot = false;
+        }
+        driver_mode = MODE_OFF;
+        return;
     }
-    driver_mode = MODE_OFF;
+
+    switch (driver_mode)
+    {
+    case MODE_MOON_LEVEL:
+        ob_SetMl(clicks_count);
+        break;
+
+    case MODE_CTK_H:
+        USRF_SET_TCALIBR(EE.usr, clicks_count);
+        break;
+
+    case MODE_BM:
+        AUXF_SET_BEACON_MODE(EE.aux, clicks_count - 1u);
+        break;
+
+    case MODE_BT:
+        AUXF_SET_BEACON_TYPE(EE.aux, (uint8_t)(1u << (clicks_count - 1u)));
+        break;
+
+    case MODE_BL:
+        AUXF_SET_BCKLIGHT_COLOR(EE.aux, clicks_count - 1u);
+        break;
+
+    case MODE_UIS:
+        ui_save = clicks_count;
+        if (ui_select_from_slot)
+        {
+            /* A slot selection is not inside the user menu, so apply the choice
+             * immediately instead of waiting for menu_exit().  The normal
+             * 5-second persistence path will save the EE shadow diff. */
+            UIF_SET_UI_INDEX(EE.uif, clicks_count);
+            ui_table_idx = clicks_count;
+            ui_select_from_slot = false;
+        }
+        break;
+
+    case MODE_LM_EN:
+        USRF_SET_LOCK_MIN_EN(EE.usr, (clicks_count == 2u));
+        break;
+
+    case MODE_LM_TIME:
+        USRF_SET_LOCK_MIN_TIME(EE.usr, clicks_count - 1u);
+        break;
+
+#if USE_EX_AUX
+    case MODE_EAUX:
+        UIF_SET_EAUX_ONOFF(EE.uif, (clicks_count == 2u));
+        break;
+#endif
+
+    default:
+        break;
+    }
+    menu_submode_done();
 #endif
 }
 
@@ -801,7 +897,7 @@ void ml_clickX(void)
  * удержание превратилось бы в HOLD уже в новом UI. */
 #define MENU_ENTRY_RELEASE_MS   3000u
 
-#ifdef USE_MENU
+#if USE_MENU
 /** @brief Ждать отпускания кнопки (максимум MENU_ENTRY_RELEASE_MS).
  *  Вызывается после входа/выхода из меню, пока FSM в главном цикле ещё не
  *  тронул событие — иначе удержание попало бы в новый UI как HOLD. */
@@ -832,7 +928,7 @@ static uint8_t ui_index_clamp(uint8_t idx)
  * для которого в таблицах UI1/UI2 нет записей (мёртвый UI до сброса). */
 void menu_exit(void)
 {
-#ifdef USE_MENU
+#if USE_MENU
     ui_select_from_slot = false;
     ui_save = ui_index_clamp(ui_save);
     UIF_SET_UI_INDEX(EE.uif, ui_save);
@@ -895,7 +991,7 @@ __attribute__((noinline)) void menu_entry_flash(uint8_t cnt, uint16_t on_ms, LED
  */
 void enter_menu_at_boot(void)
 {
-#ifdef USE_MENU
+#if USE_MENU
     /* Выбор меню по напряжению (ADC уже готов, см. main). */
     bool is_eng = voltage_ok && (vrefint_adc < MV_GE(ENG_VOLTAGE_MV));
 
@@ -928,7 +1024,7 @@ void enter_menu_at_boot(void)
 /** @brief Enter temperature calibration (chtk) mode. */
 void enter_chtk_mode(void)
 {
-#ifdef USE_MENU
+#if USE_MENU
     enter_submode(MODE_CTK_H, USRF_GET_TCALIBR(EE.usr));
 #endif
 }
@@ -945,19 +1041,6 @@ void ui_invalid_selection(void)
     aux_err(AWU_15MS);
 }
 
-/** @brief Set t_calibr from click count. */
-void chtk_clickX(void)
-{
-#ifdef USE_MENU
-    if (menu_clicks_valid(1u, 15u))
-    {
-        USRF_SET_TCALIBR(EE.usr, clicks_count);
-        menu_submode_done();
-    }
-    driver_mode = MODE_OFF;
-#endif
-}
-
 /*******************************************************************************
  *  User settings: beacon / backlight / UI select / magic slots
  ******************************************************************************/
@@ -965,7 +1048,7 @@ void chtk_clickX(void)
 /** @brief Toggle external aux mode (magic slot). */
 void slot_eauxmode(void)
 {
-#ifdef USE_EX_AUX
+#if USE_EX_AUX
     EE.uif ^= UIF_EAUX_ONOFF_MASK;
     clr_indicator((ind_clr_t)UIF_GET_EAUX_ONOFF(EE.uif));
 #endif
@@ -974,7 +1057,7 @@ void slot_eauxmode(void)
 /** @brief Toggle IPS mode. */
 void slot_ipsmode(void)
 {
-#ifdef USE_MENU
+#if USE_MENU
     EE.usr ^= USRF_ID_PLUS_SID_MASK;
     clr_indicator((ind_clr_t)USRF_GET_ID_PLUS_SID(EE.usr));
 #endif
@@ -983,166 +1066,57 @@ void slot_ipsmode(void)
 /** @brief Enter beacon mode selection (user menu). */
 void enter_bm_mode(void)
 {
-#ifdef USE_MENU
+#if USE_MENU
     enter_submode(MODE_BM, (uint8_t)(AUXF_GET_BEACON_MODE(EE.aux) + 1u));
-#endif
-}
-
-/** @brief Set beacon mode from click count (user menu). */
-void bm_clickX(void)
-{
-#ifdef USE_MENU
-    if (menu_clicks_valid(1u, 4u))
-    {
-        AUXF_SET_BEACON_MODE(EE.aux, clicks_count - 1u);
-        menu_submode_done();
-    }
-    driver_mode = MODE_OFF;
 #endif
 }
 
 /** @brief Enter beacon type selection (user menu). */
 void enter_bt_mode(void)
 {
-#ifdef USE_MENU
+#if USE_MENU
     enter_submode(MODE_BT, (uint8_t)((AUXF_GET_BEACON_TYPE(EE.aux) >> 1) + 1u));
-#endif
-}
-
-/** @brief Set beacon type from click count (user menu). */
-void bt_clickX(void)
-{
-#ifdef USE_MENU
-    if (menu_clicks_valid(1u, 3u))
-    {
-        AUXF_SET_BEACON_TYPE(EE.aux, (uint8_t)(1u << (clicks_count - 1u)));
-        menu_submode_done();
-    }
-    driver_mode = MODE_OFF;
 #endif
 }
 
 /** @brief Enter backlight color selection (user menu). */
 void enter_bl_mode(void)
 {
-#ifdef USE_MENU
+#if USE_MENU
     enter_submode(MODE_BL, (uint8_t)(AUXF_GET_BCKLIGHT_COLOR(EE.aux) + 1u));
-#endif
-}
-
-/** @brief Set backlight color from click count (user menu). */
-void bl_clickX(void)
-{
-#ifdef USE_MENU
-    if (menu_clicks_valid(1u, 2u))
-    {
-        AUXF_SET_BCKLIGHT_COLOR(EE.aux, clicks_count - 1u);
-        menu_submode_done();
-    }
-    driver_mode = MODE_OFF;
 #endif
 }
 
 /** @brief Enter UI selection mode (user menu). */
 void enter_uis_mode(void)
 {
-#ifdef USE_MENU
+#if USE_MENU
     enter_submode(MODE_UIS, ui_save);
-#endif
-}
-
-/** @brief Set UI index from click count (user menu), valid only for 1..3. */
-void uis_clickX(void)
-{
-#ifdef USE_MENU
-    /* The dispatch tables support only UI1=1 and UI2 variants=2/3.  Do not
-     * clamp a bad selection: that would silently choose a different UI. */
-    if (!menu_clicks_valid(1u, 3u))
-    {
-        driver_mode = MODE_OFF;
-        if (ui_select_from_slot)
-        {
-            ui_table_idx = ui_save;
-            ui_select_from_slot = false;
-        }
-        return;
-    }
-    ui_save = clicks_count;
-
-    if (ui_select_from_slot)
-    {
-        /* A slot selection is not inside the user menu, so apply the choice
-         * immediately instead of waiting for menu_exit().  The normal
-         * 5-second persistence path will save the EE shadow diff. */
-        UIF_SET_UI_INDEX(EE.uif, clicks_count);
-        ui_table_idx = clicks_count;
-        ui_select_from_slot = false;
-    }
-    menu_submode_done();
 #endif
 }
 
 /** @brief Enter lockout min-light enable/disable configuration (user menu). */
 void enter_lm_en_mode(void)
 {
-#ifdef USE_MENU
+#if USE_MENU
     enter_submode(MODE_LM_EN, USRF_GET_LOCK_MIN_EN(EE.usr) ? 2u : 1u);
-#endif
-}
-
-/** @brief Set lockout min-light enable/disable from click count (user menu). */
-void lm_en_clickX(void)
-{
-#ifdef USE_MENU
-    if (menu_clicks_valid(1u, 2u))
-    {
-        USRF_SET_LOCK_MIN_EN(EE.usr, (clicks_count == 2u));
-        menu_submode_done();
-    }
-    driver_mode = MODE_OFF;
 #endif
 }
 
 /** @brief Enter lockout min-light duration configuration (user menu). */
 void enter_lm_time_mode(void)
 {
-#ifdef USE_MENU
+#if USE_MENU
     enter_submode(MODE_LM_TIME, (uint8_t)(USRF_GET_LOCK_MIN_TIME(EE.usr) + 1u));
 #endif
 }
 
-/** @brief Set lockout min-light duration from click count (user menu). */
-void lm_time_clickX(void)
-{
-#ifdef USE_MENU
-    if (menu_clicks_valid(1u, 4u))
-    {
-        USRF_SET_LOCK_MIN_TIME(EE.usr, clicks_count - 1u);
-        menu_submode_done();
-    }
-    driver_mode = MODE_OFF;
-#endif
-}
-
-#ifdef USE_EX_AUX
+#if USE_EX_AUX
 /** @brief Enter extended aux voltage warning toggle (user menu). */
 void enter_eaux_mode(void)
 {
-#ifdef USE_MENU
+#if USE_MENU
     enter_submode(MODE_EAUX, UIF_GET_EAUX_ONOFF(EE.uif) ? 2u : 1u);
-#endif
-}
-
-/** @brief Set extended aux voltage warning from click count (user menu). */
-void eaux_clickX(void)
-{
-#ifdef USE_MENU
-    if (menu_clicks_valid(1u, 2u))
-    {
-        UIF_SET_EAUX_ONOFF(EE.uif, (clicks_count == 2u));
-        menu_submode_done();
-    }
-    driver_mode = MODE_OFF;
 #endif
 }
 #endif
@@ -1154,7 +1128,7 @@ void eaux_clickX(void)
 /** @brief Enter magic slot selection mode. */
 void enter_magic_mode(void)
 {
-#ifdef USE_MAGIC_SLOTS
+#if USE_MAGIC_SLOTS
     driver_mode = MODE_MAGIC;
     clr_indicator(IND_GRN);
 #else
@@ -1165,7 +1139,7 @@ void enter_magic_mode(void)
 /** @brief Exit magic slot mode. */
 void exit_magic_mode(void)
 {
-#ifdef USE_MAGIC_SLOTS
+#if USE_MAGIC_SLOTS
     driver_mode = MODE_OFF;
     clr_indicator(IND_GRN);
 #else
@@ -1176,7 +1150,7 @@ void exit_magic_mode(void)
 /** @brief Select a magic slot by current click count. */
 void select_slot(void)
 {
-#ifdef USE_MAGIC_SLOTS
+#if USE_MAGIC_SLOTS
     uint8_t slot = clicks_count - 1u;
     enter_submode((DRIVER_Mode_t)(MODE_SLOT01 + slot), slot_get(slot));
 #else
@@ -1187,7 +1161,7 @@ void select_slot(void)
 /** @brief Store click count into currently selected slot. */
 void slotN_clickX(void)
 {
-#ifdef USE_MAGIC_SLOTS
+#if USE_MAGIC_SLOTS
     uint8_t slot = driver_mode - MODE_SLOT01;
     if (!menu_clicks_valid((uint8_t)SLOT_OP_FIRST,
                            (uint8_t)SLOT_OP_LAST))
@@ -1208,12 +1182,12 @@ void slotN_clickX(void)
 /**
  * @brief Enter quick UI selection from a magic slot.
  *
- * The slot action reuses MODE_UIS/uis_clickX, but switches the dispatcher to
+ * The slot action reuses MODE_UIS/menu_clickX, but switches the dispatcher to
  * the user-settings table for the duration of the 1/2/3-click selection.
  */
 void slot_ui_select(void)
 {
-#ifdef USE_MAGIC_SLOTS
+#if USE_MAGIC_SLOTS
     ui_save = ui_table_idx;
     ui_select_from_slot = true;
     /* A slot may be assigned to a HOLD gesture.  Suppress the first HOLD

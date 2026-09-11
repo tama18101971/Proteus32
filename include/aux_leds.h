@@ -327,7 +327,7 @@ void start_aux_strobe(uint8_t index);
  */
 void start_aux_beacon(void);
 
-#ifdef USE_EX_AUX
+#if USE_EX_AUX
 /**
  * @brief Start extended aux voltage warning blink pattern.
  * @param ex_mode Warning level (VWARNING_FAST/MEDIUM/SLOW).
@@ -378,7 +378,7 @@ void aux_on(void);
  */
 void aux_off(void);
 
-#ifdef USE_AUX_ERR
+#if USE_AUX_ERR
 /**
  * @brief Three short red flashes (error indication).
  * @param delay Initial delay, or AWU_IMMEDIATELY to start without waiting.

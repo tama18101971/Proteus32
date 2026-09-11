@@ -82,7 +82,7 @@ static uint16_t aux_hbl_step;
  * available as the direct-step marker for the battery-indicator HBL phase. */
 #define AUX_HBL_DIRECT_STEP CMODE_NOACTION
 
-#ifdef USE_STROBE
+#if USE_STROBE
 typedef enum {
     STROBE_PROFILE_COMMAND = 0,
     STROBE_PROFILE_ARRAY,
@@ -251,7 +251,7 @@ static inline uint32_t make_count_cmd(LED_Bits_t device, uint8_t flashes, uint8_
 	return MAKE_CMD(device, 0, flashes, AWU_PSC_512, 27, AWU_PSC_1024, 40, brightness0, 0);
 }
 
-#ifdef USE_BATTIND
+#if USE_BATTIND
 /**
  * @brief Формирование команды индикации количества вспышек
  *
@@ -365,7 +365,7 @@ static __attribute__((noinline)) void SetBrightness(LED_Bits_t device, uint8_t b
 	}
 }
 
-#ifdef USE_STROBE
+#if USE_STROBE
 /**
  * @brief Запуск стробоскопа через общий AUX command handler.
  * @param index Strobe profile in range 0..STROBE_COUNT-1.
@@ -682,7 +682,7 @@ void aux_refresh_backlight(void) {
 	smart_off_leds(RED_LED | GRN_LED);
 }
 
-#ifdef USE_EX_AUX
+#if USE_EX_AUX
 /**
  * @brief Запуск индикации предупреждения о напряжении
  * @param ex_mode — скорость моргания (VWARNING_FAST=2с, MEDIUM=4с, SLOW=8с)
@@ -721,7 +721,7 @@ void start_exaux_voltage(WARNING_Fr_t ex_mode) {
  * с количеством вспышек, соответствующих уровню заряда.
  */
 void slot_batt_ind(void) {
-#ifdef USE_BATTIND
+#if USE_BATTIND
 	/* ID+SID uses the DAC as an AUX waveform.  Do not start it over the
 	 * normal driver output; on_driver() handles the opposite transition. */
     if (driver_is_active() && USRF_GET_ID_PLUS_SID(EE.usr))
@@ -751,7 +751,7 @@ void aux_off(void) {
 	start_aux_cmd(INFO_RED, IDM_OTHER, AWU_60MS);
 }
 
-#ifdef USE_AUX_ERR
+#if USE_AUX_ERR
 /**
  * @brief Индикация ошибки (три короткие красные вспышки)
  * @param delay начальная задержка перед первой вспышкой или AWU_IMMEDIATELY

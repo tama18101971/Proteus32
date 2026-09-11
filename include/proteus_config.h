@@ -70,15 +70,33 @@ _Static_assert(SYSCLK_HZ >= 8000000u && SYSCLK_HZ <= 48000000u,
 #define UART_TC_WAIT_LOOPS      SPIN_LOOPS_MS(1)
 
 /* ── Флаги функций (каждый #define добавляет код в прошивку) ──────
- * Отключение лишних флагов экономит Flash (лимит 16128 байт).      */
+ * Отключение лишних флагов экономит Flash (лимит 16128 байт).
+ * Дефолты = 1; для измерения вклада флага без правки исходников:
+ *   PLATFORMIO_BUILD_FLAGS="-DUSE_X=0" pio run
+ * Код использует #if USE_X, поэтому неопределённый макрос тоже
+ * выключает функцию (как раньше #ifdef). */
 
-#define USE_BATTIND         // Индикация уровня заряда батареи вспышками AUX-светодиодов (slot_batt_ind, aux_leds.c)
-#define USE_AUX_ERR         // Индикация ошибки/блокировки: aux_err + aux_dang (aux_leds.c); включается битом exaux (EE.uif) в меню пользователя
-#define USE_EX_AUX          // Расширенные AUX-режимы: предупреждение о низком напряжении (start_exaux_voltage) и доп. команды в UI
-#define USE_STROBE          // Стробоскоп: режим MODE_STROB, профили strobe_sos[], переключение up_strobe (ui.c)
-#define USE_BLOCK           // Блокировка/лок-аут: MODE_BLOCK/MODE_BLOCK0, временный свет CMODE_MIN, разблокировка (ui.c)
-#define USE_MENU            // Инженерное и пользовательское меню (вход с кнопкой при включении, ui.c)
-#define USE_MAGIC_SLOTS     // «Волшебные» слоты: до 31 клика с маской длинного нажатия (ui_table.c, ui.c)
+#ifndef USE_BATTIND
+#define USE_BATTIND 1       // Индикация уровня заряда батареи вспышками AUX-светодиодов (slot_batt_ind, aux_leds.c)
+#endif
+#ifndef USE_AUX_ERR
+#define USE_AUX_ERR 1       // Индикация ошибки/блокировки: aux_err + aux_dang (aux_leds.c); включается битом exaux (EE.uif) в меню пользователя
+#endif
+#ifndef USE_EX_AUX
+#define USE_EX_AUX 1        // Расширенные AUX-режимы: предупреждение о низком напряжении (start_exaux_voltage) и доп. команды в UI
+#endif
+#ifndef USE_STROBE
+#define USE_STROBE 1        // Стробоскоп: режим MODE_STROB, профили strobe_sos[], переключение up_strobe (ui.c)
+#endif
+#ifndef USE_BLOCK
+#define USE_BLOCK 1         // Блокировка/лок-аут: MODE_BLOCK/MODE_BLOCK0, временный свет CMODE_MIN, разблокировка (ui.c)
+#endif
+#ifndef USE_MENU
+#define USE_MENU 1          // Инженерное и пользовательское меню (вход с кнопкой при включении, ui.c)
+#endif
+#ifndef USE_MAGIC_SLOTS
+#define USE_MAGIC_SLOTS 1   // «Волшебные» слоты: до 31 клика с маской длинного нажатия (ui_table.c, ui.c)
+#endif
 
 #if defined(UART_DEBUG) || defined(PRINT_ADC)
     #include "mini_printf.h"

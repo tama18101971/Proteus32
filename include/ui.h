@@ -107,7 +107,7 @@ typedef enum {
     MODE_BL,                /**< Backlight config. */
     MODE_LM_EN,             /**< Config: lockout min-light enable/disable. */
     MODE_LM_TIME,           /**< Config: lockout min-light time. */
-#ifdef USE_EX_AUX
+#if USE_EX_AUX
     MODE_EAUX,              /**< Config: extended aux voltage warning toggle. */
 #endif
 
@@ -452,9 +452,9 @@ void save_def_ui1(void);
 void save_def_ui2(void);
 
 /**
- * @brief Handle click sequence in moonlight menu.
+ * @brief Handle a click sequence in any settings sub-mode.
  */
-void ml_clickX(void);
+void menu_clickX(void);
 
 /**
  * @brief Exit current menu mode.
@@ -467,11 +467,6 @@ void menu_exit(void);
 void enter_chtk_mode(void);
 
 /**
- * @brief Handle click sequence in thermal calibration menu.
- */
-void chtk_clickX(void);
-
-/**
  * @brief Show an invalid user-menu selection without changing settings.
  */
 void ui_invalid_selection(void);
@@ -482,19 +477,9 @@ void ui_invalid_selection(void);
 void enter_bm_mode(void);
 
 /**
- * @brief Handle click sequence in beacon mode menu.
- */
-void bm_clickX(void);
-
-/**
  * @brief Enter beacon time config.
  */
 void enter_bt_mode(void);
-
-/**
- * @brief Handle click sequence in beacon time menu.
- */
-void bt_clickX(void);
 
 /**
  * @brief Enter backlight config.
@@ -502,40 +487,20 @@ void bt_clickX(void);
 void enter_bl_mode(void);
 
 /**
- * @brief Handle click sequence in backlight menu.
- */
-void bl_clickX(void);
-
-/**
  * @brief Enter lockout min-light enable/disable config.
  */
 void enter_lm_en_mode(void);
-
-/**
- * @brief Handle click sequence in lockout min-light enable/disable menu.
- */
-void lm_en_clickX(void);
 
 /**
  * @brief Enter lockout min-light duration config.
  */
 void enter_lm_time_mode(void);
 
-/**
- * @brief Handle click sequence in lockout min-light duration menu.
- */
-void lm_time_clickX(void);
-
-#ifdef USE_EX_AUX
+#if USE_EX_AUX
 /**
  * @brief Enter extended aux voltage warning toggle (user menu).
  */
 void enter_eaux_mode(void);
-
-/**
- * @brief Handle click sequence in extended aux voltage warning menu.
- */
-void eaux_clickX(void);
 #endif
 
 /**
@@ -596,11 +561,6 @@ void step_down_ui2(void);
  * @brief Enter UI select mode.
  */
 void enter_uis_mode(void);
-
-/**
- * @brief Handle click sequence in UI select menu.
- */
-void uis_clickX(void);
 
 /**
  * @brief Reset to factory defaults.

@@ -15,7 +15,7 @@
 #include "array.h"
 #include "ob.h"
 
-#ifdef USE_EX_AUX
+#if USE_EX_AUX
 #define MAIN_OP_COUNT (EAUX_CLICKX + 1)
 #else
 #define MAIN_OP_COUNT (LM_TIME_CLICKX + 1)
@@ -39,7 +39,7 @@ static bool block_click_pending;
  */
 static bool has_block_click_slot(void)
 {
-#ifdef USE_MAGIC_SLOTS
+#if USE_MAGIC_SLOTS
     for (uint8_t slot = 2u; slot < SLOTS_COUNT; slot += 2u)
     {
         if (slot_get(slot) == SLOT_BLOCK)
@@ -172,7 +172,7 @@ static const dispatch_t usr_table[] = {
     { MODE_OFF, 6, 0, false, true,  ENTER_LM_EN_MODE },     /* 6 кликов: вкл/выкл подсветки блокировки (1..2) */
     { MODE_OFF, 7, 0, false, true,  ENTER_LM_TIME_MODE },   /* 7 кликов: время подсветки блокировки (1..4) */
     { MODE_OFF, 8, 0, false, true,  ENTER_CHTK_MODE },      /* 8 кликов: калибровка температуры (EE.usr.t_calibr, 1..15) */
-#ifdef USE_EX_AUX
+#if USE_EX_AUX
     { MODE_OFF, 9, 0, false, true,  ENTER_EAUX_MODE },      /* 9 кликов: ext aux voltage warning (EE.uif.eaux_onoff, 1..2) */
 #endif
     { MODE_OFF, 0, 0, true,  false, MENU_EXIT },
@@ -185,7 +185,7 @@ static const dispatch_t usr_table[] = {
     { MODE_LM_EN,   0, 0, false, true,  LM_EN_CLICKX },
     { MODE_LM_TIME, 0, 0, false, true,  LM_TIME_CLICKX },
     { MODE_CTK_H,   0, 0, false, true,  CHTK_CLICKX },
-#ifdef USE_EX_AUX
+#if USE_EX_AUX
     { MODE_EAUX,    0, 0, false, true,  EAUX_CLICKX },
 #endif
 
@@ -201,19 +201,17 @@ static const dispatch_t usr_table[] = {
  * (ENG_MENU_IND/USR_MENU_IND; назначаются только при загрузке из
  * enter_menu_at_boot). Ячейки [0] и [4] пусты — такие idx отсекаются
  * проверкой в ui_table_lookup. */
-static const dispatch_t *const ui_table_of[7] = {
-    [1] = ui1_table,
-    [2] = ui2_table,
-    [3] = ui2_table,
-    [5] = eng_table,
-    [6] = usr_table,
-};
-static const uint8_t ui_table_size[7] = {
-    [1] = UI1_TABLE_SIZE,
-    [2] = UI2_TABLE_SIZE,
-    [3] = UI2_TABLE_SIZE,
-    [5] = ENG_TABLE_SIZE,
-    [6] = USR_TABLE_SIZE,
+typedef struct {
+    const dispatch_t *tab;
+    uint8_t n;
+} ui_table_desc_t;
+
+static const ui_table_desc_t ui_tables[7] = {
+    [1] = { ui1_table, UI1_TABLE_SIZE },
+    [2] = { ui2_table, UI2_TABLE_SIZE },
+    [3] = { ui2_table, UI2_TABLE_SIZE },
+    [5] = { eng_table, ENG_TABLE_SIZE },
+    [6] = { usr_table, USR_TABLE_SIZE },
 };
 
 /*******************************************************************************
@@ -222,7 +220,7 @@ static const uint8_t ui_table_size[7] = {
 
 static uint8_t execute_slot(uint8_t slot)
 {
-#ifdef USE_MAGIC_SLOTS
+#if USE_MAGIC_SLOTS
     uint8_t op_idx = slot_get(slot);
     if (op_idx < SLOT_OP_FIRST || op_idx > SLOT_OP_LAST)
         op_idx = SLOT_OP_EMPTY;
@@ -349,7 +347,13 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout)
 
     /* Sub-modes HOLD -> MENU_EXIT (MODE_EAUX sits after the contiguous
      * UIS..LM_TIME range and needs its own check). */
-    if (evt->type == BTN_EVT_HOLD && ((mode >= MODE_UIS && mode <= MODE_LM_TIME) || mode == MODE_CTK_H || mode == MODE_MOON_LEVEL || mode == MODE_EAUX))
+    if (evt->type == BTN_EVT_HOLD &&
+        ((mode >= MODE_UIS && mode <= MODE_LM_TIME) ||
+         mode == MODE_CTK_H || mode == MODE_MOON_LEVEL
+#if USE_EX_AUX
+         || mode == MODE_EAUX
+#endif
+        ))
     {
         menu_exit();
         return 1;
@@ -376,11 +380,11 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout)
         }
     }
 
-    if (idx > 6u || ui_table_of[idx] == NULL)
+    if (idx > 6u || ui_tables[idx].tab == NULL)
         return 0;
 
-    const dispatch_t *table = ui_table_of[idx];
-    const uint8_t size = ui_table_size[idx];
+    const dispatch_t *table = ui_tables[idx].tab;
+    const uint8_t size = ui_tables[idx].n;
 
     for (uint8_t i = 0; i < size; i++)
     {
@@ -436,21 +440,21 @@ void (* const main_op[])(void) = {
     /*24*/ save_def_ui1,
     /*25*/ save_def_ui2,
 
-    /*26*/ ml_clickX,
+    /*26*/ menu_clickX,
 
     /*27*/ menu_exit,
 
     /*28*/ enter_chtk_mode,
-    /*29*/ chtk_clickX,
+    /*29*/ menu_clickX,
 
     /*30*/ enter_bm_mode,
-    /*31*/ bm_clickX,
+    /*31*/ menu_clickX,
 
     /*32*/ enter_bt_mode,
-    /*33*/ bt_clickX,
+    /*33*/ menu_clickX,
 
     /*34*/ enter_bl_mode,
-    /*35*/ bl_clickX,
+    /*35*/ menu_clickX,
 
     /*36*/ enter_magic_mode,
 
@@ -466,17 +470,17 @@ void (* const main_op[])(void) = {
     mode_down_ui2,
     step_down_ui2,
     enter_uis_mode,
-    uis_clickX,
+    menu_clickX,
     reset2def,
 
     /*49..52*/
     enter_lm_en_mode,
-    lm_en_clickX,
+    menu_clickX,
     enter_lm_time_mode,
-    lm_time_clickX,
-#ifdef USE_EX_AUX
+    menu_clickX,
+#if USE_EX_AUX
     /*53..54*/
     enter_eaux_mode,
-    eaux_clickX,
+    menu_clickX,
 #endif
 };
