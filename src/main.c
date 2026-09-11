@@ -304,6 +304,15 @@ int main(void)
                 }
                 else
                 {
+                    /* Strobe owns the DAC and bypasses scan_voltage(), so the
+                     * 2.7 V deep-discharge latch is explicitly restored here:
+                     * a read-only battery sample (no DAC writes) aborts the
+                     * strobe into the permanent protective state. */
+                    if (is_aux_mode(IDM_STROBE) && strobe_voltage_low())
+                    {
+                        off_aux_cmd(false);
+                        down_forever();
+                    }
                     if (beacon_is_cycle_start())
                     {
                         beacon_battery_check();

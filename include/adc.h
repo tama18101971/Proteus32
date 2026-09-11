@@ -31,7 +31,10 @@
  * @brief Perform one verified ADC measurement cycle (NTC + Vrefint).
  *
  * Reads NTC temperature channel and Vrefint. Global values are updated only
- * when both conversions complete and Vrefint is usable.
+ * when both conversions complete and Vrefint is usable. Vrefint codes above
+ * 512 (vbat below 2.4 V) are deliberately committed as valid deep-discharge
+ * samples so the four-sample undervoltage latch can fire (B4); only an
+ * implausibly high voltage (code below 240) is rejected.
  * @return true when a fresh pair was committed, false on acquisition failure.
  */
 bool adc_read(void);
@@ -114,9 +117,9 @@ extern bool voltage_ok;
 
 /**
  * @brief Пересчёт кода Vrefint в милливольты (точно, без libgcc).
- * @param vrefint_adc Код Vrefint. Сырая выборка находится в диапазоне
- *                    256..512; после калибровочного сдвига vc эффективный
- *                    код для диагностического вывода может быть 234..530.
+ * @param vrefint_adc Код Vrefint. Сырая выборка обычно 240..512; при
+ *                    глубоком разряде (< 2.4 В, B4) код доходит до 1023.
+ *                    Диагностический вывод дополнительно сдвигает код на vc.
  * @return Напряжение в мВ (floor(1228800/adc)). 0 при adc==0.
  * Используется только для отладочного вывода — горячий путь в кодах.
  */
@@ -238,6 +241,19 @@ uint16_t ratchet_max_step(void);
  * recovery threshold; this does not disable the low-voltage step-down logic.
  */
 void reset_max_step(void);
+
+/**
+ * @brief Battery protection for the strobe driver (no DAC writes).
+ *
+ * Read-only NTC/Vrefint sample on each AWU wake, with the same four-sample
+ * confirmation as scan_voltage(). Returns true after four consecutive
+ * valid sub-2.7 V readings (including deep-discharge codes above 512,
+ * vbat < 2.4 V) so the caller can abort the strobe and enter the
+ * protective state. Re-initialises and stops the ADC because main()
+ * powers it down for STANDBY.
+ * @return true when the strobe must be stopped.
+ */
+bool strobe_voltage_low(void);
 
 /**
  * @brief Irreversible shutdown: unpower load, mask interrupts, enter permanent STANDBY.

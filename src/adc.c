@@ -341,10 +341,13 @@ bool adc_read(void)
     uint16_t new_raw_temperature_adc = ADC1->RDATAR;
     uint16_t vrefint_raw = ADC1->IDATAR1;
 
-    /* A 1S cell should produce roughly 2.4..5.1 V in this measurement path,
-     * corresponding to Vrefint codes 240..512.  Reject implausible raw data
-     * before it can seed or contaminate the EMA or bypass undervoltage cut-off. */
-    if ((vrefint_raw < 240u) || (vrefint_raw > 512u))
+    /* A 1S cell produces roughly 2.4..5.1 V in this measurement path
+     * (Vrefint codes 240..512).  Codes above 512 are a genuinely deep
+     * discharged cell (B4): commit them so the four-sample undervoltage
+     * latch (scan_voltage / strobe_voltage_low) can fire instead of being
+     * silently discarded.  Only implausibly high voltages (code below 240)
+     * are rejected here. */
+    if (vrefint_raw < 240u)
         return false;
 
     /* Commit all values together so voltage_ok never publishes a new filtered
@@ -666,11 +669,12 @@ void scan_voltage(void)
     /* 1. Общая защита от глубокого разряда (< 2.70 В) для всех UI.
      * Сырой проверенный отсчёт исключает задержку/залипание EMA; четыре
      * последовательных попадания ниже порога подавляют одиночный шум.
-     * Отсечение выполняется ТОЛЬКО на валидной выборке (voltage_ok): при
-     * сбое/таймауте АЦП adc_eff_raw_vcode() возвращает код-сентинел,
-     * который иначе ложно трактовался бы как критический разряд и
-     * необратимо выключал устройство. Безопасность при сбое АЦП
-     * обеспечивает scan_limiters_fault() (термо-фейл -> гашение луча). */
+     * Отсечение выполняется ТОЛЬКО на валидной выборке (voltage_ok):
+     * таймаут/сбой АЦП даёт код-сентинел, который иначе ложно
+     * трактовался бы как критический разряд. Реально низкие коды
+     * (>512, vbat < 2.4 В) теперь валидны (B4) и наравне с 2.4..2.7 В
+     * запускают защёлку. Безопасность при сбое АЦП обеспечивает
+     * scan_limiters_fault() (термо-фейл -> гашение луча). */
     if (voltage_ok && (cutoff_vcode >= (int32_t)swt_cut[0]))
     {
         if (++voff_count_off > 3u)
@@ -751,6 +755,48 @@ void scan_voltage(void)
 
         voff_count = 0;
     }
+}
+
+/**
+ * @brief Battery-only protection for the strobe driver (no DAC writes).
+ *
+ * The strobe FSM owns the DAC waveform, so scan_voltage() deliberately
+ * bypasses MODE_STROB and the 2.7 V deep-discharge latch never runs while
+ * a strobe is active.  This guard restores only the battery half of that
+ * safety net: it takes a read-only NTC/Vrefint sample and, after four
+ * consecutive valid sub-2.7 V readings (including the deep-discharge
+ * codes above 512, vbat < 2.4 V), tells the caller to abort the strobe.
+ * It never touches the DAC, so the pulse shape is unaffected.
+ *
+ * main() stops the ADC before every STANDBY entry, so the guard
+ * re-initialises it for the measurement and stops it again before
+ * returning; otherwise a clocked ADC would leak current for the whole
+ * strobe operation.
+ *
+ * @return true when the strobe must be stopped (deep discharge).
+ */
+bool strobe_voltage_low(void)
+{
+    static uint8_t low_count = 0;
+
+    adc_init();
+    bool ok = adc_read();
+    adc_stop();
+
+    if (ok && (adc_eff_raw_vcode() >= (int32_t)swt_cut[0]))
+    {
+        if (++low_count > 3u)
+        {
+            low_count = 0;
+            return true;
+        }
+    }
+    else
+    {
+        low_count = 0;
+    }
+
+    return false;
 }
 
 /** @brief Get battery indicator flash count (0-6) based on Vbat (в кодах Vrefint). */
