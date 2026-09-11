@@ -19,7 +19,8 @@
  * Return codes: I2C_OK (0) on success, I2C_NACK (1) otherwise. The compact
  * i2c driver (include/i2c.h) collapses every failure — NACK from the DAC
  * (unpowered/missing), bus error or timeout — into I2C_NACK (checks are
- * `!= I2C_OK`).
+ * `!= I2C_OK`). On failure dac7571_set_voltage() reinitialises the I2C
+ * block once (i2c_init()), so a bus timeout cannot wedge later writes.
  */
 
 #ifndef DAC_H
@@ -48,6 +49,8 @@ void dac_pwrpin_init(void);
  *
  * Re-enables GPIOD and drives PD0 high without the low pulse performed by
  * dac_pwrpin_init().  This preserves DAC supply during an AWU-driven strobe.
+ * The value cache is invalidated because the DAC rail may have dropped while
+ * PD0 floated in STANDBY (hardware-dependent); the next write is forced.
  */
 void dac_pwrpin_restore(void);
 

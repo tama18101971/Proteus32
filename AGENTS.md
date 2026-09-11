@@ -49,13 +49,13 @@ pio device monitor               460800 8N1
 - **Button FSM** (`button.c/h`): 160 Hz debounced FSM emitting `btn_evt_t` {PRESSED, RELEASED, CLICK_SEQ, HOLD}. Multi-click up to 7 (31 in menus) with per-click long-press bitmask.
 - **UI dispatch** (`ui_table.c/h`): `dispatch_t` maps `(driver_mode + btn_evt_t)` → actions via `main_op[]` (49 entries). One table per UI (UI1/UI2/eng-menu/user-menu). `select_slot()`/`slotN_clickX()` shared for all 10 magic slots — index from `driver_mode - MODE_SLOT01`.
 - **Soft start** (`soft_start.c`): step-based. `ss_init(target, current, speed)`, `ss_scan()` @160 Hz. Speeds `SS_NO=0, SS_SLOW=1, SS_FAST=7`. `out_set_stc()` → `OFF_POWER()` at 0.
-- **DAC** (`dac.c/h`): external DAC7571 (12-bit) via I2C. PC1=SDA, PC2=SCL, PD0=pwr ctrl (`dac_pwrpin_on/off`). Maps 9-bit `step` → 12-bit DAC via cubic gamma curve `(step^3) >> 15`.
+- **DAC** (`dac.c/h`): external DAC7571 (12-bit) via I2C. PC1=SDA, PC2=SCL, PD0=pwr ctrl (`dac_pwrpin_on/off`). Maps 9-bit `step` → 12-bit DAC via cubic gamma curve `(step^3) >> 15`. On transaction failure `dac7571_set_voltage()` reinitialises I2C once (`i2c_init()`), so a bus timeout cannot wedge brightness writes (audit B1; I2C timeout paths also emit STOP).
 - **LED GPIO** (`led_gpio.c/h`): direct-drive (no PWM). PC4=green, PC7=red (push-pull), PC6=red low-side (pull-up). `on_red_h/l`, `off_red` — pin mode between output-high/input-pullup/output-low for brightness.
 
 ### Thermal limiter (`thermal_limiter.c/h`, config in `src/limiters.c`, tuning guide in `TUNING.md`)
 
 - Continuous PI controller with linear $P + I$ summing and **Equilibrium Hold Band** ($T_{\text{set}} - t_{\text{anticipate\_offset}} \le T < T_{\text{set}}$) holding $\Delta I = 0$ to eliminate hunting/oscillations.
-- Fixed-point EMA temperature filter (scale $\times 32$, 5 fractional bits) with symmetric rounding to eliminate integer truncation bias ($F == T$ at steady state).
+- Fixed-point EMA temperature filter (scale $\times 32$, 5 fractional bits). The `diff >> shift` increment truncates toward $-\infty$: positive residual gaps below $2^{\text{shift}}$ contribute 0, negative ones always contribute $\le -1$, so the filter settles up to $2^{\text{filter\_shift}} - 1$ fp-LSB (filter_shift = 4 → ≤15/32 ADC code) below the true value and converges exactly from above — one-sided cold-side bias, anti-hunting-safe; integer `filtered_temp` stays unbiased. Kept instead of symmetric rounding to save Flash (audit C5).
 - Fixed-point integral accumulator (scale $\times 64$, 6 fractional bits) with dynamic anti-windup clamping.
 - Slew rate filter (`max_drop_rate`, `max_recovery_rate`) ensuring flicker-free transitions at 30 Hz.
 

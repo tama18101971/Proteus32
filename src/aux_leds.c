@@ -161,6 +161,11 @@ static void start_aux_array(const uint32_t *pArray, awu_tick_t delay) {
 		 * после его истечения. */
 		(void)handle_aux();
 	} else {
+		/* AWU-регистры перепрограммируются только при AWUEN=0: перезапуск
+		 * поверх ещё активной команды (off_aux_cmd(false) AWU не гасит)
+		 * без AWU_OFF() давал бы разовый сбой тайминга следующего
+		 * пробуждения. Симметрично handle_aux(). */
+		AWU_OFF();
 		AWU_set_delay(delay);
 		AWU_ON();
 	}
@@ -336,6 +341,7 @@ static void start_aux_cmd(uint32_t command, IDM_Type_t idm_mode, awu_tick_t dela
 		aux_ctl.period = PER_FIRST;
 		(void)handle_aux();
 	} else {
+		AWU_OFF(); /* см. комментарий в start_aux_array() */
 		AWU_set_delay(delay);
 		AWU_ON();
 	}

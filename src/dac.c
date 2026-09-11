@@ -15,9 +15,12 @@
  * Power control: PD0 (GPIOD) switches DAC supply.
  * On power-off DAC enters Hi-Z (power saving).
  *
- * Error handling: dac_write() checks ACK on every step.
- * If any step gets NACK (DAC unpowered or missing), transaction
- * aborts immediately and returns I2C_NACK.
+ * Error handling: every step checks ACK/NACK. On any failure (DAC unpowered
+ * or missing, bus error, timeout) the transaction aborts and returns
+ * I2C_NACK. A timeout can leave the I2C block stuck mid-transfer, so on
+ * failure the peripheral is reinitialised once (i2c_init(): SWRST +
+ * reconfiguration) and the value cache stays invalid — the next write
+ * retries the transaction on the recovered bus.
  */
 
 #include "dac.h"
@@ -47,9 +50,18 @@ void dac_pwrpin_init(void)
  *
  * Re-enables GPIOD and drives PD0 high without the low pulse performed by
  * dac_pwrpin_init().  This preserves DAC supply during an AWU-driven strobe.
+ *
+ * The value cache is invalidated unconditionally: in STANDBY PD0 is Hi-Z, so
+ * whether the external DAC rail survives is hardware-dependent (needs scope
+ * verification).  If the DAC7571 lost power (POR -> register 0), a stale cache
+ * would skip the rewrite and the beam would stay dark until the next
+ * brightness change.  The cost when the rail survives is one redundant I2C
+ * write per wake (~100 µs) — negligible against AWU intervals.
  */
 void dac_pwrpin_restore(void)
 {
+    last_voltage = 0xFFFFu;
+
     RCC->APB2PCENR |= (1 << 5); /* GPIOD clock enable (bit 5) */
 
     /* Keep the output latch high before switching PD0 back to output mode.
@@ -115,7 +127,15 @@ uint8_t dac7571_set_voltage(uint16_t data_12bit)
         i2c_write_byte(byte_msb) != I2C_OK ||
         i2c_write_byte(byte_lsb) != I2C_OK ||
         i2c_stop() != I2C_OK)
+    {
+        /* Таймаут может оставить I2C в середине передачи: последующие
+         * i2c_start() падали бы по таймауту до ближайшего i2c_init()
+         * (яркость «залипала»). Восстанавливаем периферию однократно
+         * (SWRST + перенастройка); кэш уже инвалидирован, следующая
+         * запись повторит транзакцию по восстановленной шине. */
+        i2c_init(0u);
         return I2C_NACK;
+    }
 
     last_voltage = data_12bit;
     return I2C_OK;

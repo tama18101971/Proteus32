@@ -50,7 +50,14 @@ uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
         state->flags           |= THERMAL_FLAG_INITIALIZED;
     }
 
-    /* c) Fixed-Point EMA Low-Pass Filter (eliminates integer truncation bias) */
+    /* c) Fixed-point EMA low-pass filter.  The increment uses a plain arithmetic
+     * shift: `diff >> shift` truncates toward -infinity, so a positive residual
+     * gap below 2^shift contributes 0 while any negative gap contributes <= -1:
+     * the filter settles up to 2^shift - 1 fp-LSB (filter_shift = 4 -> <= 15/32
+     * ADC code) below the true temperature and converges exactly from above.
+     * The one-sided cold-side bias is anti-hunting-safe for the limiter, and
+     * integer filtered_temp stays unbiased (+16 rounding exceeds the 15 fp-LSB
+     * worst case).  Kept instead of symmetric rounding to save Flash (C5). */
     int16_t diff = (int16_t)(((int16_t)t_raw << THERMAL_TEMP_FP_SHIFT) - state->filtered_temp_fp);
     state->filtered_temp_fp = (int16_t)(state->filtered_temp_fp + (diff >> config->filter_shift));
     state->filtered_temp    = (int16_t)((state->filtered_temp_fp + (1 << (THERMAL_TEMP_FP_SHIFT - 1u))) >> THERMAL_TEMP_FP_SHIFT);

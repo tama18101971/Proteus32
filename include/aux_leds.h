@@ -462,6 +462,10 @@ bool handle_aux(void);
  * AWU windows are rounded to the nearest integer.  The limits below select
  * the finest practical prescaler over each monotonic time range while
  * keeping this macro small enough for the embedded compiler to expand.
+ * Each boundary is the exact maximum period representable by that
+ * prescaler's window 63 (psc*63/128 ms), so the 6-bit window is never
+ * clamped from 64 down to 63 — the clamp shortened the period by up to
+ * ~1.5 % (audit C4; boundaries fixed 2048→2016, 5160→5040).
  * This is a monotonic approximation, not a full search for the globally
  * smallest absolute error: the finer prescaler remains selected until its
  * 6-bit window reaches the useful end of its range.  Ties at a boundary
@@ -476,8 +480,8 @@ bool handle_aux(void);
 	 (ms) <= 254UL   ? AWU_PSC_512   : \
 	 (ms) <= 508UL   ? AWU_PSC_1024  : \
 	 (ms) <= 1016UL  ? AWU_PSC_2048  : \
-	 (ms) <= 2048UL  ? AWU_PSC_4096  : \
-	 (ms) <= 5160UL  ? AWU_PSC_10240 : \
+	 (ms) <= 2016UL  ? AWU_PSC_4096  : \
+	 (ms) <= 5040UL  ? AWU_PSC_10240 : \
 	                  AWU_PSC_61440)
 
 /**
@@ -489,6 +493,13 @@ bool handle_aux(void);
  */
 #define AWU_MS_WIN(ms) \
 	AWU_MS_WIN_FOR((ms), AWU_PSC_VALUE(AWU_MS_PSC(ms)))
+
+/* Pin the C4 boundaries: window 63 must fit exactly at each edge, and the
+ * next millisecond above it must switch to the coarser prescaler. */
+_Static_assert(AWU_MS_PSC(2016) == AWU_PSC_4096 && AWU_MS_PSC(2017) == AWU_PSC_10240 &&
+		AWU_MS_PSC(5040) == AWU_PSC_10240 && AWU_MS_PSC(5041) == AWU_PSC_61440 &&
+		AWU_MS_WIN(2016) == 63UL && AWU_MS_WIN(5040) == 63UL,
+		"AWU_MS_PSC window-clamp boundaries changed");
 
 /**
  * @brief MAKE_CMD с миллисекундами вместо psc/win
