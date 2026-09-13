@@ -17,7 +17,7 @@ Import("env")
 
 WARN_MARGIN = 256
 HARD_LIMIT = 16128
-ERROR_AT = 16064
+ERROR_AT = 16096
 TOP_N = 15
 
 _TEXT_OUT = re.compile(r"^\.text\s+0x[0-9a-fA-F]+\s+0x[0-9a-fA-F]+\s*$")

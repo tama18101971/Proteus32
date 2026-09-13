@@ -15,15 +15,15 @@
 #define UIF_USE_MEMORY_MASK   (0x01u << UIF_USE_MEMORY_SHIFT)
 #define UIF_EAUX_ONOFF_SHIFT  4u
 #define UIF_EAUX_ONOFF_MASK   (0x01u << UIF_EAUX_ONOFF_SHIFT)
-#define UIF_RESERVED_SHIFT    5u
-#define UIF_RESERVED_MASK     (0x07u << UIF_RESERVED_SHIFT)
+#define UIF_UI2_SHIFT         5u
+#define UIF_UI2_MASK          (0x07u << UIF_UI2_SHIFT)
 
-_Static_assert((UIF_UI_INDEX_MASK & (UIF_OFF_BCKL_MASK | UIF_USE_MEMORY_MASK | UIF_EAUX_ONOFF_MASK | UIF_RESERVED_MASK)) == 0u &&
-               (UIF_OFF_BCKL_MASK & (UIF_USE_MEMORY_MASK | UIF_EAUX_ONOFF_MASK | UIF_RESERVED_MASK)) == 0u &&
-               (UIF_USE_MEMORY_MASK & (UIF_EAUX_ONOFF_MASK | UIF_RESERVED_MASK)) == 0u &&
-               (UIF_EAUX_ONOFF_MASK & UIF_RESERVED_MASK) == 0u,
+_Static_assert((UIF_UI_INDEX_MASK & (UIF_OFF_BCKL_MASK | UIF_USE_MEMORY_MASK | UIF_EAUX_ONOFF_MASK | UIF_UI2_MASK)) == 0u &&
+               (UIF_OFF_BCKL_MASK & (UIF_USE_MEMORY_MASK | UIF_EAUX_ONOFF_MASK | UIF_UI2_MASK)) == 0u &&
+               (UIF_USE_MEMORY_MASK & (UIF_EAUX_ONOFF_MASK | UIF_UI2_MASK)) == 0u &&
+               (UIF_EAUX_ONOFF_MASK & UIF_UI2_MASK) == 0u,
                "UIF fields overlap");
-_Static_assert((UIF_UI_INDEX_MASK | UIF_OFF_BCKL_MASK | UIF_USE_MEMORY_MASK | UIF_EAUX_ONOFF_MASK | UIF_RESERVED_MASK) == 0xFFu,
+_Static_assert((UIF_UI_INDEX_MASK | UIF_OFF_BCKL_MASK | UIF_USE_MEMORY_MASK | UIF_EAUX_ONOFF_MASK | UIF_UI2_MASK) == 0xFFu,
                "UIF fields leave a gap");
 
 /* =========================================================================
@@ -80,8 +80,14 @@ _Static_assert(CFG_GET_FIELD(CFG_SET_FIELD(0, AUXF_BEACON_MODE_MASK, AUXF_BEACON
 _Static_assert(CFG_GET_FIELD(CFG_SET_FIELD(0, AUXF_BEACON_TYPE_MASK, AUXF_BEACON_TYPE_SHIFT, 7), AUXF_BEACON_TYPE_MASK, AUXF_BEACON_TYPE_SHIFT) == 7, "AUXF beacon_type round-trip");
 _Static_assert(CFG_GET_FIELD(CFG_SET_FIELD(0, USRF_TCALIBR_MASK, USRF_TCALIBR_SHIFT, 15), USRF_TCALIBR_MASK, USRF_TCALIBR_SHIFT) == 15, "USRF t_calibr round-trip");
 _Static_assert(CFG_GET_FIELD(CFG_SET_FIELD(0, USRF_LOCK_MIN_TIME_MASK, USRF_LOCK_MIN_TIME_SHIFT, 3), USRF_LOCK_MIN_TIME_MASK, USRF_LOCK_MIN_TIME_SHIFT) == 3, "USRF lock_min_time round-trip");
+_Static_assert(CFG_GET_FIELD(CFG_SET_FIELD(0, UIF_UI2_MASK, UIF_UI2_SHIFT, 7), UIF_UI2_MASK, UIF_UI2_SHIFT) == 7, "UIF ui2 round-trip");
+_Static_assert(((uint16_t)((uint8_t)(510u >> 1) << 1)) == 510u, "ui1 step>>1 quantisation round-trip");
 
 /* Field Accessors */
+/* default UI1: 9-битный шаг 0..511 хранится как step>>1 (8 бит).
+ * Потеря одного шага (<=0.2% яркости) окупает запись 16 Б. */
+#define CFG_GET_UI1(cfg)              ((uint16_t)((uint16_t)((cfg).ui1) << 1))
+#define CFG_SET_UI1(cfg, val)         ((cfg).ui1 = (uint8_t)((uint16_t)(val) >> 1))
 #define UIF_GET_UI_INDEX(uif)         CFG_GET_FIELD(uif, UIF_UI_INDEX_MASK, UIF_UI_INDEX_SHIFT)
 #define UIF_GET_OFF_BCKL(uif)         CFG_GET_FIELD(uif, UIF_OFF_BCKL_MASK, UIF_OFF_BCKL_SHIFT)
 #define UIF_GET_USE_MEMORY(uif)       CFG_GET_FIELD(uif, UIF_USE_MEMORY_MASK, UIF_USE_MEMORY_SHIFT)
@@ -91,6 +97,9 @@ _Static_assert(CFG_GET_FIELD(CFG_SET_FIELD(0, USRF_LOCK_MIN_TIME_MASK, USRF_LOCK
 #define UIF_SET_OFF_BCKL(uif, val)    ((uif) = CFG_SET_FIELD(uif, UIF_OFF_BCKL_MASK, UIF_OFF_BCKL_SHIFT, val))
 #define UIF_SET_USE_MEMORY(uif, val)  ((uif) = CFG_SET_FIELD(uif, UIF_USE_MEMORY_MASK, UIF_USE_MEMORY_SHIFT, val))
 #define UIF_SET_EAUX_ONOFF(uif, val)  ((uif) = CFG_SET_FIELD(uif, UIF_EAUX_ONOFF_MASK, UIF_EAUX_ONOFF_SHIFT, val))
+
+#define UIF_GET_UI2(uif)              CFG_GET_FIELD(uif, UIF_UI2_MASK, UIF_UI2_SHIFT)
+#define UIF_SET_UI2(uif, val)         ((uif) = CFG_SET_FIELD(uif, UIF_UI2_MASK, UIF_UI2_SHIFT, val))
 
 #define AUXF_GET_BCKLIGHT_TYPE(aux)   CFG_GET_FIELD(aux, AUXF_BCKLIGHT_TYPE_MASK, AUXF_BCKLIGHT_TYPE_SHIFT)
 #define AUXF_GET_BCKLIGHT_COLOR(aux)  CFG_GET_FIELD(aux, AUXF_BCKLIGHT_COLOR_MASK, AUXF_BCKLIGHT_COLOR_SHIFT)
@@ -117,31 +126,25 @@ _Static_assert(CFG_GET_FIELD(CFG_SET_FIELD(0, USRF_LOCK_MIN_TIME_MASK, USRF_LOCK
 #define SLOTS_COUNT 10
 
 /*
- * Полезный груз записи WL_FLASH (13 байт при WL_RECORD_SIZE=20 и CRC-16).
+ * Полезный груз записи WL_FLASH (9 байт при WL_RECORD_SIZE=16 и CRC-16).
  * Служебный заголовок записи — seq(4), version(1), crc(2) — хранит сама библиотека.
  *
- * Раскладка payload (ровно 13 байт):
- *   байты 0..1  : default_ui1 (uint16_t)
- *   байт 2      : uif (uint8_t)
- *   байт 3      : aux (uint8_t)
- *   байт 4      : usr (uint8_t)
- *   байт 5      : default_ui2 (uint8_t)
- *   байт 6      : default_ui3 (uint8_t)
- *   байты 7..11 : slots_packed[5] (10 слотов по 4 бита)
- *   байт 12     : reserved (0)
+ * Раскладка payload (ровно 9 байт):
+ *   байт 0      : ui1 — default UI1 step >> 1 (0..255), восстанавливается << 1
+ *   байт 1      : uif — биты 0..4 UIF-флаги, биты 5..7 default_ui2 (CMODE_*)
+ *   байт 2      : aux (uint8_t)
+ *   байт 3      : usr (uint8_t)
+ *   байты 4..8  : slots_packed[5] (10 слотов по 4 бита)
  */
 typedef struct __attribute__((packed)) {
-    uint16_t default_ui1;
-    uint8_t  uif;
+    uint8_t  ui1;             /* default UI1 step >> 1 (0..255) */
+    uint8_t  uif;             /* UIF bits 0..4 + default_ui2 bits 5..7 */
     uint8_t  aux;
     uint8_t  usr;
-    uint8_t  default_ui2;
-    uint8_t  default_ui3;
     uint8_t  slots_packed[5];
-    uint8_t  reserved;
 } app_cfg_t;
 
-_Static_assert(sizeof(app_cfg_t) == 13, "app_cfg_t size must be exactly 13 bytes");
+_Static_assert(sizeof(app_cfg_t) == 9, "app_cfg_t size must be exactly 9 bytes");
 WL_ASSERT_PAYLOAD_FITS(app_cfg_t);
 
 #define EE  (*WL_DATA_AS(app_cfg_t))

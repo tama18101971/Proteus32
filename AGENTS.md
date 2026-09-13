@@ -31,7 +31,7 @@ pio device monitor               460800 8N1
 - Poll (160 Hz / 6 ms): `button_tick() + ui_process() + ss_scan()`
 - Poll (30 Hz / 33 ms): `adc_read() + scan_limiters() + scan_voltage()`
 - 2 Hz / 500 ms: debug UART log (`[NORMAL] T=... F=... I=... L=... P=... S=... V=...`)
-- 5 s: `ob_Flush()` + payload shadow-diff → `wl_commit_if_dirty()`; then sleep
+- 5 s: `ob_Flush()` + idle-счётчик EE-коммита (запись после 60 с без нажатий, см. Data storage); then sleep
 - Sleep: `need_sleep` = STANDBY req (boot + 5 s tick; cleared by button wake); `is_sleep_mode` true after `AWU_Sleep_Now()` until button wake restore
 
 ### Subsystems
@@ -55,7 +55,7 @@ Two layers: **`tc`** (Option Bytes, `ob_GetTc/SetTc`, int8_t HW ADC correction, 
 
 ### Data storage
 
-WL_FLASH v2.0.1 (vendored `libs/WL_FLASH`): wear-leveling record ring in `0x08003F00..0x08004000` (record 20 B, CRC-16, 4 pages × 3 slots = 12). Payload = `app_cfg_t` (13 B: config + 10 nibble-packed magic slots) in `app_data.h`; `EE.fieldname` = `(*WL_DATA_AS(app_cfg_t))`. Boot: `wl_load()` → on fail `wl_init() + ee_defaults()`; 5 s tick: shadow-diff → `wl_commit_if_dirty()` (≤`WL_MAX_COMMIT_RETRY=3`, latches `WL_RETRY_EXHAUSTED` until reload). Format pinned in `platformio.ini` (`-DWL_FORMAT_VERSION=3 -DWL_RECORD_SIZE=20 -DWL_CRC_BITS=16`; bump on payload change); `maximum_size = 16128` + `-Wl,--defsym=FLASH_SIZE=16128` enforce link/upload limits. `WL_FLASH_LIGHT` removed upstream.
+WL_FLASH v2.0.1 (vendored `libs/WL_FLASH`): wear-leveling record ring in `0x08003F00..0x08004000` (record 16 B, CRC-16, 4 pages × 4 slots = 16). Payload = `app_cfg_t` (9 B: `ui1` хранит UI1 step>>1, `uif` биты 0..4 флаги + биты 5..7 `default_ui2`, `aux`, `usr`, 10 nibble-packed magic slots) in `app_data.h`; `EE.fieldname` = `(*WL_DATA_AS(app_cfg_t))`. Boot: `wl_load()` → on fail `wl_init() + ee_defaults()`; commit EE deferred: после 60 с без нажатий (счётчик `cfg_idle_ticks`, сброс в 160-Гц ветке Pressed в main.c) + немедленно в блоке сна при STANDBY с погашенным драйвером (`cfg_commit_if_changed()`, shadow-diff, ≤`WL_MAX_COMMIT_RETRY=3`, latches `WL_RETRY_EXHAUSTED` until reload); OB flush остаётся на 5-с тике. Формат pinned в `platformio.ini` (`-DWL_FORMAT_VERSION=4 -DWL_RECORD_SIZE=16 -DWL_CRC_BITS=16`; bump on payload change); v3→v4 сбрасывает настройки в дефолт (одноразово); `maximum_size = 16128` + `-Wl,--defsym=FLASH_SIZE=16128` + гейт `fw_size.py` ERROR_AT=16096 enforce limits. `WL_FLASH_LIGHT` removed upstream.
 - **Option Bytes** (`ob.c/h`): RAM-cached, flushed via `ob_Flush()`; calibration counters only (ml, tc, vc); magic slots moved to WL_FLASH v3.
 
 ### AUX LEDs / strobes (`aux_leds.c/h`)

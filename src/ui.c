@@ -112,6 +112,7 @@ void ee_defaults(void)
     EE.uif = 0;
     UIF_SET_UI_INDEX(EE.uif, 1);
     UIF_SET_OFF_BCKL(EE.uif, 1);
+    UIF_SET_UI2(EE.uif, DEFAULT_MODE);
 
     EE.aux = 0;
     AUXF_SET_BCKLIGHT_COLOR(EE.aux, BCK_COLOR_RED);
@@ -124,10 +125,7 @@ void ee_defaults(void)
     USRF_SET_LOCK_MIN_EN(EE.usr, 1);
     USRF_SET_TCALIBR(EE.usr, TCALIBR_DEFAULT);
 
-    EE.default_ui1 = DEFAULT_STEP;
-    EE.default_ui2 = DEFAULT_MODE;
-    EE.default_ui3 = 0;
-    EE.reserved = 0;
+    CFG_SET_UI1(EE, DEFAULT_STEP);
 
     static const uint8_t def_slots[SLOTS_COUNT] = {
         SLOT_DEFAULT_1CH, SLOT_DEFAULT_2CH, SLOT_DEFAULT_3C, SLOT_DEFAULT_3CH,
@@ -276,8 +274,8 @@ void off_driver(uint8_t reset_step, SoftStartSpeed_t ss_speed)
      * (main.c). */
     if (UIF_GET_USE_MEMORY(EE.uif))
     {
-        EE.default_ui1 = step_default;
-        EE.default_ui2 = mode_default;
+        CFG_SET_UI1(EE, step_default);
+        UIF_SET_UI2(EE.uif, mode_default);
     }
 
     off_auto_repeat();
@@ -383,7 +381,7 @@ void on_xmode_ui1(void)
 {
     ps.use_prev = false;
     on_driver();
-    set_current(UIF_GET_USE_MEMORY(EE.uif) ? (step_user ? step_user : step_default) : EE.default_ui1, SS_FAST);
+    set_current(UIF_GET_USE_MEMORY(EE.uif) ? (step_user ? step_user : step_default) : CFG_GET_UI1(EE), SS_FAST);
 }
 
 /** @brief Toggle turbo mode (max brightness) with prev-step recall (UI1). */
@@ -720,14 +718,14 @@ static void save_def_blink(void)
 void save_def_ui1(void)
 {
     save_def_blink();
-    EE.default_ui1 = step_user;
+    CFG_SET_UI1(EE, step_user);
 }
 
 /** @brief Save current UI2 mode as power-on default. */
 void save_def_ui2(void)
 {
     save_def_blink();
-    EE.default_ui2 = mode_current;
+    UIF_SET_UI2(EE.uif, mode_current);
 }
 
 /*******************************************************************************
@@ -1256,7 +1254,7 @@ void on_min_ui2(void)
 /** @brief Go to memorised/default mode (UI2, voltage-clamped). */
 void on_xmode_ui2(void)
 {
-    uint8_t req = UIF_GET_USE_MEMORY(EE.uif) ? mode_default : EE.default_ui2;
+    uint8_t req = UIF_GET_USE_MEMORY(EE.uif) ? mode_default : UIF_GET_UI2(EE.uif);
     uint8_t clamped = get_up_mode(req);
     if (clamped < req)                /* запрошенный режим урезан по напряжению */
         aux_err_now();
@@ -1418,8 +1416,8 @@ void ui_init(void)
     hold_guard = false;
     mode_current = CMODE_OFF;
     ui_table_idx = ui_index_clamp(UIF_GET_UI_INDEX(EE.uif));
-    step_default = EE.default_ui1;   // восстановить сохранённую яркость
-    mode_default = EE.default_ui2;   // восстановить сохранённый режим
+    step_default = CFG_GET_UI1(EE);   // восстановить сохранённую яркость
+    mode_default = UIF_GET_UI2(EE.uif);   // восстановить сохранённый режим
     step_tactic = 0;                 // турбо-память моментарки не переживает сброс
     aux_refresh_backlight();
 }
