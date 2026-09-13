@@ -266,17 +266,13 @@ void off_driver(uint8_t reset_step, SoftStartSpeed_t ss_speed)
     stop_aux_if(IDM_VWARNING, false);
     stop_aux_if(IDM_BEACON, false);
 
-    /* Memory mode: сохранить последний шаг/режим. К этому моменту значения
-     * уже очищены от турбо-сессии, запущенной двойным кликом (ps.start):
-     * set_current_ll()/off_driver_false() не записывают уровень турбо в
-     * память, а при !ps.start блок выше откатил step_default/mode_default
-     * на pr_step. Реальную запись решает сравнение с тенью на 5-сек тике
-     * (main.c). */
-    if (UIF_GET_USE_MEMORY(EE.uif))
-    {
-        CFG_SET_UI1(EE, step_default);
-        UIF_SET_UI2(EE.uif, mode_default);
-    }
+    /* Memory mode: сессионная яркость/режим (step_default/mode_default)
+     * хранится только в SRAM — Standby сохраняет её во время сна, во
+     * flash ничего не пишется. EE.ui1/EE.uif — базовые уровни по умолчанию
+     * (Power-On Defaults): их меняют лишь явные действия (5 кликов,
+     * меню, слоты, сброс). К этому моменту значения уже очищены от
+     * турбо-сессии (ps.start), так что следующее включение стартует
+     * с последнего уровня текущей сессии. */
 
     off_auto_repeat();
 

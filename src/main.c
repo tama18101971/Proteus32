@@ -16,8 +16,9 @@
  * 2. Use an AWU_4S-owned standby loop for low-power thermal supervision.
  * 3. Keep AUX/strobe AWU ownership separate from thermal supervision.
  * 4. Timer tasks: 160 Hz (UI + softstart), 30 Hz (fast thermal scan),
- *    2 Hz (debug), 5 s (sleep/persistence; EE commit after 60 s idle
- *    or at off-STANDBY).
+ *    2 Hz (debug), 5 s (sleep/persistence; EE commit on config diff only:
+ *    menus, slots, explicit saves. Session brightness lives in SRAM and
+ *    survives Standby — no flash writes on everyday on/off).
  */
 #include <stdint.h>
 #include <stdbool.h>
@@ -45,33 +46,12 @@ volatile uint8_t need_sleep = false; /* Флаг необходимости пе
 
 /* Тень последнего сохранённого в flash полезного груза настроек. Запись
  * выполняется только при реальном отличии текущих данных от тени — "чётные"
- * переключения настроек не приводят к лишней записи в flash. Коммит EE
- * отложен: серия правок внутри окна бездействия склеивается в одну запись.
- * Служебные поля записи (seq/version/crc) хранит библиотека. */
+ * переключения настроек не приводят к лишней записи. Сессионная яркость
+ * (step_default/mode_default) живёт в SRAM и EE не трогает, поэтому при
+ * повседневных включениях/выключениях записей во flash нет. Коммит — на
+ * 5-сек тике по diff с тенью; серия правок между тиками склеивается в одну
+ * запись. Служебные поля записи (seq/version/crc) хранит библиотека. */
 static app_cfg_t cfg_shadow;
-
-/* Коммит настроек — после 60 с без нажатий (12 x 5 с), либо немедленно
- * при выключении (STANDBY с погашенным драйвером, см. блок сна). Сброс
- * счётчика — в 160-Гц ветке Pressed (main loop): каждое нажатие проходит
- * через Pressed=true, отдельных опросов FSM на 5-с тике не нужно. */
-#define CFG_IDLE_TICKS 12u
-
-static uint8_t cfg_idle_ticks; /* счётчик 5-сек тиков без нажатий кнопки */
-
-/** @brief Записать настройки, если рабочая копия отличается от записанной.
- *
- * Сбой записи: dirty-флаг библиотеки остаётся → ретрай на следующем
- * вызове. После WL_MAX_COMMIT_RETRY неудач подряд коммит защёлкивается
- * в WL_RETRY_EXHAUSTED до wl_load() или wl_init(). */
-static void cfg_commit_if_changed(void)
-{
-    if (memcmp(&cfg_shadow, WL_DATA_AS(app_cfg_t), sizeof(app_cfg_t)) == 0)
-        return;
-
-    wl_mark_dirty();
-    if (wl_commit_if_dirty() == WL_OK)
-        cfg_shadow = EE;
-}
 
 /* getBright_CRT_9to12Bit(322) = 1018, or 24.86% of DAC_MAX_VALUE.
  * The strict '>' below therefore enters fast supervision at step 323:
@@ -391,20 +371,11 @@ int main(void)
         if (Pressed)
         {
             need_sleep = false;
-            cfg_idle_ticks = 0; /* нажатие = активность, откладываем коммит */
         }
 
         if (need_sleep || strobe_sleep)
         {
-            bool drv_inactive = !driver_is_active();
-
-            /* Реальное выключение: сохранить сейчас, чтобы снятие батареи
-             * во сне не потеряло сессию. Термо-сон (драйвер включён) и
-             * фазы строба исключены. */
-            if (drv_inactive && !strobe_sleep)
-                cfg_commit_if_changed();
-
-            if (drv_inactive && !aux_needs_dac())
+            if (!driver_is_active() && !aux_needs_dac())
             {
                 OFF_POWER();
             }
@@ -474,19 +445,17 @@ int main(void)
         if (tick_5s())
         {
             /* Deferred persistence: OB flushes only when its cache is dirty
-             * (ob.c); EE writes only when the working copy differs from the
-             * last-persisted shadow — an even number of toggles within the
-             * window restores the old value and produces no flash write. */
+             * (ob.c); EE commits only when the working copy differs from the
+             * shadow — an even number of toggles between ticks restores the
+             * old value and produces no flash write. Everyday on/off cycles
+             * keep EE untouched (session brightness lives in SRAM), so the
+             * memcmp below stays equal during normal use. */
             ob_Flush();
-
-            /* Отложенная запись EE: нажатия сбрасывают счётчик (ветка Pressed
-             * выше), коммит — после 60 с без нажатий. Серия правок внутри
-             * окна склеивается в одну запись; при неизменных настройках
-             * записи нет (тень совпадает с рабочей копией). */
-            if (++cfg_idle_ticks == CFG_IDLE_TICKS)
+            if (memcmp(&cfg_shadow, WL_DATA_AS(app_cfg_t), sizeof(app_cfg_t)) != 0)
             {
-                cfg_idle_ticks = 0;
-                cfg_commit_if_changed();
+                wl_mark_dirty();
+                if (wl_commit_if_dirty() == WL_OK)
+                    cfg_shadow = EE;
             }
             if (driver_is_active())
             {
