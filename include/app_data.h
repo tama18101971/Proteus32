@@ -164,7 +164,9 @@ static inline uint8_t slot_get(uint8_t index) {
 /**
  * @brief Запись элемента magic-слота по индексу (0..SLOTS_COUNT-1).
  *
- * Упаковывает 4-битное значение в slots_packed[5] и помечает WL грязным при изменении.
+ * Упаковывает 4-битное значение в slots_packed[5]. WL не помечает:
+ * персистентность определяется диффом EE vs cfg_shadow на 5-с тике
+ * (main.c), как и для остальных полей конфигурации.
  */
 static inline void slot_set(uint8_t index, uint8_t value) {
     if (index >= SLOTS_COUNT)
@@ -180,6 +182,5 @@ static inline void slot_set(uint8_t index, uint8_t value) {
     }
     if (new_b != old_b) {
         EE.slots_packed[j] = new_b;
-        //wl_mark_dirty();
     }
 }
