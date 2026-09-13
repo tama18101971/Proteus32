@@ -180,6 +180,6 @@ static inline void slot_set(uint8_t index, uint8_t value) {
     }
     if (new_b != old_b) {
         EE.slots_packed[j] = new_b;
-        wl_mark_dirty();
+        //wl_mark_dirty();
     }
 }
