@@ -58,7 +58,7 @@ typedef struct {
  ******************************************************************************/
 
 /** @brief Base moonlight level (PWM value). */
-#define BASE_MOON_LEVEL 7
+#define BASE_MOON_LEVEL 5
 
 /** @brief Default step for UI1 at initialisation. */
 #define DEFAULT_STEP    128
