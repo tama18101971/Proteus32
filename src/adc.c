@@ -680,7 +680,7 @@ void scan_voltage(void)
      * scan_limiters_fault() (термо-фейл -> гашение луча). */
     if (voltage_ok && (cutoff_vcode >= (int32_t)swt_cut[0]))
     {
-        if (++voff_count_off > 3u)
+        if (++voff_count_off > UNDERVOLT_CONFIRM_COUNT)
         {
             voff_count_off = 0;
             down_forever();
@@ -741,7 +741,7 @@ void scan_voltage(void)
     {
         if (mode_current && (eff_vcode >= (int32_t)swt_cut[mode_current - 1]))
         {
-            if (++voff_count > 3)
+            if (++voff_count > UNDERVOLT_CONFIRM_COUNT)
             {
                 voff_count = 0;
                 --mode_current;
@@ -788,7 +788,7 @@ bool strobe_voltage_low(void)
 
     if (ok && (adc_eff_raw_vcode() >= (int32_t)swt_cut[0]))
     {
-        if (++low_count > 3u)
+        if (++low_count > UNDERVOLT_CONFIRM_COUNT)
         {
             low_count = 0;
             return true;
