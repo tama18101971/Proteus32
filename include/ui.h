@@ -334,7 +334,7 @@ void set_curri(uint8_t cmode);
  ******************************************************************************/
 
 /**
- * @brief Exit magic slots mode and return to normal operation.
+ * @brief Exit magic slots mode to user-menu level 1 (1 long orange cue).
  */
 void exit_magic_mode(void);
 
@@ -468,6 +468,10 @@ void enter_chtk_mode(void);
 
 /**
  * @brief Show an invalid user-menu selection without changing settings.
+ *
+ * Unconditionally reports three short red flashes (aux_reject), regardless
+ * of the exaux flag; applies to all menu sub-modes, calibration() and the
+ * magic slot picker/assigner.
  */
 void ui_invalid_selection(void);
 
@@ -504,12 +508,15 @@ void enter_eaux_mode(void);
 #endif
 
 /**
- * @brief Enter magic slots mode.
+ * @brief Enter magic slots mode (1 short orange cue).
  */
 void enter_magic_mode(void);
 
 /**
  * @brief Select magic slot based on click count.
+ *
+ * Shows the picked slot as N orange flashes followed by M green flashes,
+ * where M is the function currently stored in slot N (1..12).
  */
 void select_slot(void);
 

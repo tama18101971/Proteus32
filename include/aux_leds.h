@@ -404,6 +404,39 @@ void aux_dang(void);
 #define aux_dang() ((void)0)
 #endif
 
+/* ===== Magic slots indication (unconditional, no exaux flag) =====
+ * Color dictionary:
+ *   orange (RED+GRN together) = magic-mode navigation (enter/exit/picker),
+ *   green  = value (slot function / confirmation),
+ *   red    = rejection of invalid input (always, see aux_reject). */
+
+/**
+ * @brief Indicate the picked magic slot: slot_no orange flashes, then op green.
+ *
+ * Two-part non-blocking sequence (AWU-FSM) via a RAM buffer.  The ~320 ms
+ * OFF pause after the last orange flash separates the slot-number group
+ * from the value group.
+ * @param slot_no Slot number 1..10 (clamped to 1..15, AUX_COUNT is 4 bits).
+ * @param op      Function number in the slot 1..12 (clamped to 1..15).
+ */
+void aux_magic_slot_info(uint8_t slot_no, uint8_t op);
+
+/**
+ * @brief Single orange flash (RED+GRN): magic-mode enter/exit cue.
+ * @param long_pulse false — short ~150 ms (enter slot picker);
+ *                   true — long ~500 ms (exit magic mode, menu_exit style).
+ */
+void aux_magic_cue(bool long_pulse);
+
+/**
+ * @brief Rejection of invalid input: three short red flashes.
+ *
+ * Unconditional (unlike aux_err(), which is gated by the exaux flag):
+ * used for all user-menu sub-modes, calibration() and the magic slot
+ * picker/assigner.
+ */
+void aux_reject(void);
+
 /**
  * @brief Main AUX processing loop (called on each AWU wake).
  * @return true if commands still active (AWU will be restarted), false if all done.

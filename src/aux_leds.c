@@ -804,3 +804,66 @@ void aux_count(uint8_t count) {
 	uint8_t flashes = count ? (count > 15 ? 15 : count) : 1;
 	start_aux_cmd(make_count_cmd(dev, flashes, 1), IDM_OTHER, AWU_120MS);
 }
+
+/** @brief RAM-буфер двухчастной индикации выбора magic-слота (см. aux_magic_slot_info). */
+static uint32_t magic_info_buf[3];
+
+/**
+ * @brief Индикация выбранного magic-слота: slot_no оранжевых, затем op зелёных.
+ *
+ * Оранжевый = RED_LED|GRN_LED одновременно. Последовательность собирается
+ * в RAM-массиве (прецедент beacon_double_buf) и запускается через AWU-FSM
+ * (неблокирующе). Полуволвы make_count_cmd: ON ≈108 мс / OFF ≈320 мс —
+ * пауза 320 мс после последней оранжевой отделяет группу номера слота
+ * от группы значения.
+ *
+ * @param slot_no номер слота 1..10 (клампится в 1..15 — поле AUX_COUNT 4 бита)
+ * @param op      номер функции в слоте 1..12 (клампится в 1..15)
+ */
+void aux_magic_slot_info(uint8_t slot_no, uint8_t op)
+{
+	if (slot_no < 1u)
+		slot_no = 1u;
+	else if (slot_no > 15u)
+		slot_no = 15u;
+	if (op < 1u)
+		op = 1u;
+	else if (op > 15u)
+		op = 15u;
+
+	magic_info_buf[0] = make_count_cmd((LED_Bits_t)(RED_LED | GRN_LED), slot_no, 1);
+	magic_info_buf[1] = make_count_cmd(GRN_LED, op, 1);
+	/* magic_info_buf[2] не пишется: буфер в BSS (нулевой) и больше нигде не
+	 * изменяется, а 0 == MAKE_SYS_CMD(AC_STOP, 0) — терминатор массива. */
+	start_aux_array(magic_info_buf, AWU_120MS);
+}
+
+/** @brief Команды вспышки-подтверждения magic-режима (Flash, ноль RAM). */
+static const uint32_t magic_cue_short = MAKE_CMD_MS(RED_LED | GRN_LED, 0, 1, 150, 150, 1, 0);
+static const uint32_t magic_cue_long  = MAKE_CMD_MS(RED_LED | GRN_LED, 0, 1, 500, 500, 1, 0);
+
+/**
+ * @brief Одинарная оранжевая вспышка (RED+GRN): вход в пикер magic-слотов
+ * или выход из magic-режима.
+ *
+ * @param long_pulse false — короткая ~150 мс; true — длинная ~500 мс
+ *        (стиль menu_exit: 500 мс ON / 500 мс OFF).
+ */
+__attribute__((noinline)) void aux_magic_cue(bool long_pulse)
+{
+	start_aux_cmd(long_pulse ? magic_cue_long : magic_cue_short,
+		      IDM_OTHER, AWU_IMMEDIATELY);
+}
+
+/**
+ * @brief Отклонение неверного ввода: три короткие красные вспышки.
+ *
+ * Безусловно (в отличие от aux_err(), гейтящегося флагом exaux):
+ * применяется во всём меню пользователя, magic-режиме и calibration().
+ * Без noinline: единственный caller (ui_invalid_selection) — LTO инлайнит
+ * сам, отдельная копия только раздувает Flash.
+ */
+void aux_reject(void)
+{
+	start_aux_cmd(ERRO_RED, IDM_OTHER, AWU_15MS);
+}

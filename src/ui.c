@@ -1026,13 +1026,16 @@ void enter_chtk_mode(void)
 /**
  * @brief Show a red indication for an invalid user-menu selection.
  *
- * Kept public because the dispatch table owns the magic-slot range check,
- * while LED control belongs to this UI module.
+ * Unconditional three red flashes (aux_reject): independent of the exaux
+ * flag, so invalid input is always reported — all menu sub-modes,
+ * calibration() and the magic slot picker/assigner.  Kept public because
+ * the dispatch table owns the magic-slot range check, while LED control
+ * belongs to this UI module.
  */
 void ui_invalid_selection(void)
 {
     off_auto_repeat();
-    aux_err(AWU_15MS);
+    aux_reject();
 }
 
 /*******************************************************************************
@@ -1119,34 +1122,43 @@ void enter_eaux_mode(void)
  *  Magic slots
  ******************************************************************************/
 
-/** @brief Enter magic slot selection mode. */
+/** @brief Enter magic slot selection mode (1 short orange cue). */
 void enter_magic_mode(void)
 {
 #if USE_MAGIC_SLOTS
     driver_mode = MODE_MAGIC;
-    clr_indicator(IND_GRN);
+    aux_magic_cue(false);
 #else
     (void)0;
 #endif
 }
 
-/** @brief Exit magic slot mode. */
+/** @brief Exit magic slot mode to user-menu level 1 (1 long orange cue). */
 void exit_magic_mode(void)
 {
 #if USE_MAGIC_SLOTS
+    off_auto_repeat();
     driver_mode = MODE_OFF;
-    clr_indicator(IND_GRN);
+    aux_magic_cue(true);
 #else
     (void)0;
 #endif
 }
 
-/** @brief Select a magic slot by current click count. */
+/**
+ * @brief Select a magic slot by current click count.
+ *
+ * Enters the slot programming mode and shows the picked slot as
+ * N orange flashes followed by M green flashes (M = function currently
+ * stored in slot N).  Unlike enter_submode(), the stored value is not
+ * re-flashed by aux_count(): the two-part magic indication replaces it.
+ */
 void select_slot(void)
 {
 #if USE_MAGIC_SLOTS
     uint8_t slot = clicks_count - 1u;
-    enter_submode((DRIVER_Mode_t)(MODE_SLOT01 + slot), slot_get(slot));
+    driver_mode = (DRIVER_Mode_t)(MODE_SLOT01 + slot);
+    aux_magic_slot_info(clicks_count, slot_get(slot));
 #else
     (void)0;
 #endif
@@ -1569,7 +1581,8 @@ void ui_process(void)
 
             ui_table_lookup(driver_mode, evt, false);
 
-            /* Hold in any slot programming mode -> exit back to magic menu */
+            /* Hold in a slot programming mode -> full magic-mode exit
+             * to user-menu level 1 */
             if (driver_mode >= MODE_SLOT01 && driver_mode <= MODE_SLOT10
                 && prev_mode == driver_mode)
             {
