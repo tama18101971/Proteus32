@@ -644,7 +644,9 @@ __attribute__((noinline, noreturn)) void down_forever(void)
  * единая шкала с UI2) clamps step_user both while the button is held and
  * after release (SS_SLOW ramp-down, no steps).  A ceiling decrease is
  * announced with aux_err() (ERRO_RED) — once per ceiling decrease.
- * For UI2 (discrete): reduce mode automatically, hard cutoff if already at mode 0.
+ * For UI2 (discrete): reduce mode automatically; at mode 0 the beam is
+ * turned off (SS_SLOW ramp to 0 via set_current(get_stepi(0), SS_SLOW))
+ * with the same ERRO_RED signal (gated by UIF_EAUX_ONOFF, as all aux_err()).
  * Monotonic: volt_stop_mode only decreases, recovers on reboot.
  * For tactical UI (ui_index 0): clamp without ratchet and indication.
  *
@@ -747,11 +749,8 @@ void scan_voltage(void)
                 --mode_current;
                 if (volt_stop_mode > mode_current)
                     volt_stop_mode = mode_current;
-                if (mode_current)
-                {
-                    set_current(get_stepi(mode_current), SS_SLOW);
-                    aux_err_now();       // сигнализируем о сбросе
-                }
+                set_current(get_stepi(mode_current), SS_SLOW);
+                aux_err_now();       // сигнализируем о сбросе
             }
             return;
         }
