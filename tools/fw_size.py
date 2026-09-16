@@ -5,9 +5,9 @@ remaining margin drops below WARN_MARGIN, fails the build when ERROR_AT is
 exceeded, and lists the largest .text input sections from the linker map to
 make regressions visible.
 
-ERROR_AT is a hard ceiling below the board limit: exceeding it fails the
-build. It is ratcheted down as the flash-reduction plan
-(.kilo/plans/1789118248090-flash-reduction.md) lands.
+ERROR_AT is the hard gate: exceeding it fails the build. It is set to the
+flash limit (HARD_LIMIT, 16128 B — matches board_upload.maximum_size and
+-Wl,--defsym=FLASH_SIZE): the image must fit the physical flash.
 """
 
 import os
@@ -17,7 +17,7 @@ Import("env")
 
 WARN_MARGIN = 256
 HARD_LIMIT = 16128
-ERROR_AT = 16120
+ERROR_AT = HARD_LIMIT  # fail the build only when the flash limit is exceeded
 TOP_N = 15
 
 _TEXT_OUT = re.compile(r"^\.text\s+0x[0-9a-fA-F]+\s+0x[0-9a-fA-F]+\s*$")
@@ -97,7 +97,7 @@ def _after_build(source, target, env):
     elif free < WARN_MARGIN:
         _print(
             "WARNING: flash margin {} B < {} B (gate {} B)".format(
-                free, WARN_MARGIN, limit - WARN_MARGIN
+                free, WARN_MARGIN, ERROR_AT
             )
         )
 
