@@ -406,15 +406,16 @@ void aux_dang(void);
 
 /* ===== Magic slots indication (unconditional, no exaux flag) =====
  * Color dictionary:
- *   orange (RED+GRN together) = magic-mode navigation (enter/exit/picker),
- *   green  = value (slot function / confirmation),
- *   red    = rejection of invalid input (always, see aux_reject). */
+ *   orange (RED+GRN together) = magic-mode enter/exit cue,
+ *   red    = slot number flashes and rejection of invalid input (always,
+ *            see aux_reject),
+ *   green  = value (slot function / confirmation). */
 
 /**
- * @brief Indicate the picked magic slot: slot_no orange flashes, then op green.
+ * @brief Indicate the picked magic slot: slot_no red flashes, then op green.
  *
  * Two-part non-blocking sequence (AWU-FSM) via a RAM buffer.  The ~320 ms
- * OFF pause after the last orange flash separates the slot-number group
+ * OFF pause after the last red flash separates the slot-number group
  * from the value group.
  * @param slot_no Slot number 1..10 (clamped to 1..15, AUX_COUNT is 4 bits).
  * @param op      Function number in the slot 1..12 (clamped to 1..15).

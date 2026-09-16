@@ -515,7 +515,7 @@ void enter_magic_mode(void);
 /**
  * @brief Select magic slot based on click count.
  *
- * Shows the picked slot as N orange flashes followed by M green flashes,
+ * Shows the picked slot as N red flashes followed by M green flashes,
  * where M is the function currently stored in slot N (1..12).
  */
 void select_slot(void);

@@ -1149,7 +1149,7 @@ void exit_magic_mode(void)
  * @brief Select a magic slot by current click count.
  *
  * Enters the slot programming mode and shows the picked slot as
- * N orange flashes followed by M green flashes (M = function currently
+ * N red flashes followed by M green flashes (M = function currently
  * stored in slot N).  Unlike enter_submode(), the stored value is not
  * re-flashed by aux_count(): the two-part magic indication replaces it.
  */

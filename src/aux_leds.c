@@ -809,13 +809,12 @@ void aux_count(uint8_t count) {
 static uint32_t magic_info_buf[3];
 
 /**
- * @brief Индикация выбранного magic-слота: slot_no оранжевых, затем op зелёных.
+ * @brief Индикация выбранного magic-слота: slot_no красных, затем op зелёных.
  *
- * Оранжевый = RED_LED|GRN_LED одновременно. Последовательность собирается
- * в RAM-массиве (прецедент beacon_double_buf) и запускается через AWU-FSM
- * (неблокирующе). Полуволвы make_count_cmd: ON ≈108 мс / OFF ≈320 мс —
- * пауза 320 мс после последней оранжевой отделяет группу номера слота
- * от группы значения.
+ * Последовательность собирается в RAM-массиве (прецедент beacon_double_buf)
+ * и запускается через AWU-FSM (неблокирующе). Полуволвы make_count_cmd:
+ * ON ≈108 мс / OFF ≈320 мс — пауза 320 мс после последней красной отделяет
+ * группу номера слота от группы значения.
  *
  * @param slot_no номер слота 1..10 (клампится в 1..15 — поле AUX_COUNT 4 бита)
  * @param op      номер функции в слоте 1..12 (клампится в 1..15)
@@ -831,7 +830,7 @@ void aux_magic_slot_info(uint8_t slot_no, uint8_t op)
 	else if (op > 15u)
 		op = 15u;
 
-	magic_info_buf[0] = make_count_cmd((LED_Bits_t)(RED_LED | GRN_LED), slot_no, 1);
+	magic_info_buf[0] = make_count_cmd(RED_LED, slot_no, 1);
 	magic_info_buf[1] = make_count_cmd(GRN_LED, op, 1);
 	/* magic_info_buf[2] не пишется: буфер в BSS (нулевой) и больше нигде не
 	 * изменяется, а 0 == MAKE_SYS_CMD(AC_STOP, 0) — терминатор массива. */
