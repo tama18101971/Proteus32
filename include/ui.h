@@ -508,7 +508,7 @@ void enter_eaux_mode(void);
 #endif
 
 /**
- * @brief Enter magic slots mode (1 short orange cue).
+ * @brief Enter magic slots mode (2 short orange cues).
  */
 void enter_magic_mode(void);
 

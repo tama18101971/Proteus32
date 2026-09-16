@@ -838,15 +838,16 @@ void aux_magic_slot_info(uint8_t slot_no, uint8_t op)
 }
 
 /** @brief Команды вспышки-подтверждения magic-режима (Flash, ноль RAM). */
-static const uint32_t magic_cue_short = MAKE_CMD_MS(RED_LED | GRN_LED, 0, 1, 150, 150, 1, 0);
+static const uint32_t magic_cue_short = MAKE_CMD_MS(RED_LED | GRN_LED, 0, 2, 150, 150, 1, 0);
 static const uint32_t magic_cue_long  = MAKE_CMD_MS(RED_LED | GRN_LED, 0, 1, 500, 500, 1, 0);
 
 /**
- * @brief Одинарная оранжевая вспышка (RED+GRN): вход в пикер magic-слотов
- * или выход из magic-режима.
+ * @brief Оранжевое подтверждение magic-режима (RED+GRN): вход в пикер
+ * magic-слотов (2 короткие вспышки) или выход из magic-режима.
  *
- * @param long_pulse false — короткая ~150 мс; true — длинная ~500 мс
- *        (стиль menu_exit: 500 мс ON / 500 мс OFF).
+ * @param long_pulse false — 2 короткие вспышки по ~150 мс (вход в пикер);
+ *                   true — 1 длинная ~500 мс (выход, стиль menu_exit:
+ *                   500 мс ON / 500 мс OFF).
  */
 __attribute__((noinline)) void aux_magic_cue(bool long_pulse)
 {

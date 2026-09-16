@@ -423,9 +423,9 @@ void aux_dang(void);
 void aux_magic_slot_info(uint8_t slot_no, uint8_t op);
 
 /**
- * @brief Single orange flash (RED+GRN): magic-mode enter/exit cue.
- * @param long_pulse false — short ~150 ms (enter slot picker);
- *                   true — long ~500 ms (exit magic mode, menu_exit style).
+ * @brief Orange confirmation (RED+GRN): magic-mode enter/exit cue.
+ * @param long_pulse false — 2 short flashes ~150 ms each (enter slot picker);
+ *                   true — 1 long ~500 ms (exit magic mode, menu_exit style).
  */
 void aux_magic_cue(bool long_pulse);
 

@@ -1122,7 +1122,7 @@ void enter_eaux_mode(void)
  *  Magic slots
  ******************************************************************************/
 
-/** @brief Enter magic slot selection mode (1 short orange cue). */
+/** @brief Enter magic slot selection mode (2 short orange cues). */
 void enter_magic_mode(void)
 {
 #if USE_MAGIC_SLOTS
