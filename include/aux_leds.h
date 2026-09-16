@@ -272,6 +272,8 @@ extern bool EnableArrayProcessing;
 extern const uint32_t *current_buf;
 /** @brief true when beacon operates in double-flash mode due to low battery (<3.1V). */
 extern bool beacon_low_voltage;
+/** @brief true = exaux warning indication fired this battery session; beacon double-flashes after off. */
+extern bool vwarning_fired;
 
 /* ===== API functions ===== */
 

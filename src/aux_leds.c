@@ -568,6 +568,7 @@ bool handle_aux(void) {
 
 bool beacon_low_voltage = false;
 static uint32_t beacon_double_buf[3];
+bool vwarning_fired = false;
 
 /**
  * @brief Check whether the beacon is at the start of its repetition cycle.
@@ -645,7 +646,8 @@ void beacon_battery_check(void)
  *   - beacon_type: цвет светодиода (RED_LED=1, GRN_LED=2, HBL_LED=4)
  *
  * Одиночная вспышка при нормальном напряжении (>= 3.2 В).
- * Двойная вспышка при пониженном напряжении (< 3.1 В).
+ * Двойная вспышка при пониженном напряжении (< 3.1 В) или если в этой сессии
+ * АКБ срабатывала exaux-предупредительная индикация (vwarning_fired).
  */
 void start_aux_beacon(void) {
 	if (!AUXF_GET_BEACON_ON(EE.aux)) return;
@@ -664,7 +666,7 @@ void start_aux_beacon(void) {
 	uint8_t br0 = (AUXF_GET_BEACON_TYPE(EE.aux) & HBL_LED) ? CMODE_MIN : 1;
 	LED_Bits_t dev = (LED_Bits_t)AUXF_GET_BEACON_TYPE(EE.aux);
 
-	if (beacon_low_voltage) {
+	if (beacon_low_voltage || vwarning_fired) {
 		/* Двойная вспышка: 50 мс ON / 150 мс OFF, затем 50 мс ON / период OFF
 		 * (150 мс кодируется макросом как 512×38/128000 = 152 мс — ближайшее
 		 * значение по округлению AWU_MS_WIN_FOR). */
@@ -702,6 +704,7 @@ void aux_refresh_backlight(void) {
  *
  */
 void start_exaux_voltage(WARNING_Fr_t ex_mode) {
+	vwarning_fired = true;   /* сессионный флаг: маяк после выключения — двойные вспышки */
 	uint32_t cmd = 0;
 	switch (ex_mode) {
 	case VWARNING_FAST:   /* ON 100мс, OFF 1900мс → период ~2с */
