@@ -40,6 +40,17 @@
 
 void __libc_init_array(void) {}
 
+/* ── Stack canary ────────────────────────────────────────────────────
+ * Слово-канарейка в НИЖНЕМ слове стековой области (_susrstack задаёт
+ * Link.ld, стек растёт вниз от _eusrstack). Запись в канарейку означает,
+ * что потребление стека достигло предела 512 Б — практически всегда это
+ * переполнение с затиранием соседней .bss. Консервативная сигнализация:
+ * ложное срабатывание на ровно полном стеке даёт безопасный отказ
+ * (гашение нагрузки + программный сброс), молчаливое переполнение
+ * исключается. Проверка — на 5-с тике бодрствования. */
+extern uint32_t _susrstack; /* linker-provided (Link.ld) */
+#define STACK_CANARY_WORD 0xC0DE5A7Au
+
 volatile wakeup_source_t wakeup_source = WS_NONE; /* Источник последнего пробуждения */
 
 volatile uint8_t need_sleep = false; /* Флаг необходимости перейти в режим сна */
@@ -229,6 +240,9 @@ int main(void)
     need_sleep = true;
 
     reset_limiters();
+
+    /* Стартовая засветка канарейки стека: до главного цикла */
+    *(volatile uint32_t *)&_susrstack = STACK_CANARY_WORD;
 
     EE_PRINTF("[TSET] setpoint=%u kp_shift=%u ki_decim=%u ki_recov=%u offset=%u\r\n",
               get_thermal_setpoint(), config.kp_left_shift,
@@ -448,6 +462,12 @@ int main(void)
 
         if (tick_5s())
         {
+            /* Переполнение стека (канарейка в нижнем слове затёрта):
+             * обесточить нагрузку и перезагрузиться через штатный
+             * HardFault-путь. */
+            if (*(volatile uint32_t *)&_susrstack != STACK_CANARY_WORD)
+                HardFault_Handler();
+
             /* Deferred persistence: OB flushes only when its cache is dirty
              * (ob.c); EE commits only when the working copy differs from the
              * shadow — an even number of toggles between ticks restores the
