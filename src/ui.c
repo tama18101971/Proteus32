@@ -510,6 +510,7 @@ void slot_strobe(void)
 void up_strobe(void)
 {
 #if USE_STROBE
+    off_auto_repeat();
     stop_aux_if(IDM_STROBE, false);
     if (++strobe_index == STROBE_COUNT) strobe_index = 0;
     start_aux_strobe(strobe_index);
