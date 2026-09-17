@@ -7,7 +7,7 @@ little-endian 16-bit checksum. RUN:  pytest test/test_protocol_v2.py -v
 import pytest
 import sys
 
-import proteus32_3 as p
+import proteus32_protocol as p
 
 SYNC1 = 0xAA
 SYNC2 = 0x55
@@ -99,24 +99,24 @@ def test_make_packet_unknown_cmd():
 # ------------------------------------------------------------- response parsing
 
 def test_parse_ok_response():
-    ok, status, raw = p.parse_base_response(base_response(0x00))
+    ok, status = p.parse_base_response(base_response(0x00))
     assert ok is True and status == 0x00
 
 
 def test_parse_error_statuses():
     for code in (0x01, 0x02, 0x03):
-        ok, status, raw = p.parse_base_response(base_response(code))
+        ok, status = p.parse_base_response(base_response(code))
         assert ok is False
         assert status == code
 
 
 def test_parse_garbage_returns_none_status():
-    ok, status, raw = p.parse_base_response(b"\xAA\xAA\xAA\xAA\xAA\xAA")
+    ok, status = p.parse_base_response(b"\xAA\xAA\xAA\xAA\xAA\xAA")
     assert ok is False and status is None
 
 
 def test_parse_short_response():
-    ok, status, raw = p.parse_base_response(b"\xAA\x55")
+    ok, status = p.parse_base_response(b"\xAA\x55")
     assert ok is False and status is None
 
 
@@ -134,6 +134,14 @@ def test_flash_bounds():
     assert p.FLASH_USER_END - p.FLASH_APP_END == 0x100       # WL_FLASH 256 B
     assert p.MAX_FLASH_SIZE == 16128
     assert p.BLOCK_SIZE == 64
+
+
+def test_cli_module_reexports_protocol():
+    """proteus32_3.py re-exports the shared protocol layer for its CLI."""
+    import proteus32_3
+    for name in ("BLOCK_SIZE", "FLASH_BASE", "FLASH_USER_END", "MAX_FLASH_SIZE",
+                 "ST_DICT", "ST_ERR_RANGE", "ST_ERR_VERIFY", "make_packet"):
+        assert hasattr(proteus32_3, name)
 
 
 def test_no_force_flag():
