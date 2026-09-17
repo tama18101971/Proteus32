@@ -273,22 +273,21 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout)
                 return 1;
             }
         }
-        if (mode == MODE_BLOCK || mode == MODE_BLOCK0)
+        /* Общий жест «1 клик после таймаута последовательности» для всех
+         * блок-режимов. MODE_BLOCK_LIGHT: погасить временный свет. Условие
+         * mode != MODE_BLOCK_ON обязательно: в этом режиме жест не должен
+         * включать подсветку (MODE_BLOCK_ON не попадал ни в одну ветку
+         * исходного каскада). */
+        if (timeout && evt->type == BTN_EVT_CLICK_SEQ && evt->clicks == 1u)
         {
-            if (timeout && evt->type == BTN_EVT_CLICK_SEQ && evt->clicks == 1u)
-            {
-                if (USRF_GET_LOCK_MIN_EN(EE.usr))
-                {
-                    lock_light_on((DRIVER_Mode_t)mode);
-                    return 1;
-                }
-            }
-        }
-        else if (mode == MODE_BLOCK_LIGHT)
-        {
-            if (timeout && evt->type == BTN_EVT_CLICK_SEQ && evt->clicks == 1u)
+            if (mode == MODE_BLOCK_LIGHT)
             {
                 lock_light_off();
+                return 1;
+            }
+            if (mode != MODE_BLOCK_ON && USRF_GET_LOCK_MIN_EN(EE.usr))
+            {
+                lock_light_on((DRIVER_Mode_t)mode);
                 return 1;
             }
         }
