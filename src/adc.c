@@ -292,6 +292,12 @@ void adc_init(void)
  * Updates raw_temperature_adc, vrefint_adc, voltage_ok, temperature_c
  * only after both
  * conversions complete successfully.
+ *
+ * @note The ADC is left running by every sampling path; main()'s sleep block
+ * is the only place that powers it down, immediately before STANDBY, and
+ * every wake re-initialises it.  A helper that stops the ADC itself must
+ * re-initialise it before the next sample: a powered-down ADC would time out
+ * and publish the sentinel code instead of a measurement.
  * @return true if a fresh NTC/Vrefint pair was committed, false otherwise.
  */
 bool adc_read(void)
@@ -381,7 +387,9 @@ bool adc_read(void)
  *   3. Отключение GPIO аналоговых входов (PD2, PD3 в Hi-Z)
  *
  * После вызова АЦП полностью обесточен. Для повторного использования
- * вызвать adc_init() (требуется повторная калибровка).
+ * вызвать adc_init() (требуется повторная калибровка).  Единственная точка
+ * вызова — sleep-блок main() перед STANDBY; остальные пути (строб-защита,
+ * маяк, пробуждение по кнопке) АЦП не гасят и рассчитывают, что он включён.
  */
 void adc_stop(void)
 {
@@ -647,14 +655,18 @@ __attribute__((noinline, noreturn)) void down_forever(void)
  * For UI2 (discrete): reduce mode automatically; at mode 0 the beam is
  * turned off (SS_SLOW ramp to 0 via set_current(get_stepi(0), SS_SLOW))
  * with the same ERRO_RED signal (gated by UIF_EAUX_ONOFF, as all aux_err()).
- * Monotonic: volt_stop_mode only decreases, recovers on reboot.
+ * volt_stop_mode decreases within a sag; scan_voltage() releases it back to
+ * CMODE_TURBO on a valid sample with vbat >= 3.1 V (the UI1 ratchet analogue).
  * For tactical UI (ui_index 0): clamp without ratchet and indication.
  *
  * Все сравнения выполняются над кодом Vrefint (без делений); калибровочный
- * vc учитывается как сдвиг кода.  При voltage_ok == false используется
- * VREF_SENTINEL — аналог прежнего vbat_mv == 0 (критично низкое) для
- * ограничений яркости; необратимое отсечение 2.70 В на невалидной выборке
- * НЕ выполняется (см. комментарий к проверке swt_cut[0] ниже).
+ * vc учитывается как сдвиг кода.  При voltage_ok == false (таймаут/сбой
+ * АЦП) потолок яркости и ступенчатое снижение режима не пересчитываются:
+ * сохраняется последний достоверный потолок, чтобы sentinel-код не
+ * воспринимался как реальное напряжение.  Необратимое отсечение 2.70 В на
+ * невалидной выборке НЕ выполняется (см. комментарий к проверке swt_cut[0]
+ * ниже); безопасность при затяжном сбое обеспечивает scan_limiters_fault()
+ * (гашение луча).
  */
 void scan_voltage(void)
 {
@@ -664,7 +676,28 @@ void scan_voltage(void)
     int32_t eff_vcode = adc_eff_vcode();
     int32_t cutoff_vcode = adc_eff_raw_vcode();
 
+    /* Сбой/таймаут АЦП даёт sentinel-код, а не измерение.  Пересчёт потолка,
+     * снижение режима и индикация выполняются только по валидной выборке:
+     * иначе sentinel уводил UI2 в режим 0 с защёлкой volt_stop_mode до
+     * перезагрузки (потухший луч + ложные ERRO_RED/VWARNING).  При затяжном
+     * сбое луч гасит scan_limiters_fault(). */
+    if (!voltage_ok)
+    {
+        /* Сбой — не отсчёт: невалидная выборка рвёт серию подтверждений
+         * (см. UNDERVOLT_CONFIRM_COUNT), как это делает и low_count в
+         * strobe_voltage_low(). */
+        voff_count = 0;
+        voff_count_off = 0;
+        return;
+    }
+
     volt_max_mode = calc_volt_max_mode(eff_vcode);
+
+    /* Подтверждённо отдохнувший АКБ (>= 3.1 В) снимает монотонную защёлку
+     * volt_stop_mode — аналог reset_max_step() для UI1; реальная просадка
+     * снова опустит потолок на следующих валидных отсчётах. */
+    if (eff_vcode < (int32_t)swt_cut[5])
+        volt_stop_mode = CMODE_TURBO;
 
     /* Гистерезис низкого заряда маяка: < 3.10 В / >= 3.20 В */
     (void)beacon_low_voltage_update();
@@ -674,13 +707,12 @@ void scan_voltage(void)
     /* 1. Общая защита от глубокого разряда (< 2.70 В) для всех UI.
      * Сырой проверенный отсчёт исключает задержку/залипание EMA; четыре
      * последовательных попадания ниже порога подавляют одиночный шум.
-     * Отсечение выполняется ТОЛЬКО на валидной выборке (voltage_ok):
-     * таймаут/сбой АЦП даёт код-сентинел, который иначе ложно
-     * трактовался бы как критический разряд. Реально низкие коды
-     * (>512, vbat < 2.4 В) теперь валидны (B4) и наравне с 2.4..2.7 В
-     * запускают защёлку. Безопасность при сбое АЦП обеспечивает
+     * Выборка здесь гарантированно валидна (ранний return выше): таймаут/сбой
+     * АЦП давал бы код-сентинел и ложно трактовался как критический разряд.
+     * Реально низкие коды (>512, vbat < 2.4 В) валидны (B4) и наравне с
+     * 2.4..2.7 В запускают защёлку. Безопасность при сбое АЦП обеспечивает
      * scan_limiters_fault() (термо-фейл -> гашение луча). */
-    if (voltage_ok && (cutoff_vcode >= (int32_t)swt_cut[0]))
+    if (cutoff_vcode >= (int32_t)swt_cut[0])
     {
         if (++voff_count_off > UNDERVOLT_CONFIRM_COUNT)
         {
@@ -698,35 +730,33 @@ void scan_voltage(void)
     /* 2. Потолок яркости по напряжению (единая шкала swt_cut + modes[]) */
     uint8_t ui_index = ui_table_idx;
 
-    /* Ramping UI1: храповик + кламп step_user к потолку */
+    /* Ramping UI1: храповик + кламп step_user к потолку.
+     * Выборка валидна (ранний return выше), отдельный гейт voltage_ok не нужен. */
     if (ui_index == 1)
     {
-        if (voltage_ok)
-        {
-            /* Рампинг «упёрся» в просадку АКБ: сигнализируем ERRO_RED
-             * однократно на каждое снижение потолка храповика.
-             * ratchet_max_step() монотонно не возрастает, поэтому на
-             * одном уровне повторных сигналов не будет; reset_max_step()
-             * при новом нажатии поднимает потолок — сигнала нет. */
-            static uint16_t v_max_prev = MAX_STEP;
-            uint16_t v_max = ratchet_max_step();
-            if (v_max < v_max_prev)
-                aux_err_now();
-            v_max_prev = v_max;
+        /* Рампинг «упёрся» в просадку АКБ: сигнализируем ERRO_RED
+         * однократно на каждое снижение потолка храповика.
+         * ratchet_max_step() монотонно не возрастает, поэтому на
+         * одном уровне повторных сигналов не будет; reset_max_step()
+         * при новом нажатии поднимает потолок — сигнала нет. */
+        static uint16_t v_max_prev = MAX_STEP;
+        uint16_t v_max = ratchet_max_step();
+        if (v_max < v_max_prev)
+            aux_err_now();
+        v_max_prev = v_max;
 
-            uint16_t cap = (v_max > limiter) ? (uint16_t)(v_max - limiter) : 1u;
-            max_step = cap;
-            /* При удержании рампинг упирается в потолок (с термочастью
-             * limiter, как прежде): плавный ретаргет SS_SLOW, без ступенек. */
-            if (Pressed && (step_user > cap))
-                set_current(cap, SS_SLOW);
-            /* Замена ступенчатой лестницы ×0.75: после отпускания кнопки
-             * просадка АКБ тоже плавно тянет step_user к потолку храповика
-             * (без термочасти: requested brightness в step_user остаётся
-             * прерогативой термолимитера — get_step_tc в set_current). */
-            else if (!Pressed && (step_user > v_max))
-                set_current(v_max, SS_SLOW);
-        }
+        uint16_t cap = (v_max > limiter) ? (uint16_t)(v_max - limiter) : 1u;
+        max_step = cap;
+        /* При удержании рампинг упирается в потолок (с термочастью
+         * limiter, как прежде): плавный ретаргет SS_SLOW, без ступенек. */
+        if (Pressed && (step_user > cap))
+            set_current(cap, SS_SLOW);
+        /* Замена ступенчатой лестницы ×0.75: после отпускания кнопки
+         * просадка АКБ тоже плавно тянет step_user к потолку храповика
+         * (без термочасти: requested brightness в step_user остаётся
+         * прерогативой термолимитера — get_step_tc в set_current). */
+        else if (!Pressed && (step_user > v_max))
+            set_current(v_max, SS_SLOW);
     }
     /* Тактический UI (ui_index 0): кламп к единому потолку без храповика
      * и сигнализации (моментарка пересетит step_default при каждом
@@ -741,6 +771,8 @@ void scan_voltage(void)
     /* Discrete UI (mode-based UI2: ui_index 2 или 3) */
     else
     {
+        /* Выборка валидна (ранний return выше) — сентинел больше не может
+         * увести mode_current в 0 и защёлкнуть volt_stop_mode. */
         if (mode_current && (eff_vcode >= (int32_t)swt_cut[mode_current - 1]))
         {
             if (++voff_count > UNDERVOLT_CONFIRM_COUNT)
@@ -770,10 +802,14 @@ void scan_voltage(void)
  * codes above 512, vbat < 2.4 V), tells the caller to abort the strobe.
  * It never touches the DAC, so the pulse shape is unaffected.
  *
- * main() stops the ADC before every STANDBY entry, so the guard
- * re-initialises it for the measurement and stops it again before
- * returning; otherwise a clocked ADC would leak current for the whole
- * strobe operation.
+ * The ADC is left running: it is powered down only by the main-loop sleep
+ * block, immediately before STANDBY.  Stopping it here would break the awake
+ * path — the strobe can be stopped by a button hold while the MCU stays
+ * awake, and the following sample_and_scan() would read a powered-down ADC
+ * (sentinel -> mode cascade to 0 / latched volt_stop_mode).  The extra
+ * quiescent current of a clocked ADC during the short awake windows is
+ * accepted; powering it down again would re-create that failure unless
+ * adc_read() gained its own re-init guard.
  *
  * @return true when the strobe must be stopped (deep discharge).
  */
@@ -783,7 +819,6 @@ bool strobe_voltage_low(void)
 
     adc_init();
     bool ok = adc_read();
-    adc_stop();
 
     if (ok && (adc_eff_raw_vcode() >= (int32_t)swt_cut[0]))
     {

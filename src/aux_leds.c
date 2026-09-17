@@ -592,13 +592,14 @@ bool beacon_is_cycle_start(void)
  * - При критическом разряде (< 2.70 В) переходит в необратимый глубокий сон down_forever().
  * - При напряжении < 3.10 В переключает маяк на двойные вспышки.
  * - При напряжении >= 3.20 В возвращает маяк на одиночные вспышки.
- * - Сразу после замера АЦП обесточивается через adc_stop().
+ * - АЦП остаётся включённым: гасит его только sleep-блок main() перед
+ *   STANDBY (маяк может быть прерван кнопочным пробуждением без STANDBY-wake,
+ *   и обесточенный АЦП дал бы sentinel в следующем sample_and_scan()).
  */
 void beacon_battery_check(void)
 {
 	adc_init();
 	bool ok = adc_read();
-	adc_stop();
 
 	if (!ok) return;
 
@@ -619,7 +620,6 @@ void beacon_battery_check(void)
 					confirmed++;
 				}
 			}
-			adc_stop();
 		}
 		if (confirmed >= 2)
 		{

@@ -110,8 +110,11 @@ extern uint16_t vrefint_raw_adc;
 
 /**
  * @brief Признак валидной свежей выборки напряжения.
- * false — после таймаута/сбоя АЦП (main); защита трактует это как
- * «критически низкое» напряжение (sentinel), как раньше vbat_mv==0.
+ * false — после таймаута/сбоя АЦП (main); adc_eff_vcode()/adc_eff_raw_vcode()
+ * отдают sentinel («критически низкое»), но scan_voltage() на такой выборке
+ * не пересчитывает потолок яркости и не снижает режим — сохраняется
+ * последнее достоверное значение; hard cutoff 2.70 В также выполняется
+ * только на валидной выборке.
  */
 extern bool voltage_ok;
 
@@ -226,7 +229,11 @@ void scan_voltage(void);
 /** @brief Dynamic UI2 mode ceiling (updated in scan_voltage). */
 extern uint8_t volt_max_mode;
 
-/** @brief Ratchet memory — historical minimum of volt_max_mode. */
+/**
+ * @brief UI2 voltage latch — historical minimum of volt_max_mode within a sag.
+ * Released back to CMODE_TURBO by scan_voltage() when a valid sample shows
+ * vbat >= 3.1 V (mirror of the UI1 ratchet reset).
+ */
 extern uint8_t volt_stop_mode;
 
 /** @brief UI1 sag ratchet: monotonically decreasing step ceiling by voltage. */
@@ -256,8 +263,9 @@ void reset_max_step(void);
  * confirmation as scan_voltage(). Returns true after four consecutive
  * valid sub-2.7 V readings (including deep-discharge codes above 512,
  * vbat < 2.4 V) so the caller can abort the strobe and enter the
- * protective state. Re-initialises and stops the ADC because main()
- * powers it down for STANDBY.
+ * protective state.  The ADC is left running: it is powered down only by the
+ * main-loop sleep block before STANDBY (stopping it here would leave a
+ * powered-down ADC for the next sample_and_scan() on the awake path).
  * @return true when the strobe must be stopped.
  */
 bool strobe_voltage_low(void);

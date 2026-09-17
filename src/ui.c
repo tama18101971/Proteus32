@@ -521,9 +521,9 @@ void off_strobe(void)
 {
 #if USE_STROBE
     stop_aux_if(IDM_STROBE, false);
+    /* step_default/mode_default и ps.use_prev уже восстановлены внутри
+     * off_driver() (ветка if (ps.use_prev)) — повторных действий не нужно. */
     off_driver(false, SS_NO);
-    if (ps.use_prev) step_default = ps.pr_step;
-    ps.use_prev = false;
 #endif
 }
 
