@@ -50,16 +50,23 @@ uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
         state->flags           |= THERMAL_FLAG_INITIALIZED;
     }
 
-    /* c) Fixed-point EMA low-pass filter.  The increment uses a plain arithmetic
-     * shift: `diff >> shift` truncates toward -infinity, so a positive residual
-     * gap below 2^shift contributes 0 while any negative gap contributes <= -1:
-     * the filter settles up to 2^shift - 1 fp-LSB (filter_shift = 4 -> <= 15/32
-     * ADC code) below the true temperature and converges exactly from above.
-     * The one-sided cold-side bias is anti-hunting-safe for the limiter, and
-     * integer filtered_temp stays unbiased (+16 rounding exceeds the 15 fp-LSB
-     * worst case).  Kept instead of symmetric rounding to save Flash (C5). */
+    /* c) Fixed-point EMA low-pass filter with symmetric rounding
+     * (round half up): adding half a filter step before the arithmetic
+     * shift yields floor(diff/2^filter_shift + 0.5), so the settled
+     * residual is a symmetric ±(2^(filter_shift-1) - 1) fp-LSB
+     * (filter_shift = 4 -> ±7/32 ADC code) instead of the one-sided
+     * -15/32 cold bias of plain truncation.  Thermally negligible either
+     * way (~0.05 °C at ~8.8 codes/°C), and hunting is still impossible:
+     * the residual never spans the 8-code hold band or the 2-code
+     * p_deadband.  Integer filtered_temp keeps the +16 round-half-up and
+     * stays within ±1 ADC code of the true value. */
     int16_t diff = (int16_t)(((int16_t)t_raw << THERMAL_TEMP_FP_SHIFT) - state->filtered_temp_fp);
-    state->filtered_temp_fp = (int16_t)(state->filtered_temp_fp + (diff >> config->filter_shift));
+    uint8_t fshift = config->filter_shift;
+    /* Guard covers filter_shift == 0; for the pinned config (4) LTO folds
+     * both the guard and the half-step into constants. */
+    int16_t half = (fshift != 0u) ? (int16_t)(1u << (fshift - 1u)) : (int16_t)0;
+    state->filtered_temp_fp = (int16_t)(state->filtered_temp_fp +
+        ((int16_t)(diff + half) >> fshift));
     state->filtered_temp    = (int16_t)((state->filtered_temp_fp + (1 << (THERMAL_TEMP_FP_SHIFT - 1u))) >> THERMAL_TEMP_FP_SHIFT);
 
     int16_t t_cur_fp       = state->filtered_temp_fp;
