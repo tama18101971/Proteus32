@@ -124,11 +124,11 @@ static const uint32_t strobe_bike2[] = {
  * multi-phase strobes only need an array and one descriptor below. */
 static const strobe_profile_t strobe_commands[STROBE_COUNT] = {
     { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD_MS(HBL_LED, 1, 0, 30, 30, CMODE_TURBO, CMODE_OFF) } }, /* 30ms / 30ms */
-    { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD_MS(HBL_LED, 1, 0, 60, 2000, CMODE_TURBO, CMODE_MID) } }, /* 60ms / 2s */
     { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD_MS(HBL_LED, 1, 0, 60, 1008, CMODE_MAX, CMODE_OFF) } }, /* 60ms / ~1s */
     { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD_MS(HBL_LED, 1, 0, 60, 4000, CMODE_MAX, CMODE_OFF) } }, /* 60ms / 4s */
-    { STROBE_PROFILE_ARRAY,   { .array = strobe_sos } },
+    { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD_MS(HBL_LED, 1, 0, 60, 2000, CMODE_TURBO, CMODE_MID) } }, /* 60ms / 2s */
     { STROBE_PROFILE_ARRAY,   { .array = strobe_bike2 } }, /* bike strobe 2 */
+    { STROBE_PROFILE_ARRAY,   { .array = strobe_sos } },
 };
 #endif
 
