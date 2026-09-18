@@ -98,7 +98,15 @@ _Static_assert(SYSCLK_HZ >= 8000000u && SYSCLK_HZ <= 48000000u,
 #define USE_MAGIC_SLOTS 1   // «Волшебные» слоты: до 31 клика с маской длинного нажатия (ui_table.c, ui.c)
 #endif
 #ifndef USE_LSI_GUARD
-#define USE_LSI_GUARD 1     // Защита от отказа LSI/AWU: awu_ready + гейты термосна и старта AUX (awu.c, main.c, aux_leds.c)
+/* Защита от отказа LSI/AWU: awu_ready + гейты термосна и старта AUX
+ * (awu.c, main.c, aux_leds.c). По умолчанию ОТКЛЮЧЕНА: вероятность
+ * отказа LSI оценена как очень низкая, а оба guard'а (LSI + строб)
+ * вместе не помещаются в 16128 Б. Включение: PLATFORMIO_BUILD_FLAGS
+ * "-DUSE_LSI_GUARD=1" (вклад +84 Б; при включённом строб-гейде
+ * одновременно не помещается). Принимаемый риск при отключении:
+ * без LSI строб не отсчитает первый OFF-полупериод и может залипнуть
+ * на ON-яркости, термосон AWU_4S не разбудит MCU. */
+#define USE_LSI_GUARD 0
 #endif
 
 #if defined(UART_DEBUG) || defined(PRINT_ADC)
