@@ -347,6 +347,25 @@ bool beacon_is_cycle_start(void);
  */
 void beacon_battery_check(void);
 
+#if USE_BEACON_ADC_GUARD
+/**
+ * @brief True while the beacon is latched off by a persistent ADC failure.
+ *
+ * Three consecutive failed beacon_battery_check() calls latch the beacon
+ * off; start_aux_beacon() refuses to restart it until the latch clears.
+ */
+bool beacon_adc_dead(void);
+
+/**
+ * @brief Clear the ADC-failure beacon latch.
+ *
+ * Called from the button-wake path after the first valid ADC sample:
+ * user presence plus a proven-live ADC allow the beacon to resume on the
+ * next OFF-sleep (if still enabled in EE).
+ */
+void beacon_adc_latch_reset(void);
+#endif /* USE_BEACON_ADC_GUARD */
+
 /**
  * @brief Refresh button backlight state according to EE.aux settings.
  */

@@ -296,7 +296,14 @@ int main(void)
                 adc_init();
                 if (!is_aux_mode(IDM_STROBE))
                 {
-                    (void)sample_and_scan();
+                    if (sample_and_scan())
+                    {
+#if USE_BEACON_ADC_GUARD
+                        /* АЦП доказанно жив + пользователь присутствует:
+                         * маяку можно возвращаться на следующем OFF-сне. */
+                        beacon_adc_latch_reset();
+#endif
+                    }
                 }
                 tim2_start();
                 sleep_owner = SLEEP_OWNER_NORMAL;

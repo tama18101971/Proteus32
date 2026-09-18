@@ -592,6 +592,29 @@ bool beacon_low_voltage = false;
 static uint32_t beacon_double_buf[3];
 bool vwarning_fired = false;
 
+#if USE_BEACON_ADC_GUARD
+/* ── Защита маяка от устойчивого отказа АЦП (USE_BEACON_ADC_GUARD) ──
+ * Маяк перезапускается каждым sleep-блоком по флагу EE, поэтому простая
+ * остановка команды ничего не даёт: нужен счётчик отказов + RAM-защёлка,
+ * гейтящая start_aux_beacon() до доказанно живого АЦП. Порог 3 — как у
+ * строб-гайда и лимитеров; каждая проверка АКБ — один цикл маяка. */
+#define BEACON_ADC_FAIL_CONFIRM 3u
+static uint8_t beacon_fail_streak = 0;
+static bool beacon_adc_latch = false;
+
+/** @brief True while the beacon is latched off by a persistent ADC failure. */
+bool beacon_adc_dead(void)
+{
+	return beacon_adc_latch;
+}
+
+/** @brief Clear the ADC-failure latch (button wake with a valid sample). */
+void beacon_adc_latch_reset(void)
+{
+	beacon_adc_latch = false;
+}
+#endif
+
 /**
  * @brief Check whether the beacon is at the start of its repetition cycle.
  * @return true on the cycle-initial AWU wake before the first flash.
@@ -623,7 +646,24 @@ void beacon_battery_check(void)
 	adc_init();
 	bool ok = adc_read();
 
-	if (!ok) return;
+	if (!ok)
+	{
+#if USE_BEACON_ADC_GUARD
+		/* Отказ измерения — не отсчёт разряда (путь down_forever ниже не
+		 * задеваем). Отдельная серия: 3 неудачных проверки подряд гасят
+		 * маяк до кнопочного пробуждения с валидной выборкой. */
+		if (++beacon_fail_streak >= BEACON_ADC_FAIL_CONFIRM)
+		{
+			beacon_fail_streak = 0;
+			beacon_adc_latch = true;
+			stop_aux_if(IDM_BEACON, false);
+		}
+#endif
+		return;
+	}
+#if USE_BEACON_ADC_GUARD
+	beacon_fail_streak = 0;
+#endif
 
 	int32_t eff_vcode = adc_eff_raw_vcode();
 
@@ -674,6 +714,11 @@ void beacon_battery_check(void)
 void start_aux_beacon(void) {
 	if (!AUXF_GET_BEACON_ON(EE.aux)) return;
 	if (menu_beacon_mute) return;   /* сессионный мьют во время меню */
+#if USE_BEACON_ADC_GUARD
+	/* Защёлка ADC-отказа: маяк без проверки АКБ не запускается ни одним
+	 * из вызывающих (sleep-блок main, гистерезис beacon_battery_check). */
+	if (beacon_adc_dead()) return;
+#endif
 	if (aux_is_active()) return;
 
 	/* Параметры OFF-полупериода по beacon_mode:
