@@ -141,6 +141,13 @@ static const strobe_profile_t strobe_commands[STROBE_COUNT] = {
  */
 static void start_aux_array(const uint32_t *pArray, awu_tick_t delay) {
 	off_aux_cmd(false);
+#if USE_LSI_GUARD
+	/* Без LSI AWU не тикает: массив стартовал бы и остался на первом
+	 * ON-полупериоде до разряда АКБ. Очистка выше обязательна — гасит
+	 * предыдущую команду и возвращает GPIO в безопасное состояние. */
+	if (!awu_ready)
+		return;
+#endif
 	memset(&aux_ctl, 0, sizeof(aux_ctl));
 
 	EnableArrayProcessing = true;
@@ -320,6 +327,13 @@ static uint32_t set_aux_count(uint8_t count) {
  */
 static void start_aux_cmd(uint32_t command, IDM_Type_t idm_mode, awu_tick_t delay) {
 	off_aux_cmd(false);
+#if USE_LSI_GUARD
+	/* Без LSI AWU не тикает: AWU_IMMEDIATELY путь успел бы включить
+	 * яркость (SetBrightness), но фаза OFF никогда не наступила бы —
+	 * луч залип до разряда АКБ. Очистка выше гасит предыдущую команду. */
+	if (!awu_ready)
+		return;
+#endif
 
 	aux_cmd.aux_cmd = command;
 
@@ -376,6 +390,17 @@ static __attribute__((noinline)) void SetBrightness(LED_Bits_t device, uint8_t b
 void start_aux_strobe(uint8_t index)
 {
 	const strobe_profile_t *profile;
+
+#if USE_LSI_GUARD
+	/* Без LSI строб не отсчитает первый OFF-полупериод (луч залип бы на
+	 * CMODE_TURBO). off_strobe() вместо «молчаливого отказа»: корректно
+	 * выходит из MODE_STROB, восстанавливает сессию, гасит DAC. */
+	if (!awu_ready)
+	{
+		off_strobe();
+		return;
+	}
+#endif
 
 	if (index >= STROBE_COUNT)
 		return;

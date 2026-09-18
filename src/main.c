@@ -118,6 +118,14 @@ static bool thermal_fast_required(void)
  */
 static bool thermal_sleep_allowed(void)
 {
+#if USE_LSI_GUARD
+    /* Без LSI таймер AWU не тикает: термосон AWU_4S не проснулся бы и
+     * фонарь остался в STANDBY без термоконтроля и отсечки разряда.
+     * Деградация: MCU остаётся на TIM2 (30 Гц опрос) — контроль полный,
+     * цена — потребление бодрствования. */
+    if (!awu_ready)
+        return false;
+#endif
     return driver_is_active() &&
            (driver_mode != MODE_BLOCK_LIGHT) &&
            !thermal_fast_required() &&
@@ -362,6 +370,21 @@ int main(void)
             need_sleep = false;
             tick_5s_reset();
         }
+
+#if USE_LSI_GUARD
+        /* LSI умер при активном AUX-режиме (транзиент EMI при бодрствовании
+         * или неудачный рестарт AWU_init() при пробуждении кнопкой):
+         * гасим корректно. off_strobe() восстанавливает сессию и выходит
+         * из MODE_STROB; для остальных AUX-владельцев достаточно
+         * off_aux_cmd(false). AWU-владение дальше не восстанавливается —
+         * последующие гейты старта держат AUX выключенным. */
+        if (!awu_ready && aux_is_active())
+        {
+            off_aux_cmd(false);
+            if (driver_mode == MODE_STROB)
+                off_strobe();
+        }
+#endif
 
         bool strobe_sleep = is_aux_mode(IDM_STROBE) && !button_sequence_active();
         bool thermal_sleep = (need_sleep &&

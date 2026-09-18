@@ -61,6 +61,11 @@ _Static_assert(((int)AWU_16S < (int)AWU_IMMEDIATELY) && ((int)AWU_IMMEDIATELY <=
 //extern volatile uint8_t awu_event; /**< AWU event flag, set in ISR */
 extern volatile uint8_t is_sleep_mode; /**< Non-zero when MCU is in STANDBY */
 
+#if USE_LSI_GUARD
+/** @brief LSI stability result of the last AWU_init() (see awu.c). */
+extern bool awu_ready;
+#endif
+
 /** @brief Enable AWU peripheral. */
 #define AWU_ON()    (PWR->AWUCSR |=  PWR_AWUCSR_AWUEN)
 /** @brief Disable AWU peripheral. */

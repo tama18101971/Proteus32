@@ -97,6 +97,9 @@ _Static_assert(SYSCLK_HZ >= 8000000u && SYSCLK_HZ <= 48000000u,
 #ifndef USE_MAGIC_SLOTS
 #define USE_MAGIC_SLOTS 1   // «Волшебные» слоты: до 31 клика с маской длинного нажатия (ui_table.c, ui.c)
 #endif
+#ifndef USE_LSI_GUARD
+#define USE_LSI_GUARD 1     // Защита от отказа LSI/AWU: awu_ready + гейты термосна и старта AUX (awu.c, main.c, aux_leds.c)
+#endif
 
 #if defined(UART_DEBUG) || defined(PRINT_ADC)
     #include "mini_printf.h"
