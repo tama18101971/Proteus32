@@ -489,7 +489,7 @@ uint16_t vbat_to_mv_calibrated(void)
  */
 static const uint16_t swt_cut[6] =
 {   /* vbat < mV ⟺ adc >= это значение */
-    MV_LT(2700), MV_LT(2710), MV_LT(2740), MV_LT(2800), MV_LT(2850), MV_LT(3050)
+    MV_LT(2700), MV_LT(2710), MV_LT(2730), MV_LT(2790), MV_LT(2840), MV_LT(3050)
 };
 
 /**
@@ -509,7 +509,7 @@ static uint8_t calc_volt_max_mode(int32_t eff_vcode)
 /* ============ Потолок яркости UI1 по напряжению (ramping) ============
  * Единая шкала с UI2: потолок = get_stepi(volt_max_mode) — яркость
  * режима, разрешённого при текущем напряжении (modes[]: 20..511 по
- * порогам swt_cut 2.71/2.74/2.80/2.85/3.05 В).
+ * порогам swt_cut 2.71/2.73/2.79/2.84/3.05 В).
  * volt_step_ratchet монотонно убывает (MIN) до явного безопасного восстановления. */
 uint16_t ratchet_max_step(void)
 {
