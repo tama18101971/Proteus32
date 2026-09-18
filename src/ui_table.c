@@ -296,12 +296,26 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout)
 
     /* UI1's one-click OFF action must wait while a click-sequence slot may
      * contain SLOT_BLOCK.  A later CLICK_SEQ either enters block or replays
-     * the ordinary one-click OFF below. */
-    if (mode == MODE_ON && idx == 1u && evt->type == BTN_EVT_RELEASED &&
-        evt->clicks == 1u && has_block_click_slot())
+     * the ordinary one-click OFF below.  RELEASED и CLICK_SEQ — непере-
+     * секающиеся типы событий, поэтому обе проверки в одном блоке перед
+     * slot-dispatch эквивалентны прежнему разнесению (порядок относительно
+     * slot-dispatch не менял исход). */
+    if (mode == MODE_ON && idx == 1u)
     {
-        block_click_pending = true;
-        return 1;
+        if (evt->type == BTN_EVT_RELEASED && evt->clicks == 1u && has_block_click_slot())
+        {
+            block_click_pending = true;
+            return 1;
+        }
+        if (timeout && evt->type == BTN_EVT_CLICK_SEQ && block_click_pending)
+        {
+            block_click_pending = false;
+            if (evt->clicks == 1u)
+            {
+                off_driver_false();
+                return 1;
+            }
+        }
     }
 
     /* Common slot dispatch in UI1 / UI2 (MODE_OFF and MODE_ON). */
@@ -327,20 +341,6 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout)
                 block_click_pending = false;
                 return 1;
             }
-        }
-    }
-
-    /* Restore UI1's normal one-click OFF semantics if the sequence ended
-     * without matching the configured SLOT_BLOCK gesture.  Other sequences
-     * must continue to the normal UI table (notably UI1's two-click turbo). */
-    if (mode == MODE_ON && idx == 1u && timeout &&
-        evt->type == BTN_EVT_CLICK_SEQ && block_click_pending)
-    {
-        block_click_pending = false;
-        if (evt->clicks == 1u)
-        {
-            off_driver_false();
-            return 1;
         }
     }
 
