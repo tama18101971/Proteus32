@@ -132,6 +132,7 @@ static void exaux(int32_t eff_vcode)
  * гистерезис маяка срабатывали позже истинного порога. */
 static uint16_t ema_avg;
 static bool ema_seeded;
+static bool adc_ready;
 
 /** @brief Initialise EMA filter with seed value. */
 void ema_init(uint16_t seed)
@@ -241,6 +242,8 @@ uint16_t get_exact_temp_adc(void)
  */
 void adc_init(void)
 {
+    adc_ready = false;
+    voltage_ok = false;
     // 1. Включаем тактирование GPIOD и ADC1
     RCC->APB2PCENR |= (1 << 5) | (1 << 9); // GPIOD(bit5) | ADC1(bit9)
 
@@ -285,15 +288,18 @@ void adc_init(void)
     // 13. Сброс калибровки (RSTCAL = бит 3 в CTLR2) — с таймаутом
     uint32_t timeout = ADC_WAIT_TIMEOUT;
     ADC1->CTLR2 |= (1 << 3);
-    while ((ADC1->CTLR2 & (1 << 3)) && --timeout)
-        ;
+    while (ADC1->CTLR2 & (1 << 3))
+        if (!--timeout)
+            return;
 
     // 14. Калибровка ADC (CAL = бит 2 в CTLR2) — с таймаутом
     timeout = ADC_WAIT_TIMEOUT;
     ADC1->CTLR2 |= (1 << 2);
-    while ((ADC1->CTLR2 & (1 << 2)) && --timeout)
-        ;
+    while (ADC1->CTLR2 & (1 << 2))
+        if (!--timeout)
+            return;
 
+    adc_ready = true;
     ema_init(0);
 }
 
@@ -321,6 +327,8 @@ bool adc_read(void)
     /* A new conversion invalidates the previous sample until the complete
      * NTC/Vrefint pair passes all acquisition checks below. */
     voltage_ok = false;
+    if (!adc_ready)
+        return false;
 
     // Включаем делитель напряжения: PD3 = 0 ("земля" нижнего плеча, ток через NTC течёт)
     GPIOD->BCR = (1 << 3);
@@ -406,6 +414,7 @@ bool adc_read(void)
  */
 void adc_stop(void)
 {
+    adc_ready = false;
     /* Если АЦП уже отключено (тактирование выключено или ADON=0) — выходим */
     if (!(RCC->APB2PCENR & RCC_ADC1EN) || !(ADC1->CTLR2 & (1 << 0)))
         return;
