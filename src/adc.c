@@ -749,46 +749,48 @@ void scan_voltage(void)
     exaux(eff_vcode);
 #endif
 
-    /* 2. Потолок яркости по напряжению (единая шкала swt_cut + modes[]) */
+    /* 2. Потолок яркости по напряжению (единая шкала swt_cut + modes[]).
+     * Общий кламп для рампинга (UI1) и тактического UI: цель вычисляется
+     * по-разному, кламп step_user к цели — один на оба пути. */
     uint8_t ui_index = ui_table_idx;
 
-    /* Ramping UI1: храповик + кламп step_user к потолку.
-     * Выборка валидна (ранний return выше), отдельный гейт voltage_ok не нужен. */
-    if (ui_index == 1)
+    if ((ui_index == 1) || (ui_index == 0) || (ui_index > 3u))
     {
-        /* Рампинг «упёрся» в просадку АКБ: сигнализируем ERRO_RED
-         * однократно на каждое снижение потолка храповика.
-         * ratchet_max_step() монотонно не возрастает, поэтому на
-         * одном уровне повторных сигналов не будет; reset_max_step()
-         * при новом нажатии поднимает потолок — сигнала нет. */
-        static uint16_t v_max_prev = MAX_STEP;
-        uint16_t v_max = ratchet_max_step();
-        if (v_max < v_max_prev)
-            aux_err_now();
-        v_max_prev = v_max;
+        uint16_t target;
+        if (ui_index == 1)
+        {
+            /* Рампинг «упёрся» в просадку АКБ: сигнализируем ERRO_RED
+             * однократно на каждое снижение потолка храповика.
+             * ratchet_max_step() монотонно не возрастает, поэтому на
+             * одном уровне повторных сигналов не будет; reset_max_step()
+             * при новом нажатии поднимает потолок — сигнала нет. */
+            static uint16_t v_max_prev = MAX_STEP;
+            uint16_t v_max = ratchet_max_step();
+            if (v_max < v_max_prev)
+                aux_err_now();
+            v_max_prev = v_max;
 
-        uint16_t cap = (v_max > limiter) ? (uint16_t)(v_max - limiter) : 1u;
-        max_step = cap;
-        /* При удержании рампинг упирается в потолок (с термочастью
-         * limiter, как прежде): плавный ретаргет SS_SLOW, без ступенек. */
-        if (Pressed && (step_user > cap))
-            set_current(cap, SS_SLOW);
-        /* Замена ступенчатой лестницы ×0.75: после отпускания кнопки
-         * просадка АКБ тоже плавно тянет step_user к потолку храповика
-         * (без термочасти: requested brightness в step_user остаётся
-         * прерогативой термолимитера — get_step_tc в set_current). */
-        else if (!Pressed && (step_user > v_max))
-            set_current(v_max, SS_SLOW);
-    }
-    /* Тактический UI (ui_index 0): кламп к единому потолку без храповика
-     * и сигнализации (моментарка пересетит step_default при каждом
-     * нажатии — кламп держит яркость в рамках на время удержания).
-     * Меню (5/6) сюда не попадают: driver_mode не активен. */
-    else if (ui_index == 0 || ui_index > 3u)
-    {
-        uint16_t cap = get_stepi(volt_max_mode);
-        if (step_user > cap)
-            set_current(cap, SS_SLOW);
+            /* max_step — безусловный потолок рампинга с термочастью
+             * limiter (как прежде; обновляется и в PRESSED-обработчике
+             * ui.c по той же формуле). */
+            max_step = (v_max > limiter) ? (uint16_t)(v_max - limiter) : 1u;
+            /* При удержании рампинг упирается в потолок (с термочастью
+             * limiter): плавный ретаргет SS_SLOW. После отпускания цель —
+             * потолок храповика целиком: requested brightness в step_user
+             * остаётся прерогативой термолимитера (get_step_tc). */
+            target = Pressed ? max_step : v_max;
+        }
+        else
+        {
+            /* Тактический UI: кламп к единому потолку без храповика
+             * и сигнализации (моментарка пересетит step_default при каждом
+             * нажатии — кламп держит яркость в рамках на время удержания).
+             * Меню (5/6) сюда не попадают: driver_mode не активен. */
+            target = get_stepi(volt_max_mode);
+        }
+
+        if (step_user > target)
+            set_current(target, SS_SLOW);
     }
     /* Discrete UI (mode-based UI2: ui_index 2 или 3) */
     else
