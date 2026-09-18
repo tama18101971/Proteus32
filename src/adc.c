@@ -835,6 +835,60 @@ void scan_voltage(void)
  *
  * @return true when the strobe must be stopped (deep discharge).
  */
+#if USE_STROBE_ADC_GUARD
+/**
+ * @brief Combined strobe battery/measurement state (USE_STROBE_ADC_GUARD).
+ *
+ * Same single read-only sample as strobe_voltage_low(), plus a separate
+ * streak counter for acquisition failures: 3 failed adc_read() in a row
+ * report STROBE_ADC_DEAD so the caller stops the strobe recoverably —
+ * a dead measurement is NOT proof of deep discharge and must not reach
+ * down_forever().  Any valid sample clears the failure streak; firing
+ * either threshold clears its own counter, so a fresh strobe start begins
+ * a new series.  The undervoltage latch (low_count, four consecutive
+ * valid sub-2.7 V readings including codes above 512) behaves exactly
+ * like strobe_voltage_low().
+ *
+ * @return STROBE_BATT_OK, STROBE_BATT_LOW or STROBE_ADC_DEAD.
+ */
+uint8_t strobe_battery_state(void)
+{
+    static uint8_t low_count = 0;
+    static uint8_t fail_streak = 0;
+
+    adc_init();
+    bool ok = adc_read();
+
+    if (!ok)
+    {
+        /* Сбой измерения — не отсчёт разряда: рвёт серию низких выборок
+         * (как недостижение порога в обычной логике) и копит свою серию. */
+        low_count = 0;
+        if (++fail_streak >= STROBE_ADC_FAIL_CONFIRM)
+        {
+            fail_streak = 0;
+            return STROBE_ADC_DEAD;
+        }
+        return STROBE_BATT_OK;
+    }
+    fail_streak = 0;
+
+    if (adc_eff_raw_vcode() >= (int32_t)swt_cut[0])
+    {
+        if (++low_count > UNDERVOLT_CONFIRM_COUNT)
+        {
+            low_count = 0;
+            return STROBE_BATT_LOW;
+        }
+    }
+    else
+    {
+        low_count = 0;
+    }
+
+    return STROBE_BATT_OK;
+}
+#else
 bool strobe_voltage_low(void)
 {
     static uint8_t low_count = 0;
@@ -857,6 +911,7 @@ bool strobe_voltage_low(void)
 
     return false;
 }
+#endif /* USE_STROBE_ADC_GUARD */
 
 /** @brief Get battery indicator flash count (0-6) based on Vbat (в кодах Vrefint). */
 uint8_t bat_get_flashes(void) {

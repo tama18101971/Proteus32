@@ -335,13 +335,38 @@ int main(void)
                      * 2.7 V deep-discharge latch is explicitly restored here:
                      * a read-only battery sample (no DAC writes) aborts the
                      * strobe into the permanent protective state. */
-                    if (is_aux_mode(IDM_STROBE) && strobe_voltage_low())
+                    if (is_aux_mode(IDM_STROBE))
                     {
-                        off_aux_cmd(false);
-                        /* down_forever() EE не коммитит: запись при
-                         * критическом разряде опаснее потери последних
-                         * изменений настроек. */
-                        down_forever();
+#if USE_STROBE_ADC_GUARD
+                        uint8_t batt = strobe_battery_state();
+                        if (batt == STROBE_BATT_LOW)
+                        {
+                            off_aux_cmd(false);
+                            /* down_forever() EE не коммитит: запись при
+                             * критическом разряде опаснее потери последних
+                             * изменений настроек. */
+                            down_forever();
+                        }
+                        else if (batt == STROBE_ADC_DEAD)
+                        {
+                            /* Восстанавливаемый останов: отказ измерений не
+                             * доказывает разряд АКБ, поэтому без down_forever.
+                             * off_strobe() корректно выходит из MODE_STROB
+                             * (сессия восстановлена), пользователь может
+                             * запустить строб снова — счётчики серий свежие. */
+                            off_aux_cmd(false);
+                            off_strobe();
+                        }
+#else
+                        if (strobe_voltage_low())
+                        {
+                            off_aux_cmd(false);
+                            /* down_forever() EE не коммитит: запись при
+                             * критическом разряде опаснее потери последних
+                             * изменений настроек. */
+                            down_forever();
+                        }
+#endif
                     }
                     if (beacon_is_cycle_start())
                     {

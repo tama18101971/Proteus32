@@ -108,6 +108,14 @@ _Static_assert(SYSCLK_HZ >= 8000000u && SYSCLK_HZ <= 48000000u,
  * на ON-яркости, термосон AWU_4S не разбудит MCU. */
 #define USE_LSI_GUARD 0
 #endif
+#ifndef USE_STROBE_ADC_GUARD
+#define USE_STROBE_ADC_GUARD 1  /* Прекращение строба при устойчивом отказе АЦП
+ * (adc.c strobe_battery_state, main.c): 3 неудачных adc_read() подряд →
+ * ВОССТАНОВИМЫЙ останов через off_strobe(). Подтверждённый разряд
+ * (4 валидных отсчёта ниже 2.7 В) по-прежнему уводит в down_forever().
+ * При 0 — прежнее поведение: неудачные выборки только рвут серию
+ * подтверждений, строб может крутиться вслепую. */
+#endif
 
 #if defined(UART_DEBUG) || defined(PRINT_ADC)
     #include "mini_printf.h"

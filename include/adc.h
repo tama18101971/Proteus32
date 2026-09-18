@@ -23,6 +23,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include "proteus_config.h"
 
 #define TEMPERATURE_TABLE_START  (-200)
 #define TEMPERATURE_TABLE_STEP   (10)
@@ -269,6 +270,30 @@ void reset_max_step(void);
  * @return true when the strobe must be stopped.
  */
 bool strobe_voltage_low(void);
+
+/* ── USE_STROBE_ADC_GUARD: outcome of the strobe battery check ─────
+ * Один замер на пробуждение, два независимых счётчика:
+ *   - STROBE_BATT_LOW  — 4 валидных отсчёта ниже 2.70 В (как прежде,
+ *     включает deep-discharge коды >512): необратимый down_forever();
+ *   - STROBE_ADC_DEAD  — STROBE_ADC_FAIL_CONFIRM неудачных adc_read()
+ *     подряд (таймаут/сбой): ВОССТАНОВИМЫЙ останов через off_strobe() —
+ *     отказ измерений не доказывает разряд АКБ.
+ * Любая валидная выборка сбрасывает fail_streak; срабатывание порога
+ * сбрасывает соответствующий счётчик (свежий старт строба начинает
+ * серию заново). */
+#if USE_STROBE_ADC_GUARD
+#define STROBE_BATT_OK     0u
+#define STROBE_BATT_LOW    1u
+#define STROBE_ADC_DEAD    2u
+#define STROBE_ADC_FAIL_CONFIRM 3u
+
+/**
+ * @brief Combined strobe battery/measurement state (USE_STROBE_ADC_GUARD).
+ * @return STROBE_BATT_OK, STROBE_BATT_LOW (confirmed deep discharge) or
+ *         STROBE_ADC_DEAD (persistent acquisition failure).
+ */
+uint8_t strobe_battery_state(void);
+#endif /* USE_STROBE_ADC_GUARD */
 
 /**
  * @brief Irreversible shutdown: unpower load, mask interrupts, enter permanent STANDBY.
