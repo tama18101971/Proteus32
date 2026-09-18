@@ -263,8 +263,6 @@ extern union AUX_Cmd_u *p_aux;
 
 /** @brief Current voltage warning level. */
 extern uint8_t vwarning;
-/** @brief Previous voltage warning level (for change detection). */
-extern uint8_t vwarning_old;
 
 /** @brief true = array processing active. */
 extern bool EnableArrayProcessing;
@@ -332,7 +330,8 @@ void start_aux_beacon(void);
 #if USE_EX_AUX
 /**
  * @brief Start extended aux voltage warning blink pattern.
- * @param ex_mode Warning level (VWARNING_FAST/MEDIUM/SLOW).
+ * @param ex_mode Warning level (VWARNING_FAST=double flash ~2s,
+ *                VWARNING_MEDIUM/SLOW=single flash 4s/8s).
  */
 void start_exaux_voltage(WARNING_Fr_t ex_mode);
 #endif

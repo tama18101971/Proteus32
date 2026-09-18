@@ -217,7 +217,6 @@ uint8_t on_driver(void)
             off_aux_cmd(false);
         ON_POWER();
         vwarning = VWARNING_NONE;
-        vwarning_old = VWARNING_NONE;
         direction = DIR_UP;
         driver_mode = MODE_ON;
         return 1;
@@ -573,7 +572,6 @@ void lock_light_on(DRIVER_Mode_t prev_mode)
         off_aux_cmd(false);
     ON_POWER();
     vwarning = VWARNING_NONE;
-    vwarning_old = VWARNING_NONE;
     direction = DIR_UP;
     mode_current = CMODE_MIN;
     set_curri(CMODE_MIN);

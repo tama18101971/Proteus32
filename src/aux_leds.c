@@ -41,7 +41,6 @@
 #include <string.h>
 
 uint8_t vwarning = VWARNING_NONE;			// Текущий уровень предупреждения о напряжении
-uint8_t vwarning_old = VWARNING_NONE;		// Предыдущий уровень (для отслеживания изменений)
 
 /* Указатель на текущую AUX-команду (одиночная или из массива).
  * Если NULL — обработчик неактивен.
@@ -691,9 +690,12 @@ void aux_refresh_backlight(void) {
 #if USE_EX_AUX
 /**
  * @brief Запуск индикации предупреждения о напряжении
- * @param ex_mode — скорость моргания (VWARNING_FAST=2с, MEDIUM=4с, SLOW=8с)
+ * @param ex_mode — скорость моргания (VWARNING_FAST=двойная вспышка ~2с,
+ *                  MEDIUM=одиночная 4с, SLOW=одиночная 8с)
  *
- * Зацикленная (cycle=1) команда: одна вспышка RED_LED за период.
+ * FAST (компайл-таймовый массив, как двойная вспышка маяка):
+ *   ON 50мс / OFF 152мс / ON 50мс / OFF ~1.76с → период ~2.01с.
+ * MEDIUM/SLOW — зацикленная (cycle=1) команда: одна вспышка RED_LED за период.
  * ON-полупериод — короткая вспышка, OFF — пауза до следующей вспышки.
  * Сумма ON+OFF ≈ период предупреждения (2/4/8 с).
  * Первая вспышка — через ~1 с (AWU_1S): «тихая пауза» отделяет начало
@@ -703,21 +705,26 @@ void aux_refresh_backlight(void) {
  */
 void start_exaux_voltage(WARNING_Fr_t ex_mode) {
 	vwarning_fired = true;   /* сессионный флаг: маяк после выключения — двойные вспышки */
-	uint32_t cmd = 0;
-	switch (ex_mode) {
-	case VWARNING_FAST:   /* ON 100мс, OFF 1900мс → период ~2с */
-		cmd = MAKE_CMD_MS(RED_LED, 1, 0, 100, 1900, 1, 0);
-		break;
-	case VWARNING_MEDIUM: /* ON 100мс, OFF 3900мс → период ~4с */
-		cmd = MAKE_CMD_MS(RED_LED, 1, 0, 100, 3900, 1, 0);
-		break;
-	case VWARNING_SLOW:   /* ON 100мс, OFF 7900мс → период ~8с */
-		cmd = MAKE_CMD_MS(RED_LED, 1, 0, 100, 7900, 1, 0);
-		break;
-	default:
-		break;
+
+	if (ex_mode == VWARNING_FAST) {
+		static const uint32_t vw_fast_seq[3] = {
+			/* двойная вспышка как в маяке: ON 50мс / OFF 152мс (512×38),
+			 * ON 50мс / OFF ~1.76с (4096×55) → период ~2.01с */
+			MAKE_CMD_MS(RED_LED, 0, 1, 50, 150, 1, 0),
+			MAKE_CMD_MS(RED_LED, 0, 1, 50, 1750, 1, 0),
+			AC_REP_ATSTART
+		};
+		start_aux_array(vw_fast_seq, AWU_1S);   /* «тихая пауза» ~1с перед первой вспышкой */
+		aux_ctl.idmode = IDM_VWARNING;
+	} else {
+		uint32_t cmd = 0;
+		switch (ex_mode) {          /* MEDIUM/SLOW — без изменений */
+		case VWARNING_MEDIUM: cmd = MAKE_CMD_MS(RED_LED, 1, 0, 100, 3900, 1, 0); break;
+		case VWARNING_SLOW:   cmd = MAKE_CMD_MS(RED_LED, 1, 0, 100, 7900, 1, 0); break;
+		default: break;
+		}
+		start_aux_cmd(cmd, IDM_VWARNING, AWU_1S);
 	}
-	start_aux_cmd(cmd, IDM_VWARNING, AWU_1S);
 }
 #endif
 

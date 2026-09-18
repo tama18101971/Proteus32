@@ -82,7 +82,8 @@ static const uint16_t ex_lvls[3] = {
  * @param eff_vcode Calibrated Vrefint code (vcode - vc).
  *
  * Compares effective voltage against three thresholds and triggers
- * progressively more urgent blink patterns via start_exaux_voltage().
+ * progressively more urgent blink patterns via start_exaux_voltage()
+ * (FAST = double flash ~2s, MEDIUM/SLOW = single flash 4s/8s).
  * Only active when eaux_onoff is set and driver is in MODE_ON.
  */
 static void exaux(int32_t eff_vcode)
@@ -94,7 +95,6 @@ static void exaux(int32_t eff_vcode)
         if (vwarning != VWARNING_NONE)
         {
             vwarning = VWARNING_NONE;
-            vwarning_old = VWARNING_NONE;
             stop_aux_if(IDM_VWARNING, false);
         }
         return;
@@ -105,14 +105,14 @@ static void exaux(int32_t eff_vcode)
     else if (eff_vcode >= ex_lvls[0])  vwarning = VWARNING_SLOW;
     else                                vwarning = VWARNING_NONE;
 
-    if (vwarning != vwarning_old || (vwarning != VWARNING_NONE && !aux_is_active())) {
-        vwarning_old = vwarning;
-        if (vwarning != VWARNING_NONE)
-            start_exaux_voltage((WARNING_Fr_t)vwarning);
-        else
-            stop_aux_if(IDM_VWARNING, false);
+    /* Обработчик здесь никогда не активен (ранний return выше): ненулевой
+     * уровень — (пере)запуск (стартеры сами зовут off_aux_cmd(false)),
+     * NONE — stop (no-op, если не бежит). Отдельный vwarning_old не нужен. */
+    if (vwarning != VWARNING_NONE)
+        start_exaux_voltage((WARNING_Fr_t)vwarning);
+    else
+        stop_aux_if(IDM_VWARNING, false);
     }
-}
 #endif
 
 /* Таймаут циклов опроса флагов/битов АЦП (защита от зависания при сбое) */
