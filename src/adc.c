@@ -48,11 +48,13 @@
 uint16_t vrefint_adc = 0;    /* код Vrefint после EMA (обновляется в adc_read) */
 
 /* Последний проверенный СЫРОЙ код Vrefint (до EMA). Используется
- * необратимой защитой от глубокого разряда: EMA по построению несёт
- * переходный лаг ~2^EMA_SHIFT отсчётов (16 при 30 Гц — ~0.5 с) на
- * быстрой просадке, поэтому hard cutoff 2.7 В сравнивает именно raw
- * («из коробки», выбросы гасятся счётчиком voff_count_off), а фильтр
- * обслуживает только плавное регулирование.
+ * аварийным backstop глубокого разряда (UV_DEEP_*): EMA по построению
+ * несёт переходный лаг ~2^EMA_SHIFT отсчётов (16 при 30 Гц — ~0.5 с,
+ * в термо-сне AWU_4S — до ~64 с), поэтому необратимый аварийный порог
+ * сравнивает именно raw («из коробки», выбросы гасятся счётчиком
+ * vdeep_count), а фильтр обслуживает плавное регулирование — включая
+ * отсечение 2.70 В на мунлайте, единое с каскадом снижения (без гонки
+ * raw/EMA на последнем шаге спуска).
  * Второй потребитель — calibration(): усредняет сырые коды серии свежих
  * пар, не завися от состояния фильтра. */
 uint16_t vrefint_raw_adc;
@@ -489,8 +491,10 @@ uint16_t vbat_to_mv_calibrated(void)
  *   vbat < mV  ⟺  adc >= MV_LT(mV)   (низкое напряжение — код высокий)
  *   vbat >= mV ⟺  adc <= MV_GE(mV)
  * Калибровочный vc (int8, коды) входит как e = adc - vc.
- * Смысл индексов:
- *   [0] = критический разряд → down_forever()
+ * Смысл индексов (EMA-канал, регулирование и штатное отсечение):
+ *   [0] = отсечение 2.70 В на мунлайте → down_forever() (спуск по режимам
+ *         обязан дойти до мунлайта раньше; аварийный backstop 2.50 В —
+ *         вне таблицы, на raw-канале, см. UV_DEEP_* в adc.h)
  *   [1..5] = единый потолок UI1/UI2 (calc_volt_max_mode):
  *            vbat < порог[i] ⟺ макс. допустимый режим = i
  *            (CMODE_MOON..CMODE_MAX; UI1 — тот же режим через get_stepi)
@@ -544,14 +548,16 @@ int32_t adc_eff_vcode(void)
 }
 
 /**
- * @brief Калиброванный СЫРОЙ код Vrefint (без EMA) для hard cutoff 2.7 В.
+ * @brief Калиброванный СЫРОЙ код Vrefint (без EMA) для аварийного backstop.
  * @return (vrefint_raw_adc - vc) при валидной выборке, иначе VREF_SENTINEL - vc
  *         (тот же fail-safe, что и у adc_eff_vcode()).
  *
- * EMA предназначена для регулирования яркости и предупреждений; необратимая
- * защита от глубокого разряда не должна зависеть от параметров фильтра и
- * частоты опроса, поэтому сравнивает именно raw-код («из коробки» выбросы
- * гасятся счётчиком подтверждений voff_count_off в scan_voltage()). */
+ * raw-канал остался только у аварийного порога UV_DEEP_VCODE (2.50 В,
+ * scan_voltage) и гардов строба/маяка на AWU-пробуждениях: необратимый
+ * аварийный порог не должен зависеть от параметров фильтра и частоты
+ * опроса. Штатное отсечение 2.70 В на мунлайте — на EMA-канале
+ * (adc_eff_vcode), единым сигналом с каскадом снижения («из коробки»
+ * выбросы backstop гасятся счётчиком vdeep_count в scan_voltage()). */
 int32_t adc_eff_raw_vcode(void)
 {
     uint16_t code = voltage_ok ? vrefint_raw_adc : VREF_SENTINEL;
@@ -670,33 +676,46 @@ __attribute__((noinline, noreturn)) void down_forever(void)
 /**
  * @brief Battery undervoltage protection (call at 30 Hz), в кодах Vrefint.
  *
+ * Двухуровневая защита разряда; регулирование — единый EMA-канал
+ * (adc_eff_vcode), raw-канал остался только у аварийного backstop:
+ *   1. Backstop глубокого разряда < 2.50 В (raw, UV_DEEP_*): работает на
+ *      любой яркости, пока постепенный спуск не дошёл до мунлайта, а АКБ
+ *      проваливается быстрее каскада. Без раннего return — каскад/потолок
+ *      продолжают считаться, отскок после шага вниз сбрасывает серию.
+ *   2. Отсечение 2.70 В (EMA, swt_cut[0]) — только на мунлайте (каскад
+ *      UI2 завершён / EMA-потолок UI1 на мунлайте): на мунлайте ток ~0,
+ *      EMA ≈ напряжению покоя, порог соответствует ТЗ «спуск по режимам,
+ *      выключение при 2.70 В». Единый сигнал с каскадом исключает гонку
+ *      raw/EMA: порог входа в мунлайт (swt_cut[1]) пересекается строго
+ *      раньше порога отсечения (swt_cut[0]).
+ *
  * For UI1 (ramping): the sag ratchet ceiling (= get_stepi(volt_max_mode),
  * единая шкала с UI2) clamps step_user both while the button is held and
  * after release (SS_SLOW ramp-down, no steps).  A ceiling decrease is
  * announced with aux_err() (ERRO_RED) — once per ceiling decrease.
- * For UI2 (discrete): reduce mode automatically; at mode 0 the beam is
- * turned off (SS_SLOW ramp to 0 via set_current(get_stepi(0), SS_SLOW))
- * with the same ERRO_RED signal (gated by UIF_EAUX_ONOFF, as all aux_err()).
+ * For UI2 (discrete): reduce mode automatically down to CMODE_MOON with
+ * the same ERRO_RED signal (gated by UIF_EAUX_ONOFF, as all aux_err());
+ * the transition «moon → off» belongs to the 2.70 V cutoff (п. 2 выше).
  * volt_stop_mode decreases within a sag; scan_voltage() releases it back to
  * CMODE_TURBO on a valid sample with vbat >= 3.1 V (the UI1 ratchet analogue).
  * For tactical UI (ui_index 0): clamp without ratchet and indication.
  *
  * Все сравнения выполняются над кодом Vrefint (без делений); калибровочный
  * vc учитывается как сдвиг кода.  При voltage_ok == false (таймаут/сбой
- * АЦП) потолок яркости и ступенчатое снижение режима не пересчитываются:
- * сохраняется последний достоверный потолок, чтобы sentinel-код не
- * воспринимался как реальное напряжение.  Необратимое отсечение 2.70 В на
- * невалидной выборке НЕ выполняется (см. комментарий к проверке swt_cut[0]
- * ниже); безопасность при затяжном сбое обеспечивает scan_limiters_fault()
- * (гашение луча).
+ * АЦП) потолок яркости и ступенчатое снижение режима не пересчитываются,
+ * все серии подтверждений рвутся: сохраняется последний достоверный
+ * потолок, чтобы sentinel-код не воспринимался как реальное напряжение.
+ * Отсечение и backstop на невалидной выборке НЕ выполняются; безопасность
+ * при затяжном сбое обеспечивает scan_limiters_fault() (гашение луча).
  */
 void scan_voltage(void)
 {
-    static uint8_t voff_count = 0;
-    static uint8_t voff_count_off = 0;
+    static uint8_t voff_count = 0;     /* серия снижения режима UI2 */
+    static uint8_t voff_count_off = 0; /* серия отсечения 2.70 В (мунлайт) */
+    static uint8_t vdeep_count = 0;    /* серия backstop 2.50 В (raw) */
 
     int32_t eff_vcode = adc_eff_vcode();
-    int32_t cutoff_vcode = adc_eff_raw_vcode();
+    int32_t deep_vcode = adc_eff_raw_vcode();
 
     /* Сбой/таймаут АЦП даёт sentinel-код, а не измерение.  Пересчёт потолка,
      * снижение режима и индикация выполняются только по валидной выборке:
@@ -705,11 +724,12 @@ void scan_voltage(void)
      * сбое луч гасит scan_limiters_fault(). */
     if (!voltage_ok)
     {
-        /* Сбой — не отсчёт: невалидная выборка рвёт серию подтверждений
-         * (см. UNDERVOLT_CONFIRM_COUNT), как это делает и low_count в
-         * strobe_voltage_low(). */
+        /* Сбой — не отсчёт: невалидная выборка рвёт ВСЕ серии подтверждений
+         * (UNDERVOLT_CONFIRM_COUNT / UV_DEEP_CONFIRM), как это делает и
+         * low_count в strobe_voltage_low(). */
         voff_count = 0;
         voff_count_off = 0;
+        vdeep_count = 0;
         return;
     }
 
@@ -724,26 +744,42 @@ void scan_voltage(void)
     /* Гистерезис низкого заряда маяка: < 3.10 В / >= 3.20 В */
     (void)beacon_low_voltage_update();
 
-    if (!driver_is_active()) return;
-
-    /* 1. Общая защита от глубокого разряда (< 2.70 В) для всех UI.
-     * Сырой проверенный отсчёт исключает задержку/залипание EMA; четыре
-     * последовательных попадания ниже порога подавляют одиночный шум.
-     * Выборка здесь гарантированно валидна (ранний return выше): таймаут/сбой
-     * АЦП давал бы код-сентинел и ложно трактовался как критический разряд.
-     * Реально низкие коды (>512, vbat < 2.4 В) валидны (B4) и наравне с
-     * 2.4..2.7 В запускают защёлку. Безопасность при сбое АЦП обеспечивает
-     * scan_limiters_fault() (термо-фейл -> гашение луча). */
-    if (cutoff_vcode >= (int32_t)swt_cut[0])
+    if (!driver_is_active())
     {
-        if (++voff_count_off > UNDERVOLT_CONFIRM_COUNT)
-        {
-            voff_count_off = 0;
-            down_forever();
-        }
+        /* Серии не переживают период неактивности: иначе накопленные
+         * подтверждения «доигрывались» бы на реактивации. */
+        voff_count = 0;
+        voff_count_off = 0;
+        vdeep_count = 0;
         return;
     }
-    voff_count_off = 0;
+
+    /* 1. Аварийный backstop глубокого разряда (< 2.50 В) на любой яркости.
+     * raw-канал: необратимый аварийный порог не должен зависеть от
+     * параметров EMA и частоты опроса (в термо-сне лаг EMA до ~64 с).
+     * Без раннего return: каскад/потолок ниже продолжают работать, отскок
+     * напряжения после шага вниз сбрасывает серию; down_forever() — только
+     * если АКБ держится ниже 2.50 В под нагрузкой дольше UV_DEEP_CONFIRM
+     * подтверждений подряд. Штатный путь завершения спуска — отсечение
+     * 2.70 В на мунлайте (блок 3 ниже): во всех достижимых точках оно
+     * срабатывает раньше (2.70 В EMA против 2.50 В raw, 4 против 8
+     * подтверждений). Выборка здесь гарантированно валидна (ранний return
+     * выше): таймаут/сбой АЦП давал бы код-сентинел и ложно трактовался
+     * как разряд. Реально низкие коды (>512, vbat < 2.4 В) валидны (B4) и
+     * входят в порог наравне с 2.4..2.5 В. Безопасность при сбое АЦП
+     * обеспечивает scan_limiters_fault() (термо-фейл -> гашение луча). */
+    if (deep_vcode >= (int32_t)UV_DEEP_VCODE)
+    {
+        if (++vdeep_count > UV_DEEP_CONFIRM)
+        {
+            vdeep_count = 0;
+            down_forever();
+        }
+    }
+    else
+    {
+        vdeep_count = 0;
+    }
 
 #if USE_EX_AUX
     exaux(eff_vcode);
@@ -795,9 +831,11 @@ void scan_voltage(void)
     /* Discrete UI (mode-based UI2: ui_index 2 или 3) */
     else
     {
-        /* Выборка валидна (ранний return выше) — сентинел больше не может
-         * увести mode_current в 0 и защёлкнуть volt_stop_mode. */
-        if (mode_current && (eff_vcode >= (int32_t)swt_cut[mode_current - 1]))
+        /* Каскад снижения работает только ВЫШЕ мунлайта: переход
+         * «мунлайт → выкл» принадлежит отсечению 2.70 В (блок 3 ниже).
+         * Выборка валидна (ранний return выше) — сентинел не мешает. */
+        if (mode_current > CMODE_MOON &&
+            (eff_vcode >= (int32_t)swt_cut[mode_current - 1]))
         {
             if (++voff_count > UNDERVOLT_CONFIRM_COUNT)
             {
@@ -812,6 +850,32 @@ void scan_voltage(void)
         }
 
         voff_count = 0;
+    }
+
+    /* 3. Отсечение 2.70 В (EMA-канал) — только когда постепенный спуск дошёл
+     * до мунлайта: UI2 — каскад завершён (mode_current <= CMODE_MOON),
+     * UI1/тактический — EMA-потолок на мунлайте (volt_max_mode <= CMODE_MOON).
+     * На мунлайте ток близок к нулю: EMA ≈ напряжению покоя, порог честно
+     * соответствует ТЗ «выключение при 2.70 В». Единый канал с каскадом
+     * делает порядок пересечения порогов детерминированным: swt_cut[1]
+     * (вход в мунлайт) пересекается строго раньше swt_cut[0], серия из
+     * UNDERVOLT_CONFIRM_COUNT+1 подряд гасит дребезг, а отскок напряжения
+     * после схлопывания яркости в мунлайт сбрасывает её. */
+    bool at_moon = ((ui_index == 2) || (ui_index == 3))
+                       ? (mode_current <= CMODE_MOON)
+                       : (volt_max_mode <= CMODE_MOON);
+
+    if (at_moon && (eff_vcode >= (int32_t)swt_cut[0]))
+    {
+        if (++voff_count_off > UNDERVOLT_CONFIRM_COUNT)
+        {
+            voff_count_off = 0;
+            down_forever();
+        }
+    }
+    else
+    {
+        voff_count_off = 0;
     }
 }
 
