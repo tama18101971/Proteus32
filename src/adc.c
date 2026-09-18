@@ -87,6 +87,8 @@ static const uint16_t ex_lvls[3] = {
  */
 static void exaux(int32_t eff_vcode)
 {
+	if (aux_is_active()) return;
+
     if (!UIF_GET_EAUX_ONOFF(EE.uif) || (driver_mode != MODE_ON))
     {
         if (vwarning != VWARNING_NONE)
@@ -487,7 +489,7 @@ uint16_t vbat_to_mv_calibrated(void)
  */
 static const uint16_t swt_cut[6] =
 {   /* vbat < mV ⟺ adc >= это значение */
-    MV_LT(2700), MV_LT(2710), MV_LT(2750), MV_LT(2800), MV_LT(2900), MV_LT(3050)
+    MV_LT(2700), MV_LT(2710), MV_LT(2740), MV_LT(2800), MV_LT(2850), MV_LT(3050)
 };
 
 /**
@@ -507,7 +509,7 @@ static uint8_t calc_volt_max_mode(int32_t eff_vcode)
 /* ============ Потолок яркости UI1 по напряжению (ramping) ============
  * Единая шкала с UI2: потолок = get_stepi(volt_max_mode) — яркость
  * режима, разрешённого при текущем напряжении (modes[]: 20..511 по
- * порогам swt_cut 2.75/2.80/2.90/3.00/3.10 В).
+ * порогам swt_cut 2.71/2.74/2.80/2.85/3.05 В).
  * volt_step_ratchet монотонно убывает (MIN) до явного безопасного восстановления. */
 uint16_t ratchet_max_step(void)
 {
