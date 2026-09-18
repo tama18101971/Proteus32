@@ -47,7 +47,14 @@ _Static_assert((1000u * I2C_CCR) / I2C_FREQ_MHZ >= 600u,
 _Static_assert((2000u * I2C_CCR) / I2C_FREQ_MHZ >= 1200u,
                "I2C SCL low time below the 1200 ns Fast-mode minimum");
 
-/* Таймаут ожидания флага в итерациях цикла (~10 мс) */
+/* Таймаут ожидания флага в итерациях цикла (~10 мс).
+ * Принято по аудиту (сентябрь 2026): бюджет рассчитан на застрявшую шину,
+ * а не на clock stretching — DAC7571 не документирует растяжение
+ * (write-only ЦАП, данные защёлкиваются на ACK), полная транзакция
+ * ~0.8 мс при 400 кГц. Восстановление трёхслойное: STOP по таймауту /
+ * NACK (i2c_wait_flag), STOP при застрявшем BUSY (i2c_start), SWRST-reinit
+ * при первом же сбое (dac7571_set_voltage). Повышение до 20 мс лишь
+ * замедлило бы обнаружение реального клина, пользы нет. */
 #define I2C_TIMEOUT_LOOPS   SPIN_LOOPS_MS(10)
 
 /* Конфигурация линий PC1 (SDA) / PC2 (SCL): AF Open-Drain, 50 МГц */
