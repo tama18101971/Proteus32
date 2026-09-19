@@ -114,7 +114,11 @@ static bool thermal_fast_required(void)
 
 /**
  * @brief Check whether the main driver may enter the slow thermal sleep loop.
- * @return true only when low-power sampling can safely own the AWU.
+ * @return true when low-power sampling can safely own or follow the AWU.
+ *
+ * Активный AUX FSM термосну не мешает: пока паттерн идёт, cadence задают
+ * его окна (handle_aux() перевооружает AWU на каждом wake), а замеры
+ * АКБ/термо выполняются на каждом aux-пробуждении; при тихом AUX — AWU_4S.
  */
 static bool thermal_sleep_allowed(void)
 {
@@ -130,8 +134,7 @@ static bool thermal_sleep_allowed(void)
            (driver_mode != MODE_BLOCK_LIGHT) &&
            !thermal_fast_required() &&
            !ss_is_active() &&
-           !button_sequence_active() &&
-           !aux_is_active();
+           !button_sequence_active();
 }
 
 /**
@@ -279,7 +282,14 @@ int main(void)
             /* 1. Пробуждение по кнопке: восстанавливаем периферию */
             if (ws == WS_BUTTON && is_sleep_mode)
             {
-                if (sleep_owner == SLEEP_OWNER_THERMAL)
+                /* При активном AUX AWU не обезоруживаем: вооружённое окно
+                 * переживает STANDBY+SystemInit (как OFF-маяк при owner
+                 * NORMAL), паттерн продолжится через WS_AWU → handle_aux()
+                 * в бодрствовании.  Иначе метроном AUX глохнет навсегда:
+                 * перевооружать некому, а sleep-блок видит aux_is_active()
+                 * и не ставит AWU_4S → вечный STANDBY с включённым
+                 * драйвером и залипшим LED. */
+                if ((sleep_owner == SLEEP_OWNER_THERMAL) && !aux_is_active())
                     AWU_OFF();
                 SystemInit();
                 /* Вернуть LSI: в чистом OFF-сне он был остановлен (AWU_stop(true)),
@@ -316,6 +326,14 @@ int main(void)
                     AWU_OFF();
                     wake_i2c();
                     adc_init();
+
+                    /* AUX FSM задаёт cadence пробуждений, пока паттерн активен:
+                     * каждый wake обязан продвинуть один переход и перевооружить
+                     * AWU следующим окном (симметрично AUX-ветке ниже).  При
+                     * неактивном AUX это no-op: off_aux_cmd() очистил
+                     * p_aux/EnableArrayProcessing — pending=false, и sleep-блок
+                     * ниже перевооружит AWU_4S. */
+                    handle_aux();
 
                     bool sample_ok = sample_and_scan();
                     EE_PRINTF("[TWAKE] ok=%u T=%u F=%d I=%d L=%u V=%umV\r\n",
@@ -458,11 +476,15 @@ int main(void)
 
             if (thermal_sleep)
             {
-                /* Thermal sleep owns AWU; beacon/AUX must not overwrite the
-                 * four-second sampling interval. */
-                AWU_OFF();
-                AWU_set_delay(AWU_4S);
-                AWU_ON();
+                /* Пока активен AUX-паттерн, cadence владеет AUX FSM: AWU уже
+                 * вооружён handle_aux() следующим окном.  Перевооружаем
+                 * 4-секундный интервал только при тихом AUX. */
+                if (!aux_is_active())
+                {
+                    AWU_OFF();
+                    AWU_set_delay(AWU_4S);
+                    AWU_ON();
+                }
             }
             else if (!is_aux_mode(IDM_STROBE))
             {
@@ -559,8 +581,9 @@ int main(void)
                 }
                 else
                 {
-                    /* High power, active limiting, soft-start, button
-                     * activity, or AUX ownership keeps the MCU awake. */
+                    /* High power, active limiting, soft-start, or button
+                     * activity keeps the MCU awake.  AUX ownership no
+                     * longer does: thermal sleep follows its cadence. */
                     sleep_owner = SLEEP_OWNER_NORMAL;
                     need_sleep = false;
                 }

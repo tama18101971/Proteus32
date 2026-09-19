@@ -32,7 +32,7 @@ pio device monitor               460800 8N1
 - Poll (30 Hz / 33 ms): `adc_read() + scan_limiters() + scan_voltage()`
 - 2 Hz / 500 ms: debug UART log (`[NORMAL] T=... F=... I=... L=... P=... S=... V=...`)
 - 5 s: `ob_Flush()` + EE-коммит по diff с тенью (записи только при явных изменениях настроек, см. Data storage); then sleep
-- Sleep: `need_sleep` = STANDBY req (boot + 5 s tick; cleared by button wake); `is_sleep_mode` true after `AWU_Sleep_Now()` until button wake restore
+- Sleep: `need_sleep` = STANDBY req (boot + 5 s tick; cleared by button wake); `is_sleep_mode` true after `AWU_Sleep_Now()` until button wake restore; при активном драйвере ниже `THERMAL_FAST_STEP` термосон идёт в ритме окон AUX (AWU принадлежит AUX FSM, `thermal_sleep_allowed()` допускает активный AUX), замеры АКБ/термо — на каждом aux-wake; паттерн закончился — возврат к AWU_4S; кнопочное пробуждение при активном AUX не обезоруживает AWU — паттерн продолжается в бодрствовании
 
 ### Subsystems
 
