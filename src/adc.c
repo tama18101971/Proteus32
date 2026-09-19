@@ -492,8 +492,8 @@ uint16_t vbat_to_mv_calibrated(void)
  *   vbat >= mV ⟺  adc <= MV_GE(mV)
  * Калибровочный vc (int8, коды) входит как e = adc - vc.
  * Смысл индексов (EMA-канал, регулирование и штатное отсечение):
- *   [0] = отсечение 2.70 В на мунлайте → down_forever() (спуск по режимам
- *         обязан дойти до мунлайта раньше; аварийный backstop 2.50 В —
+ *   [0] = отсечение 2.70 В на минимальном режиме → down_forever() (спуск по режимам
+ *         обязан дойти до CMODE_MIN; аварийный backstop 2.50 В —
  *         вне таблицы, на raw-канале, см. UV_DEEP_* в adc.h)
  *   [1..5] = единый потолок UI1/UI2 (calc_volt_max_mode):
  *            vbat < порог[i] ⟺ макс. допустимый режим = i
@@ -679,23 +679,22 @@ __attribute__((noinline, noreturn)) void down_forever(void)
  * Двухуровневая защита разряда; регулирование — единый EMA-канал
  * (adc_eff_vcode), raw-канал остался только у аварийного backstop:
  *   1. Backstop глубокого разряда < 2.50 В (raw, UV_DEEP_*): работает на
- *      любой яркости, пока постепенный спуск не дошёл до мунлайта, а АКБ
- *      проваливается быстрее каскада. Без раннего return — каскад/потолок
+ *      любой яркости, пока постепенный спуск не дошёл до минимального режима,
+ *      а АКБ проваливается быстрее каскада. Без раннего return — каскад/потолок
  *      продолжают считаться, отскок после шага вниз сбрасывает серию.
- *   2. Отсечение 2.70 В (EMA, swt_cut[0]) — только на мунлайте (каскад
- *      UI2 завершён / EMA-потолок UI1 на мунлайте): на мунлайте ток ~0,
- *      EMA ≈ напряжению покоя, порог соответствует ТЗ «спуск по режимам,
+ *   2. Отсечение 2.70 В (EMA, swt_cut[0]) — на минимальном режиме (каскад
+ *      UI2 завершён на CMODE_MIN / EMA-потолок UI1 на CMODE_MIN): порог
+ *      соответствует ТЗ «спуск по режимам до минимального,
  *      выключение при 2.70 В». Единый сигнал с каскадом исключает гонку
- *      raw/EMA: порог входа в мунлайт (swt_cut[1]) пересекается строго
- *      раньше порога отсечения (swt_cut[0]).
+ *      raw/EMA.
  *
  * For UI1 (ramping): the sag ratchet ceiling (= get_stepi(volt_max_mode),
  * единая шкала с UI2) clamps step_user both while the button is held and
  * after release (SS_SLOW ramp-down, no steps).  A ceiling decrease is
  * announced with aux_err() (ERRO_RED) — once per ceiling decrease.
- * For UI2 (discrete): reduce mode automatically down to CMODE_MOON with
+ * For UI2 (discrete): reduce mode automatically down to CMODE_MIN with
  * the same ERRO_RED signal (gated by UIF_EAUX_ONOFF, as all aux_err());
- * the transition «moon → off» belongs to the 2.70 V cutoff (п. 2 выше).
+ * the transition «min → off» belongs to the 2.70 V cutoff (п. 2 выше).
  * volt_stop_mode decreases within a sag; scan_voltage() releases it back to
  * CMODE_TURBO on a valid sample with vbat >= 3.1 V (the UI1 ratchet analogue).
  * For tactical UI (ui_index 0): clamp without ratchet and indication.
@@ -711,7 +710,7 @@ __attribute__((noinline, noreturn)) void down_forever(void)
 void scan_voltage(void)
 {
     static uint8_t voff_count = 0;     /* серия снижения режима UI2 */
-    static uint8_t voff_count_off = 0; /* серия отсечения 2.70 В (мунлайт) */
+    static uint8_t voff_count_off = 0; /* серия отсечения 2.70 В (минимальный режим) */
     static uint8_t vdeep_count = 0;    /* серия backstop 2.50 В (raw) */
 
     int32_t eff_vcode = adc_eff_vcode();
@@ -761,7 +760,7 @@ void scan_voltage(void)
      * напряжения после шага вниз сбрасывает серию; down_forever() — только
      * если АКБ держится ниже 2.50 В под нагрузкой дольше UV_DEEP_CONFIRM
      * подтверждений подряд. Штатный путь завершения спуска — отсечение
-     * 2.70 В на мунлайте (блок 3 ниже): во всех достижимых точках оно
+     * 2.70 В на минимальном режиме (блок 3 ниже): во всех достижимых точках оно
      * срабатывает раньше (2.70 В EMA против 2.50 В raw, 4 против 8
      * подтверждений). Выборка здесь гарантированно валидна (ранний return
      * выше): таймаут/сбой АЦП давал бы код-сентинел и ложно трактовался
@@ -831,10 +830,10 @@ void scan_voltage(void)
     /* Discrete UI (mode-based UI2: ui_index 2 или 3) */
     else
     {
-        /* Каскад снижения работает только ВЫШЕ мунлайта: переход
-         * «мунлайт → выкл» принадлежит отсечению 2.70 В (блок 3 ниже).
+        /* Каскад снижения работает только ВЫШЕ минимального режима: переход
+         * «минимум → выкл» принадлежит отсечению 2.70 В (блок 3 ниже).
          * Выборка валидна (ранний return выше) — сентинел не мешает. */
-        if (mode_current > CMODE_MOON &&
+        if (mode_current > CMODE_MIN &&
             (eff_vcode >= (int32_t)swt_cut[mode_current - 1]))
         {
             if (++voff_count > UNDERVOLT_CONFIRM_COUNT)
@@ -852,20 +851,15 @@ void scan_voltage(void)
         voff_count = 0;
     }
 
-    /* 3. Отсечение 2.70 В (EMA-канал) — только когда постепенный спуск дошёл
-     * до мунлайта: UI2 — каскад завершён (mode_current <= CMODE_MOON),
-     * UI1/тактический — EMA-потолок на мунлайте (volt_max_mode <= CMODE_MOON).
-     * На мунлайте ток близок к нулю: EMA ≈ напряжению покоя, порог честно
-     * соответствует ТЗ «выключение при 2.70 В». Единый канал с каскадом
-     * делает порядок пересечения порогов детерминированным: swt_cut[1]
-     * (вход в мунлайт) пересекается строго раньше swt_cut[0], серия из
-     * UNDERVOLT_CONFIRM_COUNT+1 подряд гасит дребезг, а отскок напряжения
-     * после схлопывания яркости в мунлайт сбрасывает её. */
-    bool at_moon = ((ui_index == 2) || (ui_index == 3))
-                       ? (mode_current <= CMODE_MOON)
-                       : (volt_max_mode <= CMODE_MOON);
+    /* 3. Отсечение 2.70 В (EMA-канал) — когда постепенный спуск дошёл
+     * до минимального режима (или ниже): UI2 — каскад завершён (mode_current <= CMODE_MIN),
+     * UI1/тактический — EMA-потолок на минимальном режиме (volt_max_mode <= CMODE_MIN).
+     * Порог соответствует ТЗ «выключение при 2.70 В». */
+    bool at_min = ((ui_index == 2) || (ui_index == 3))
+                      ? (mode_current <= CMODE_MIN)
+                      : (volt_max_mode <= CMODE_MIN);
 
-    if (at_moon && (eff_vcode >= (int32_t)swt_cut[0]))
+    if (at_min && (eff_vcode >= (int32_t)swt_cut[0]))
     {
         if (++voff_count_off > UNDERVOLT_CONFIRM_COUNT)
         {
