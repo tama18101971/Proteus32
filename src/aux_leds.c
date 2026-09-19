@@ -640,6 +640,10 @@ bool beacon_is_cycle_start(void)
  * - АЦП остаётся включённым: гасит его только sleep-блок main() перед
  *   STANDBY (маяк может быть прерван кнопочным пробуждением без STANDBY-wake,
  *   и обесточенный АЦП дал бы sentinel в следующем sample_and_scan()).
+ * - adc_init() — один раз на серию, перед первым замером; подтверждения
+ *   идут через adc_read() без реинициализации: adc_read() сам защищён
+ *   флагом adc_ready и сам перезапускает преобразование, а пороги
+ *   работают на RAW-канале, которому EMA-пересев безразличен (audit L6).
  */
 void beacon_battery_check(void)
 {
@@ -673,14 +677,9 @@ void beacon_battery_check(void)
 		uint8_t confirmed = 0;
 		for (uint8_t i = 0; i < 3; i++)
 		{
-			adc_init();
-			if (adc_read())
+			if (adc_read() && adc_eff_raw_vcode() >= (int32_t)MV_LT(2700))
 			{
-				int32_t code = adc_eff_raw_vcode();
-				if (code >= (int32_t)MV_LT(2700))
-				{
-					confirmed++;
-				}
+				confirmed++;
 			}
 		}
 		if (confirmed >= 2)

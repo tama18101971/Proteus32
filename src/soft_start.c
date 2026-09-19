@@ -51,20 +51,15 @@ void ss_init(uint16_t target, uint16_t previous, SoftStartSpeed_t speed)
 		return;
 	}
 
-	int8_t s_size = (target > previous) ? (int8_t)speed : (int8_t)-(int8_t)speed;
-
-	if (s_size != 0)
-	{
-		/* set_current() resolves the thermal limit before entering this
-		 * low-level module, so target is already the physical safe target. */
-		ss.target = target;
-		uint16_t count = ABS((int16_t)(target - previous));
-		uint16_t sc = (speed == SS_FAST) ? (uint16_t)(((uint32_t)count * SS_FAST_SCALER) >> 15) : count;
-		ss.step_count = sc ? sc : 1;
-		ss.position = previous;
-	}
-
-	ss.step_size = s_size;
+	/* set_current() resolves the thermal limit before entering this
+	 * low-level module, so target is already the physical safe target. */
+	ss.target = target;
+	uint16_t count = ABS((int16_t)(target - previous));
+	uint16_t sc = (speed == SS_FAST) ? (uint16_t)(((uint32_t)count * SS_FAST_SCALER) >> 15) : count;
+	ss.step_count = sc ? sc : 1;
+	ss.position = previous;
+	/* speed != SS_NO here (early return above), so step_size is never 0. */
+	ss.step_size = (target > previous) ? (int8_t)speed : (int8_t)-(int8_t)speed;
 	ss.enable = true;
 }
 

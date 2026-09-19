@@ -45,7 +45,7 @@ pio device monitor               460800 8N1
 ### Thermal limiter (`thermal_limiter.c/h`, config in `src/limiters.c`, tuning guide in `TUNING.md`)
 
 - Continuous PI controller, linear $P + I$ summing, with **Equilibrium Hold Band** ($T_{\text{set}} - t_{\text{anticipate\_offset}} \le T < T_{\text{set}}$) holding $\Delta I = 0$ → no hunting.
-- Fixed-point EMA filter (scale $\times 32$, 5 bits): `diff >> shift` truncates toward $-\infty$ → settles up to $2^{\text{filter\_shift}} - 1$ fp-LSB (≤15/32 ADC code) below true value (one-sided cold bias, anti-hunting; integer stays unbiased); kept over symmetric rounding to save Flash (audit C5).
+- Fixed-point EMA filter (scale $\times 32$, 5 bits): symmetric round-half-up — `avg += (diff + 2^(shift−1)) >> shift` → settled residual ±(2^(shift−1) − 1) fp-LSB (±7/32 ADC code at shift 4), no one-sided bias; the earlier truncation-toward-−∞ variant was replaced (audit C5 superseded); hunting still excluded (residual ≪ 8-code hold band).
 - Integral accumulator (scale $\times 64$, 6 bits) with dynamic anti-windup clamping.
 - Slew filter (`max_drop_rate`, `max_recovery_rate`) → flicker-free 30 Hz transitions.
 
