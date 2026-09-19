@@ -5,7 +5,9 @@
  * Замена универсальной библиотеки I2C-CH32V003 ради экономии Flash.
  * Поддерживает ТОЛЬКО тот сценарий, который нужен DAC7571:
  *   START -> ADDR(W) -> байты данных -> STOP
- * Чтение, Repeated START, буферы, сканер и bus-recovery отсутствуют.
+ * Чтение, Repeated START, буферы и сканер отсутствуют. Bus recovery
+ * (отпускание SDA, удерживаемой зависшим ведомым: до 9 тактов SCL + STOP)
+ * выполняется в каждом i2c_init().
  *
  * Пин-конфигурация: PC1 — SDA, PC2 — SCL (AF Open-Drain).
  * Тактирование: FREQ/CCR выводятся из SYSCLK_HZ (proteus_config.h) под
@@ -43,7 +45,19 @@ uint8_t i2c_start(void);                /* START с ожиданием SB */
 uint8_t i2c_stop(void);                 /* STOP с ожиданием освобождения шины */
 uint8_t i2c_send_addr(uint8_t addr, uint8_t direction); /* Адрес + R/W, ожидание ADDR */
 uint8_t i2c_send_byte(uint8_t data);    /* Байт данных, ожидание TXE */
-uint8_t i2c_wait_ack(void);             /* Ожидание BTF (байт передан) */
+uint8_t i2c_wait_flag(uint16_t flag);   /* Ожидание флага STAR1 (внутреннее API) */
+
+/**
+ * @brief Ожидание завершения передачи байта (BTF)
+ * @return I2C_OK или I2C_NACK
+ *
+ * static inline: единственный вызов — из i2c_write_byte(), отдельная
+ * extern-функция i2c_wait_ack() в i2c.c только тратила Flash (audit M4, trim).
+ */
+static inline uint8_t i2c_wait_ack(void)
+{
+    return i2c_wait_flag(I2C_STAR1_BTF);
+}
 
 /**
  * @brief Отправка байта с ожиданием подтверждения (атомарно)

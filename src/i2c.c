@@ -16,6 +16,11 @@
  * выдаётся STOP, чтобы оборванная транзакция не держала шину занятой
  * (BUSY) — иначе все следующие i2c_start() падали бы по таймауту до
  * переинициализации (её выполняет dac7571_set_voltage() при первом сбое).
+ *
+ * Восстановление шины (bus recovery): каждый i2c_init() перед настройкой
+ * AF отпускает SDA, удерживаемую зависшим ведомым, — до 9 тактов SCL в
+ * GPIO-режиме + STOP (audit M4: SWRST-реинит шину в этом случае не
+ * освобождал, и яркость «залипала» до перезапуска).
  */
 
 #include "i2c.h"
@@ -62,16 +67,32 @@ _Static_assert((2000u * I2C_CCR) / I2C_FREQ_MHZ >= 1200u,
 #define I2C_PINS_MASK       0x00000FF0u
 
 /**
+ * @brief Аварийный выход из транзакции: STOP + I2C_NACK.
+ *
+ * Общий хвост всех путей ошибки i2c_wait_flag() (noinline — одна копия
+ * вместо трёх встроенных, экономия Flash). STOP обязателен: без него
+ * периферия остаётся мастером с занятой шиной (BUSY), и все следующие
+ * i2c_start() падают по таймауту вплоть до переинициализации.
+ */
+static __attribute__((noinline)) uint8_t i2c_fail_stop(void)
+{
+    I2C1->CTLR1 |= I2C_CTLR1_STOP;
+    return I2C_NACK;
+}
+
+/**
  * @brief Ожидание установки бита флага в STAR1 с контролем ошибок и таймаута
  *
  * При AF (NACK ведомого), BERR/ARLO и таймауте формируется STOP (шина не
- * остаётся занятой) и возвращается I2C_NACK. Флаги ошибок сбрасываются записью
- * инвертированной маски (требование WCH).
+ * остаётся занятой) и возвращается I2C_NACK. Флаги STAR1 — rc_w0 и на пути
+ * ошибки сбрасываются записью нуля во весь регистр (см. тело).
  *
  * @param flag Бит флага STAR1 (SB/ADDR/TXE/BTF)
  * @return I2C_OK или I2C_NACK
+ *
+ * Не static: вызывается также из inline-обёрток i2c.h (i2c_wait_ack).
  */
-static uint8_t i2c_wait_flag(uint16_t flag)
+uint8_t i2c_wait_flag(uint16_t flag)
 {
     uint32_t t = I2C_TIMEOUT_LOOPS;
 
@@ -79,26 +100,22 @@ static uint8_t i2c_wait_flag(uint16_t flag)
     {
         uint16_t star1 = I2C1->STAR1;
 
-        if (star1 & I2C_STAR1_AF)
+        /* AF (NACK ведомого), BERR и ARLO сворачиваются в один выход.
+         * Транзакция уже оборвана, поэтому вместо инвертированной маски
+         * (дорогая 32-битная константа) в STAR1 пишется ноль: флаги STAR1
+         * — rc_w0, запись 0 сбрасывает их все разом, read-only биты не
+         * затрагиваются, а сброс TXE/BTF/SB/ADDR на пути ошибки безвреден
+         * (транзакция завершается STOP-ом). */
+        if (star1 & (I2C_STAR1_AF | I2C_STAR1_BERR | I2C_STAR1_ARLO))
         {
-            I2C1->STAR1 = (uint16_t)~I2C_STAR1_AF;
-            I2C1->CTLR1 |= I2C_CTLR1_STOP;
-            return I2C_NACK;
-        }
-        if (star1 & (I2C_STAR1_BERR | I2C_STAR1_ARLO))
-        {
-            I2C1->STAR1 = (uint16_t)~(I2C_STAR1_BERR | I2C_STAR1_ARLO);
-            I2C1->CTLR1 |= I2C_CTLR1_STOP;
-            return I2C_NACK;
+            I2C1->STAR1 = 0;
+            return i2c_fail_stop();
         }
         if (--t == 0u)
         {
-            /* Таймаут: транзакция оборвана посреди передачи. Выдаём STOP,
-             * иначе периферия остаётся мастером с занятой шиной (BUSY) и все
-             * следующие i2c_start() навсегда падают по таймауту — вплоть до
-             * переинициализации (её делает dac7571_set_voltage()). */
-            I2C1->CTLR1 |= I2C_CTLR1_STOP;
-            return I2C_NACK;
+            /* Таймаут: транзакция оборвана посреди передачи (см. i2c_fail_stop;
+             * переинициализацию выполняет dac7571_set_voltage()). */
+            return i2c_fail_stop();
         }
     }
     return I2C_OK;
@@ -120,16 +137,39 @@ uint8_t i2c_init(uint32_t bound)
     RCC->APB2PCENR |= RCC_IOPCEN;   /* Порт C */
     RCC->APB1PCENR |= RCC_I2C1EN;   /* I2C1 */
 
+    /* Восстановление шины (audit M4): зависший посреди транзакции ведомый
+     * может удерживать SDA внизу — AF-перенастройка и SWRST шину не
+     * освобождают, и все последующие транзакции падали бы до перезапуска.
+     * PC1=SDA ввод, PC2=SCL выход open-drain: ровно 9 тактов SCL — этого
+     * достаточно, чтобы вытолкнуть зависший бит-поток ведомого и отпустить
+     * SDA (свободная шина: DAC без START такты игнорирует, цена ~6 мкс).
+     * Программных задержек нет: cadence записей в регистры даёт
+     * SCL ~1-2 МГц, а единственный ведомый — DAC7571 с HS-входом
+     * (до 3.4 Мбит/с) — фронты гарантированно регистрируются. Штатный
+     * STOP выдаётся периферией в финальной записи CTLR1 ниже. */
+    GPIOC->CFGLR = (GPIOC->CFGLR & ~I2C_PINS_MASK) | 0x00000640u;
+    uint8_t pulses = 9u;
+    do
+    {
+        GPIOC->BCR  = (1u << 2);                /* SCL = 0 */
+        GPIOC->BSHR = (1u << 2);                /* SCL = 1 */
+    } while (--pulses);
+
     GPIOC->CFGLR = (GPIOC->CFGLR & ~I2C_PINS_MASK) | I2C_PINS_AF_OD;
 
-    I2C1->CTLR1 |= I2C_CTLR1_SWRST;     /* Программный сброс */
-    I2C1->CTLR1 &= (uint16_t)~I2C_CTLR1_SWRST;
+    /* Программный сброс. Абсолютные записи вместо read-modify-write:
+     * init-путь всё равно переконфигурирует CTLR1 с нуля, а пара
+     * li+sw / sw zero короче двух RMW (экономия Flash, audit M4 trim). */
+    I2C1->CTLR1 = I2C_CTLR1_SWRST;
+    I2C1->CTLR1 = 0;
 
     I2C1->CTLR2  = (uint16_t)I2C_FREQ_MHZ;              /* PCLK1 в МГц */
     I2C1->CKCFGR = (uint16_t)(I2C_CKCFGR_FS | I2C_CCR); /* Fast mode + CCR */
     I2C1->OADDR1 = (1u << 14);          /* Обязательный бит 14 (WCH) */
 
-    I2C1->CTLR1 |= (I2C_CTLR1_PE | I2C_CTLR1_ACK);
+    /* PE + ACK и STOP одной записью: STOP сбрасывает state machine
+     * ведомого после recovery-тактов (на свободной шине — безвреден). */
+    I2C1->CTLR1 |= (I2C_CTLR1_PE | I2C_CTLR1_ACK | I2C_CTLR1_STOP);
     return I2C_OK;
 }
 
@@ -162,8 +202,7 @@ uint8_t i2c_start(void)
             /* BUSY не освободился (шиной владеет оборванная транзакция):
              * пробуем закрыть её STOP-ом; если мастер давно не активен,
              * запись безвредна. Полное восстановление — у вызывающего кода. */
-            I2C1->CTLR1 |= I2C_CTLR1_STOP;
-            return I2C_NACK;
+            return i2c_fail_stop();
         }
     }
 
@@ -222,11 +261,5 @@ uint8_t i2c_send_byte(uint8_t data)
     return i2c_wait_flag(I2C_STAR1_TXE);
 }
 
-/**
- * @brief Ожидание завершения передачи байта (BTF)
- * @return I2C_OK или I2C_NACK
- */
-uint8_t i2c_wait_ack(void)
-{
-    return i2c_wait_flag(I2C_STAR1_BTF);
-}
+/* i2c_wait_ack() перенесён в i2c.h (static inline): единственный вызов —
+ * из i2c_write_byte(), отдельная extern-копия только тратила Flash. */
