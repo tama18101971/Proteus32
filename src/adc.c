@@ -507,7 +507,7 @@ uint16_t vbat_to_mv_calibrated(void)
  */
 static const uint16_t swt_cut[6] =
 {   /* vbat < mV ⟺ adc >= это значение */
-    MV_LT(2700), MV_LT(2710), MV_LT(2725), MV_LT(2760), MV_LT(2820), MV_LT(3010)
+    MV_LT(2700), MV_LT(2710), MV_LT(2725), MV_LT(2740), MV_LT(2810), MV_LT(3010)
 };
 
 /* Латч потолка режимов: modes[] уменьшается монотонно при разряде АКБ и
