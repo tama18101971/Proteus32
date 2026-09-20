@@ -930,11 +930,25 @@ bool strobe_voltage_low(void)
 }
 #endif /* USE_STROBE_ADC_GUARD */
 
-/** @brief Get battery indicator flash count (0-6) based on Vbat (в кодах Vrefint). */
+/** @brief Get battery indicator flash count (0-6) based on Vbat (в кодах Vrefint).
+ *
+ * Делает свежий замер АЦП, чтобы индикация отражала текущий заряд АКБ, а не
+ * устаревшее значение EMA-фильтра. Тот хранит последнее измерение под
+ * нагрузкой и не успевает отреагировать на восстановление напряжения после
+ * выключения фонаря — сразу после выключения индикация показывала
+ * заниженный уровень (3 вспышки вместо 5). Сырой код (adc_eff_raw_vcode) —
+ * мгновенное значение без лага фильтра; пороги разбиты на 200 мВ, так что
+ * шум выборки не перебивает счёт. При сбое замера (АЦП обесточен во сне /
+ * таймаут) используется заранее взятый EMA-как резерв, а не sentinel
+ * «критически низкого напряжения». */
 uint8_t bat_get_flashes(void) {
 	static const uint16_t thresholds[] = {MV_LT(3000), MV_LT(3200), MV_LT(3400),
 	                                      MV_LT(3600), MV_LT(3800), MV_LT(4000)};
+	/* EMA-значение — резерв на случай неудачного свежего замера (снимается
+	 * до adc_read(), чтобы сбой не заставлял падать на sentinel). */
 	int32_t eff_vcode = adc_eff_vcode();
+	if (adc_read())
+		eff_vcode = adc_eff_raw_vcode();
 	for (uint8_t i = 0; i < sizeof(thresholds) / sizeof(thresholds[0]); i++) {
 		if (eff_vcode >= (int32_t)thresholds[i]) return i;
 	}
