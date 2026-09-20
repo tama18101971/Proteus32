@@ -38,14 +38,17 @@
  * modes or UI actions.
  * @{
  */
-/** @brief Button event type enumeration. */
+/** @brief Button event type enumeration.
+ *
+ * packed: 0..4 — один байт. btn_evt_t остаётся 3-байтовой, а обращения к
+ * полю .type идут через lbu/sb без 32-битной упаковки. */
 typedef enum {
     BTN_EVT_NONE = 0,            /**< No event */
     BTN_EVT_PRESSED,             /**< Button just pressed (debounced rising edge) */
     BTN_EVT_RELEASED,            /**< Button released, not held */
     BTN_EVT_CLICK_SEQ,           /**< Click sequence complete (release timeout or max clicks) */
     BTN_EVT_HOLD,                /**< Hold detected (or repeat tick) */
-} btn_evt_type_t;
+} __attribute__((packed)) btn_evt_type_t;
 /** @} */
 
 /** @brief Button event structure. */

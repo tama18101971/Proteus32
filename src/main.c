@@ -90,9 +90,12 @@ static sleep_owner_t sleep_owner = SLEEP_OWNER_NORMAL;
 void HardFault_Handler(void) __attribute__((noreturn));
 void HardFault_Handler(void)
 {
-    GPIO_PinConfig(GPIOC, GPIO_Pin_4, CFG_IN_ANALOG);
-    GPIO_PinConfig(GPIOC, GPIO_Pin_6, CFG_IN_ANALOG);
-    GPIO_PinConfig(GPIOC, GPIO_Pin_7, CFG_IN_ANALOG);
+    /* Один masked-write: PC4/PC6/PC7 -> Analog Input.  Промежуточные
+     * значения CFGLR никем не читаются, итог совпадает с тремя
+     * GPIO_PinConfig(CFG_IN_ANALOG) по отдельности — на RV32EC это на
+     * две пары load/mask/store дешевле. */
+    GPIOC->CFGLR &= ~(((uint32_t)0xFu << (4 * 4)) | ((uint32_t)0xFu << (4 * 6)) |
+                      ((uint32_t)0xFu << (4 * 7)));
     GPIOC->BCR = GPIO_Pin_4 | GPIO_Pin_6 | GPIO_Pin_7;
     GPIOD->BCR = (1u << 0); /* PD0: питание DAC off */
     NVIC_SystemReset();     /* Программный сброс ядра (core_riscv.h) */

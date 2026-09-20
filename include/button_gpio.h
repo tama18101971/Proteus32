@@ -15,13 +15,17 @@
 
 #include "ch32v00x.h"
 
-/** @brief Wake-up source enumeration. */
+/** @brief Wake-up source enumeration.
+ *
+ * packed: значения 0..2 хранятся одним байтом. Глобальная volatile
+ * переменная и RAM-структуры событий не тянут 32-битный слот, а сравнения
+ * по-прежнему выполняются одной инструкцией. */
 typedef enum
 {
     WS_NONE = 0,  /**< No wake-up */
     WS_AWU,       /**< Wake-up by AWU timer */
     WS_BUTTON     /**< Wake-up by button press */
-} wakeup_source_t;
+} __attribute__((packed)) wakeup_source_t;
 
 //extern volatile uint8_t button_event;        /**< Button press event flag */
 extern volatile wakeup_source_t wakeup_source; /**< Last wake-up source */

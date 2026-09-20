@@ -121,7 +121,7 @@ typedef enum {
     MODE_SLOT08,            /**< Magic slot 8. */
     MODE_SLOT09,            /**< Magic slot 9. */
     MODE_SLOT10             /**< Magic slot 10. */
-} DRIVER_Mode_t;
+} __attribute__((packed)) DRIVER_Mode_t;
 
 /** @brief Current driver mode. */
 extern DRIVER_Mode_t driver_mode;
@@ -185,7 +185,7 @@ extern uint8_t mode_default;
 typedef enum {
     DIR_DOWN = 0U,
     DIR_UP
-} RUMP_Dir_t;
+} __attribute__((packed)) RUMP_Dir_t;
 
 /** @brief Indicator colour indices. */
 typedef enum {

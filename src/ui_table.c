@@ -201,17 +201,23 @@ static const dispatch_t usr_table[] = {
  * (ENG_MENU_IND/USR_MENU_IND; назначаются только при загрузке из
  * enter_menu_at_boot). Ячейки [0] и [4] пусты — такие idx отсекаются
  * проверкой в ui_table_lookup. */
-typedef struct {
-    const dispatch_t *tab;
-    uint8_t n;
-} ui_table_desc_t;
+/* Deskriptor razdeljon na dva massiva: ui_table_desc_t (ukazatel + uint8 +
+ * vyravnivanie) zanimala 56 B rodata, dva massiva - 35 B.
+ * Interfejsy i razmery indeksirujutsja odnim i tem zhe ui_table_idx. */
+static const dispatch_t *const ui_tab_ptr[7] = {
+    [1] = ui1_table,
+    [2] = ui2_table,
+    [3] = ui2_table,
+    [5] = eng_table,
+    [6] = usr_table,
+};
 
-static const ui_table_desc_t ui_tables[7] = {
-    [1] = { ui1_table, UI1_TABLE_SIZE },
-    [2] = { ui2_table, UI2_TABLE_SIZE },
-    [3] = { ui2_table, UI2_TABLE_SIZE },
-    [5] = { eng_table, ENG_TABLE_SIZE },
-    [6] = { usr_table, USR_TABLE_SIZE },
+static const uint8_t ui_tab_size[7] = {
+    [1] = UI1_TABLE_SIZE,
+    [2] = UI2_TABLE_SIZE,
+    [3] = UI2_TABLE_SIZE,
+    [5] = ENG_TABLE_SIZE,
+    [6] = USR_TABLE_SIZE,
 };
 
 /*******************************************************************************
@@ -379,11 +385,11 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout)
         }
     }
 
-    if (idx > 6u || ui_tables[idx].tab == NULL)
+    if (idx > 6u || ui_tab_ptr[idx] == NULL)
         return 0;
 
-    const dispatch_t *table = ui_tables[idx].tab;
-    const uint8_t size = ui_tables[idx].n;
+    const dispatch_t *table = ui_tab_ptr[idx];
+    const uint8_t size = ui_tab_size[idx];
 
     for (uint8_t i = 0; i < size; i++)
     {
