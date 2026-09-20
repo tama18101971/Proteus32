@@ -38,7 +38,8 @@
  ******************************************************************************/
 
 uint8_t mode_default = DEFAULT_MODE;
-uint8_t mode_current = CMODE_OFF;
+/* CMODE_TURBO: каскад защиты по напряжению стартует без ограничений (см. ui_init). */
+uint8_t mode_current = CMODE_TURBO;
 
 DRIVER_Mode_t driver_mode = MODE_OFF;
 bool stop_bit = false;
@@ -1423,7 +1424,12 @@ void ui_init(void)
     ui1_was_pressed = false;
     ui_select_from_slot = false;
     hold_guard = false;
-    mode_current = CMODE_OFF;
+    /* Каскад защиты по напряжению (mode_current) стартует без ограничений:
+     * CMODE_TURBO = потолок MAX_STEP. CMODE_OFF здесь нельзя — в UI1
+     * первое включение (on_xmode_ui1) не трогает mode_current, и scan_voltage()
+     * клампил бы яркость к get_stepi(0)=modes[0]=0 (свет не горит + ложные
+     * ERRO_RED в step_up_ui1). Дискретные UI2/UI3 задают режим сами. */
+    mode_current = CMODE_TURBO;
     ui_table_idx = ui_index_clamp(UIF_GET_UI_INDEX(EE.uif));
     step_default = CFG_GET_UI1(EE);   // восстановить сохранённую яркость
     mode_default = UIF_GET_UI2(EE.uif);   // восстановить сохранённый режим
