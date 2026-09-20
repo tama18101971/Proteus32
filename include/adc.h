@@ -249,13 +249,13 @@ bool beacon_low_voltage_update(void);
  */
 void scan_voltage(void);
 
-/** @brief Dynamic UI2 mode ceiling (updated in scan_voltage). */
+/** @brief Dynamic UI2 mode ceiling (monotonic latch, updated in scan_voltage). */
 extern uint8_t volt_max_mode;
 
 /**
- * @brief UI2 voltage latch — historical minimum of volt_max_mode within a sag.
- * Released back to CMODE_TURBO by scan_voltage() when a valid sample shows
- * vbat >= 3.1 V (mirror of the UI1 ratchet reset).
+ * @brief UI2 voltage latch — monotonic latch, only decreases during a sag.
+ * NOT restored on voltage recovery (ТЗ). Reset to CMODE_TURBO only on
+ * driver off/on (scan_voltage when !driver_is_active()).
  */
 extern uint8_t volt_stop_mode;
 

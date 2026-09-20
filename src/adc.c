@@ -507,27 +507,48 @@ uint16_t vbat_to_mv_calibrated(void)
  */
 static const uint16_t swt_cut[6] =
 {   /* vbat < mV ⟺ adc >= это значение */
-    MV_LT(2700), MV_LT(2710), MV_LT(2730), MV_LT(2790), MV_LT(2840), MV_LT(3050)
+    MV_LT(2700), MV_LT(2710), MV_LT(2725), MV_LT(2760), MV_LT(2820), MV_LT(3010)
 };
+
+/* Латч потолка режимов: modes[] уменьшается монотонно при разряде АКБ и
+ * НЕ восстанавливается при росте напряжения (ТЗ). Сброс только при
+ * неактивном драйвере (выкл/вкл) — осознанное действие пользователя.
+ * Previous-mode state for the monotonic latch. */
+static uint8_t volt_max_mode_latch = CMODE_TURBO;
+
+/* Counters for the voltage-protection series (scan_voltage).
+ * File-scope so reset_voltage_latches() can clear them alongside the latches. */
+static uint8_t voff_count = 0;     /* серия снижения режима UI2 */
+static uint8_t voff_count_off = 0; /* серия отсечения 2.70 В (минимальный режим) */
+static uint8_t vdeep_count = 0;    /* серия backstop 2.50 В (raw) */
 
 /**
  * @brief Вычисляет максимально допустимый режим UI2 по текущему напряжению.
+ *
+ * Монотонный латч: режим только снижается при падении напряжения,
+ * НЕ восстанавливается при росте. Сброс latch — при неактивном драйвере
+ * (scan_voltage), то есть при выключении/включении фонаря.
  * @param eff_vcode Эффективный код Vrefint (с учётом калибровки vc).
  * @return Индекс максимального режима (CMODE_MOON..CMODE_TURBO).
  */
 static uint8_t calc_volt_max_mode(int32_t eff_vcode)
 {
-    /* Индексы 1..5 совпадают со swt_cut[1..5]; индекс 0 в этом цикле не
-     * используется (итерация с CMODE_MOON=1). */
-    for (uint8_t i = CMODE_MOON; i < CMODE_TURBO; i++)
-        if (eff_vcode >= (int32_t)swt_cut[i]) return i;
-    return CMODE_TURBO;
+    /* Снижение напряжения: точные пороги swt_cut[1..5] */
+    while (volt_max_mode_latch > CMODE_MOON)
+    {
+        if (eff_vcode >= (int32_t)swt_cut[volt_max_mode_latch - 1])
+            volt_max_mode_latch--;
+        else
+            break;
+    }
+    /* Повышение напряжения — НЕ обрабатывается: латч не снимается. */
+    return volt_max_mode_latch;
 }
 
 /* ============ Потолок яркости UI1 по напряжению (ramping) ============
  * Единая шкала с UI2: потолок = get_stepi(volt_max_mode) — яркость
  * режима, разрешённого при текущем напряжении (modes[]: 20..511 по
- * порогам swt_cut 2.71/2.73/2.79/2.84/3.05 В).
+ * порогам swt_cut 2.71/2.725/2.76/2.82/3.01 В).
  * volt_step_ratchet монотонно убывает (MIN) до явного безопасного восстановления. */
 uint16_t ratchet_max_step(void)
 {
@@ -706,8 +727,8 @@ __attribute__((noinline, noreturn)) void down_forever(void)
  * For UI2 (discrete): reduce mode automatically down to CMODE_MIN with
  * the same ERRO_RED signal (gated by UIF_EAUX_ONOFF, as all aux_err());
  * the transition «min → off» belongs to the 2.70 V cutoff (п. 2 выше).
- * volt_stop_mode decreases within a sag; scan_voltage() releases it back to
- * CMODE_TURBO on a valid sample with vbat >= 3.1 V (the UI1 ratchet analogue).
+ * volt_stop_mode decreases within a sag; it is NOT restored on recovery
+ * (ТЗ: монотонный латч), only reset to CMODE_TURBO on driver off/on.
  * For tactical UI (ui_index 0): clamp without ratchet and indication.
  *
  * Все сравнения выполняются над кодом Vrefint (без делений); калибровочный
@@ -718,12 +739,25 @@ __attribute__((noinline, noreturn)) void down_forever(void)
  * Отсечение и backstop на невалидной выборке НЕ выполняются; безопасность
  * при затяжном сбое обеспечивает scan_limiters_fault() (гашение луча).
  */
+/**
+ * @brief Сбросить все латчи потолка режимов и серии подтверждений.
+ *
+ * Вызывается при сбое АЦП (невалидная выборка) и при неактивном драйвере
+ * (выкл/вкл фонаря): монотонные латчи volt_max_mode_latch / volt_stop_mode
+ * возвращаются в CMODE_TURBO, все счётчики серий обнуляются.
+ * Используется вместо дублирующегося кода в двух местах scan_voltage().
+ */
+static void reset_voltage_latches(void)
+{
+    voff_count = 0;
+    voff_count_off = 0;
+    vdeep_count = 0;
+    volt_max_mode_latch = CMODE_TURBO;
+    volt_stop_mode = CMODE_TURBO;
+}
+
 void scan_voltage(void)
 {
-    static uint8_t voff_count = 0;     /* серия снижения режима UI2 */
-    static uint8_t voff_count_off = 0; /* серия отсечения 2.70 В (минимальный режим) */
-    static uint8_t vdeep_count = 0;    /* серия backstop 2.50 В (raw) */
-
     int32_t eff_vcode = adc_eff_vcode();
     int32_t deep_vcode = adc_eff_raw_vcode();
 
@@ -737,19 +771,11 @@ void scan_voltage(void)
         /* Сбой — не отсчёт: невалидная выборка рвёт ВСЕ серии подтверждений
          * (UNDERVOLT_CONFIRM_COUNT / UV_DEEP_CONFIRM), как это делает и
          * low_count в strobe_voltage_low(). */
-        voff_count = 0;
-        voff_count_off = 0;
-        vdeep_count = 0;
+        reset_voltage_latches();
         return;
     }
 
     volt_max_mode = calc_volt_max_mode(eff_vcode);
-
-    /* Подтверждённо отдохнувший АКБ (>= 3.1 В) снимает монотонную защёлку
-     * volt_stop_mode — аналог reset_max_step() для UI1; реальная просадка
-     * снова опустит потолок на следующих валидных отсчётах. */
-    if (eff_vcode < (int32_t)swt_cut[5])
-        volt_stop_mode = CMODE_TURBO;
 
     /* Гистерезис низкого заряда маяка: < 3.10 В / >= 3.20 В */
     (void)beacon_low_voltage_update();
@@ -758,9 +784,7 @@ void scan_voltage(void)
     {
         /* Серии не переживают период неактивности: иначе накопленные
          * подтверждения «доигрывались» бы на реактивации. */
-        voff_count = 0;
-        voff_count_off = 0;
-        vdeep_count = 0;
+        reset_voltage_latches();
         return;
     }
 
