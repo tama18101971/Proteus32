@@ -579,13 +579,13 @@ _Static_assert(AWU_MS_PSC(2016) == AWU_PSC_4096 && AWU_MS_PSC(2017) == AWU_PSC_1
 
 #define INFO_RED  MAKE_CMD_MS(RED_LED, 0, 1, 448, 896, 1, 0)  /* 1 красная ~448/896мс */
 #define INFO_GRN  MAKE_CMD_MS(GRN_LED, 0, 2, 224, 112, 1, 0)  /* 2 зелёных ~224/112мс */
-#define ERRO_RED  MAKE_CMD_MS(RED_LED, 0, 3, 15, 90, 1, 0)    /* 3 красных ~15/90мс */
-#define DANG_RED  MAKE_CMD_MS(RED_LED, 0, 1, 15, 90, 1, 0)    /* 1 красная ~15/90мс */
+#define ERRO_RED  MAKE_CMD_MS(RED_LED, 0, 3, 15, 60, 1, 0)    /* 3 красных ~15/60мс */
+#define DANG_RED  MAKE_CMD_MS(RED_LED, 0, 1, 15, 60, 1, 0)    /* 1 красная ~15/60мс */
 
 /* Freeze the documented encodings of the known commands (regression guard
  * against accidental changes of MAKE_CMD_MS/AWU rounding constants). */
 _Static_assert(INFO_RED == 0x0789C311UL && INFO_GRN == 0x0783C222UL &&
-		ERRO_RED == 0x06D27831UL && DANG_RED == 0x06D27811UL,
+		ERRO_RED == 0x07C07831UL && DANG_RED == 0x07C07811UL,
 		"Known AUX command encodings changed");
 
 /* Round-trip layout test: all fields at their maximum value must fill the

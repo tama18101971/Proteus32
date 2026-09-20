@@ -28,7 +28,7 @@ so it is NEVER decoded through C bitfields — bitfield layout is implementation
 - Pairwise mask non-overlap asserts + masks tile 0xFFFFFFFF exactly
 - Golden round-trip: MAKE_CMD(0x7,1,15,7,63,7,63,7,7) == 0xFFFFFFFF and decodes back
 - Regression freeze: INFO_RED == 0x0789C311, INFO_GRN == 0x0783C222,
-  ERRO_RED == 0x06D27831, DANG_RED == 0x06D27811
+  ERRO_RED == 0x07C07831, DANG_RED == 0x07C07811
   (asserts fold to constants — zero Flash cost; verified 2026-08-31:
   Flash 15928/16128 vs 15936 baseline, LSP clangd include-path errors in IDE are pre-existing noise)
 
