@@ -518,7 +518,6 @@ static uint8_t volt_max_mode_latch = CMODE_TURBO;
 
 /* Counters for the voltage-protection series (scan_voltage).
  * File-scope so reset_voltage_latches() can clear them alongside the latches. */
-static uint8_t voff_count = 0;     /* серия снижения режима UI2 */
 static uint8_t voff_count_off = 0; /* серия отсечения 2.70 В (минимальный режим) */
 static uint8_t vdeep_count = 0;    /* серия backstop 2.50 В (raw) */
 
@@ -749,7 +748,6 @@ __attribute__((noinline, noreturn)) void down_forever(void)
  */
 static void reset_voltage_latches(void)
 {
-    voff_count = 0;
     voff_count_off = 0;
     vdeep_count = 0;
     volt_max_mode_latch = CMODE_TURBO;
@@ -867,28 +865,22 @@ void scan_voltage(void)
         if (step_user > target)
             set_current(target, SS_SLOW);
     }
-    /* Discrete UI (mode-based UI2: ui_index 2 или 3) */
+/* Discrete UI (mode-based UI2: ui_index 2 или 3) */
     else
     {
-        /* Каскад снижения работает только ВЫШЕ минимального режима: переход
-         * «минимум → выкл» принадлежит отсечению 2.70 В (блок 3 ниже).
-         * Выборка валидна (ранний return выше) — сентинел не мешает. */
+        /* Снижение мгновенное, без задержки UNDERVOLT_CONFIRM_COUNT —
+         * как в UI1 (рампинг): при превышении порога swt_cut[mode_current-1]
+         * режим уходит вниз за один отсчёт. */
         if (mode_current > CMODE_MIN &&
             (eff_vcode >= (int32_t)swt_cut[mode_current - 1]))
         {
-            if (++voff_count > UNDERVOLT_CONFIRM_COUNT)
-            {
-                voff_count = 0;
-                --mode_current;
-                if (volt_stop_mode > mode_current)
-                    volt_stop_mode = mode_current;
-                set_current(get_stepi(mode_current), SS_SLOW);
-                aux_err_now();       // сигнализируем о сбросе
-            }
+            --mode_current;
+            if (volt_stop_mode > mode_current)
+                volt_stop_mode = mode_current;
+            set_current(get_stepi(mode_current), SS_SLOW);
+            aux_err_now();       // сигнализируем о сбросе
             return;
         }
-
-        voff_count = 0;
     }
 
     /* 3. Отсечение 2.70 В (raw-канал) — когда постепенный спуск дошёл
