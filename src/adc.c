@@ -63,13 +63,7 @@ bool voltage_ok = false;     /* false = нет валидной свежей в�
 int16_t temperature_c = 0;
 uint16_t raw_temperature_adc = 0; // сырое значение температуры с АЦП (обновляется в adc_read)
 
-uint8_t volt_max_mode = CMODE_TURBO;
 uint8_t volt_stop_mode = CMODE_TURBO;
-
-/* Храповик потолка яркости UI1 (ramping): монотонно убывает по мере
- * просадки АКБ и сбрасывается лишь на новой попытке включения с
- * подтверждённо восстановившимся напряжением (reset_max_step()). */
-uint16_t volt_step_ratchet = MAX_STEP;
 
 #if USE_EX_AUX
 /** @brief Voltage thresholds for extended aux warning (Vrefint codes, ascending).
@@ -500,9 +494,9 @@ uint16_t vbat_to_mv_calibrated(void)
  *         обязан дойти до CMODE_MIN; аварийный backstop 2.50 В —
  *         вне таблицы, на raw-канале, см. UV_DEEP_* в adc.h)
  *         Порог [0] — на raw-канале: необратимый, не зависит от EMA-лага.
- *   [1..5] = единый потолок UI1/UI2 (calc_volt_max_mode):
- *            vbat < порог[i] ⟺ макс. допустимый режим = i
- *            (CMODE_MOON..CMODE_MAX; UI1 — тот же режим через get_stepi)
+ *   [1..5] = единый подтверждённый каскад всех UI (mode_current):
+ *            vbat < swt_cut[mode_current-1] 4 подряд отсчёта ⟺ шаг вниз
+ *            (CMODE_MOON..CMODE_MAX; потолок = get_stepi(mode_current))
  *   vbat >= 3100 мВ → без ограничений (CMODE_TURBO / step 511)
  */
 static const uint16_t swt_cut[6] =
@@ -510,51 +504,11 @@ static const uint16_t swt_cut[6] =
     MV_LT(2700), MV_LT(2710), MV_LT(2725), MV_LT(2740), MV_LT(2810), MV_LT(3010)
 };
 
-/* Латч потолка режимов: modes[] уменьшается монотонно при разряде АКБ и
- * НЕ восстанавливается при росте напряжения (ТЗ). Сброс только при
- * неактивном драйвере (выкл/вкл) — осознанное действие пользователя.
- * Previous-mode state for the monotonic latch. */
-static uint8_t volt_max_mode_latch = CMODE_TURBO;
-
 /* Counters for the voltage-protection series (scan_voltage).
  * File-scope so reset_voltage_latches() can clear them alongside the latches. */
+static uint8_t voff_count = 0;     /* серия снижения режима по напряжению (все UI) */
 static uint8_t voff_count_off = 0; /* серия отсечения 2.70 В (минимальный режим) */
 static uint8_t vdeep_count = 0;    /* серия backstop 2.50 В (raw) */
-
-/**
- * @brief Вычисляет максимально допустимый режим UI2 по текущему напряжению.
- *
- * Монотонный латч: режим только снижается при падении напряжения,
- * НЕ восстанавливается при росте. Сброс latch — при неактивном драйвере
- * (scan_voltage), то есть при выключении/включении фонаря.
- * @param eff_vcode Эффективный код Vrefint (с учётом калибровки vc).
- * @return Индекс максимального режима (CMODE_MOON..CMODE_TURBO).
- */
-static uint8_t calc_volt_max_mode(int32_t eff_vcode)
-{
-    /* Снижение напряжения: точные пороги swt_cut[1..5] */
-    while (volt_max_mode_latch > CMODE_MOON)
-    {
-        if (eff_vcode >= (int32_t)swt_cut[volt_max_mode_latch - 1])
-            volt_max_mode_latch--;
-        else
-            break;
-    }
-    /* Повышение напряжения — НЕ обрабатывается: латч не снимается. */
-    return volt_max_mode_latch;
-}
-
-/* ============ Потолок яркости UI1 по напряжению (ramping) ============
- * Единая шкала с UI2: потолок = get_stepi(volt_max_mode) — яркость
- * режима, разрешённого при текущем напряжении (modes[]: 20..511 по
- * порогам swt_cut 2.71/2.725/2.76/2.82/3.01 В).
- * volt_step_ratchet монотонно убывает (MIN) до явного безопасного восстановления. */
-uint16_t ratchet_max_step(void)
-{
-    uint16_t s = get_stepi(volt_max_mode);
-    if (s < volt_step_ratchet) volt_step_ratchet = s;
-    return volt_step_ratchet;
-}
 
 /* Код Vrefint, представляющий «критически низкое напряжение» при отсутствии
  * валидной выборки (voltage_ok == false).  Заменяет прежний маркер
@@ -613,18 +567,6 @@ bool beacon_low_voltage_update(void)
         beacon_low_voltage = false;
 
     return beacon_low_voltage != prev;
-}
-
-/**
- * @brief Сброс храповика потолка яркости UI1.
- *
- * Сбрасывает монотонно убывающий потолок (volt_step_ratchet) на MAX_STEP.
- * Вызывается при новой попытке включения с подтверждённо восстановившимся
- * напряжением, чтобы снять ограничение, наложленное просадкой АКБ.
- */
-void reset_max_step(void)
-{
-    volt_step_ratchet = MAX_STEP;
 }
 
 extern volatile uint8_t need_sleep;
@@ -709,8 +651,8 @@ __attribute__((noinline, noreturn)) void down_forever(void)
  *      любой яркости, пока постепенный спуск не дошёл до минимального режима,
  *      а АКБ проваливается быстрее каскада. Без раннего return — каскад/потолок
  *      продолжают считаться, отскок после шага вниз сбрасывает серию.
- *   2. Отсечение 2.70 В (raw, swt_cut[0]) — на минимальном режиме (каскад
- *      UI2 завершён на CMODE_MIN / EMA-потолок UI1 на CMODE_MIN): порог
+ *   2. Отсечение 2.70 В (raw, swt_cut[0]) — на минимальном режиме
+ *      (единый каскад всех UI завершён на CMODE_MIN): порог
  *      соответствует ТЗ «спуск по режимам до минимального,
  *      выключение при 2.70 В». Как и backstop, необратимый порог не должен
  *      зависеть от параметров фильтра и частоты опроса: на 30 Гц EMA отстаёт
@@ -719,16 +661,15 @@ __attribute__((noinline, noreturn)) void down_forever(void)
  *      на ~2.65 В. Гейт at_min задаётся состоянием каскада, а не каналом —
  *      гонки raw/EMA на последнем шаге спуска нет.
  *
- * For UI1 (ramping): the sag ratchet ceiling (= get_stepi(volt_max_mode),
- * единая шкала с UI2) clamps step_user both while the button is held and
- * after release (SS_SLOW ramp-down, no steps).  A ceiling decrease is
- * announced with aux_err() (ERRO_RED) — once per ceiling decrease.
- * For UI2 (discrete): reduce mode automatically down to CMODE_MIN with
- * the same ERRO_RED signal (gated by UIF_EAUX_ONOFF, as all aux_err());
- * the transition «min → off» belongs to the 2.70 V cutoff (п. 2 выше).
- * volt_stop_mode decreases within a sag; it is NOT restored on recovery
- * (ТЗ: монотонный латч), only reset to CMODE_TURBO on driver off/on.
- * For tactical UI (ui_index 0): clamp without ratchet and indication.
+ * Единый подтверждённый каскад для ВСЕХ UI: при 4 подряд отсчётах ниже
+ * swt_cut[mode_current-1] (UNDERVOLT_CONFIRM_COUNT) mode_current уходит
+ * на ступень вниз с сигналом aux_err() (ERRO_RED, гейт UIF_EAUX_ONOFF);
+ * потолок яркости — get_stepi(mode_current): для UI2/UI3 это сам режим,
+ * для UI1 (ramping) и тактического — кламп step_user (плавный SS_SLOW).
+ * Переход «min → off» принадлежит отсечению 2.70 В (п. 2 выше).
+ * volt_stop_mode и mode_current убывают в течение просадки и НЕ
+ * восстанавливаются при росте напряжения (ТЗ: монотонный латч) —
+ * сброс в CMODE_TURBO только при выкл/вкл (off_driver).
  *
  * Все сравнения выполняются над кодом Vrefint (без делений); калибровочный
  * vc учитывается как сдвиг кода.  При voltage_ok == false (таймаут/сбой
@@ -742,15 +683,15 @@ __attribute__((noinline, noreturn)) void down_forever(void)
  * @brief Сбросить все латчи потолка режимов и серии подтверждений.
  *
  * Вызывается при сбое АЦП (невалидная выборка) и при неактивном драйвере
- * (выкл/вкл фонаря): монотонные латчи volt_max_mode_latch / volt_stop_mode
- * возвращаются в CMODE_TURBO, все счётчики серий обнуляются.
+ * (выкл/вкл фонаря): монотонный латч volt_stop_mode возвращается
+ * в CMODE_TURBO, все счётчики серий обнуляются.
  * Используется вместо дублирующегося кода в двух местах scan_voltage().
  */
 static void reset_voltage_latches(void)
 {
+    voff_count = 0;
     voff_count_off = 0;
     vdeep_count = 0;
-    volt_max_mode_latch = CMODE_TURBO;
     volt_stop_mode = CMODE_TURBO;
 }
 
@@ -772,8 +713,6 @@ void scan_voltage(void)
         reset_voltage_latches();
         return;
     }
-
-    volt_max_mode = calc_volt_max_mode(eff_vcode);
 
     /* Гистерезис низкого заряда маяка: < 3.10 В / >= 3.20 В */
     (void)beacon_low_voltage_update();
@@ -817,80 +756,65 @@ void scan_voltage(void)
     exaux(eff_vcode);
 #endif
 
-    /* 2. Потолок яркости по напряжению (единая шкала swt_cut + modes[]).
-     * Общий кламп для рампинга (UI1) и тактического UI: цель вычисляется
-     * по-разному, кламп step_user к цели — один на оба пути. Предикат
-     * «не в {2,3}»: scan_voltage() достигается при активном драйвере,
-     * ui_table_idx клампится к 1..3 вне boot-меню, так что ">3" мертво
-     * (audit L7d), но трёхчлен ==1/==0/>3 компактен и оставлен как
-     * защитное программирование — лобовое удаление ">3" разваливает
-     * паттерн диапазонной проверки и растит код (измерено: +12 Б). */
-    uint8_t ui_index = ui_table_idx;
-
-    if ((ui_index == 1) || (ui_index == 0) || (ui_index > 3u))
+    /* 2. Подтверждённый каскад снижения режима по напряжению — для ВСЕХ UI.
+     * mode_current — эффективный режим каскада (CMODE_TURBO на включении,
+     * дискретные UI2/UI3 управляют им напрямую); потолок яркости —
+     * get_stepi(mode_current), монотонно не возрастает до выкл/вкл
+     * (off_driver сбрасывает в CMODE_TURBO, латчи — reset_voltage_latches).
+     * Снижение — на 4-м подряд отсчёте ниже swt_cut[mode_current-1]
+     * (UNDERVOLT_CONFIRM_COUNT); невалидная выборка, отскок напряжения
+     * и неактивный драйвер рвут серию. Работает только ВЫШЕ минимального
+     * режима: переход «минимум → выкл» принадлежит отсечению 2.70 В
+     * (блок 3 ниже). */
+    if (mode_current > CMODE_MIN &&
+        (eff_vcode >= (int32_t)swt_cut[mode_current - 1]))
     {
-        uint16_t target;
-        if (ui_index == 1)
+        if (++voff_count > UNDERVOLT_CONFIRM_COUNT)
         {
-            /* Рампинг «упёрся» в просадку АКБ: сигнализируем ERRO_RED
-             * однократно на каждое снижение потолка храповика.
-             * ratchet_max_step() монотонно не возрастает, поэтому на
-             * одном уровне повторных сигналов не будет; reset_max_step()
-             * при новом нажатии поднимает потолок — сигнала нет. */
-            static uint16_t v_max_prev = MAX_STEP;
-            uint16_t v_max = ratchet_max_step();
-            if (v_max < v_max_prev)
-                aux_err_now();
-            v_max_prev = v_max;
-
-            /* max_step — безусловный потолок рампинга с термочастью
-             * limiter (как прежде; обновляется и в PRESSED-обработчике
-             * ui.c по той же формуле). */
-            max_step = (v_max > limiter) ? (uint16_t)(v_max - limiter) : 1u;
-            /* При удержании рампинг упирается в потолок (с термочастью
-             * limiter): плавный ретаргет SS_SLOW. После отпускания цель —
-             * потолок храповика целиком: requested brightness в step_user
-             * остаётся прерогативой термолимитера (get_step_tc). */
-            target = Pressed ? max_step : v_max;
-        }
-        else
-        {
-            /* Тактический UI: кламп к единому потолку без храповика
-             * и сигнализации (моментарка пересетит step_default при каждом
-             * нажатии — кламп держит яркость в рамках на время удержания).
-             * Меню (5/6) сюда не попадают: driver_mode не активен. */
-            target = get_stepi(volt_max_mode);
-        }
-
-        if (step_user > target)
-            set_current(target, SS_SLOW);
-    }
-/* Discrete UI (mode-based UI2: ui_index 2 или 3) */
-    else
-    {
-        /* Снижение мгновенное, без задержки UNDERVOLT_CONFIRM_COUNT —
-         * как в UI1 (рампинг): при превышении порога swt_cut[mode_current-1]
-         * режим уходит вниз за один отсчёт. */
-        if (mode_current > CMODE_MIN &&
-            (eff_vcode >= (int32_t)swt_cut[mode_current - 1]))
-        {
+            voff_count = 0;
             --mode_current;
             if (volt_stop_mode > mode_current)
                 volt_stop_mode = mode_current;
             set_current(get_stepi(mode_current), SS_SLOW);
             aux_err_now();       // сигнализируем о сбросе
-            return;
         }
+        return;
+    }
+
+    voff_count = 0;
+
+    /* Кламп запрошенной яркости к потолку каскада (UI1 ramping/тактический).
+     * ui_table_idx клампится к 1..3 вне boot-меню; дискретные UI2/UI3 (2/3)
+     * уже обработаны каскадом выше (mode_current == яркость), так что
+     * здесь остаются UI1 (1) и тактический (0). */
+    uint8_t ui_index = ui_table_idx;
+    uint16_t v_max = get_stepi(mode_current);
+
+    if (ui_index == 1)
+    {
+        /* UI1: max_step — потолок рампинга с термочастью limiter.
+         * При удержании рампинг упирается в потолок (плавный ретаргет
+         * SS_SLOW); после отпускания цель — потолок целиком: requested
+         * brightness в step_user остаётся прерогативой термолимитера
+         * (get_step_tc). */
+        max_step = (v_max > limiter) ? (uint16_t)(v_max - limiter) : 1u;
+        uint16_t target = Pressed ? max_step : v_max;
+        if (step_user > target)
+            set_current(target, SS_SLOW);
+    }
+    else if (step_user > v_max)
+    {
+        /* Тактический UI: кламп к потолку каскада (моментарка пересетит
+         * яркость при каждом нажатии — кламп держит её в рамках на время
+         * удержания). */
+        set_current(v_max, SS_SLOW);
     }
 
     /* 3. Отсечение 2.70 В (raw-канал) — когда постепенный спуск дошёл
-     * до минимального режима (или ниже): UI2 — каскад завершён (mode_current <= CMODE_MIN),
-     * UI1/тактический — EMA-потолок на минимальном режиме (volt_max_mode <= CMODE_MIN).
-     * Порог соответствует ТЗ «выключение при 2.70 В». Гейт at_min задаётся
-     * состоянием каскада, а не каналом, поэтому гонки raw/EMA нет. */
-    bool at_min = ((ui_index == 2) || (ui_index == 3))
-                      ? (mode_current <= CMODE_MIN)
-                      : (volt_max_mode <= CMODE_MIN);
+     * до минимального режима (каскад завершён на CMODE_MIN). Единый гейт
+     * для всех UI: состояние каскада mode_current, а не канал измерения —
+     * гонки raw/EMA нет. Порог соответствует ТЗ «выключение при 2.70 В». */
+    bool at_min = (mode_current <= CMODE_MIN);
 
     if (at_min && (deep_vcode >= (int32_t)swt_cut[0]))
     {

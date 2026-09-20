@@ -148,7 +148,9 @@ typedef enum {
     CMODE_NOACTION        /**< No action / placeholder. */
 } CURRENT_Modes_t;
 
-/** @brief Currently active discrete mode (UI2). */
+/** @brief Currently active discrete mode. Для UI2/UI3 — выбранный режим;
+ * для всех UI — эффективный режим каскада защиты по напряжению
+ * (scan_voltage; CMODE_TURBO на включении, сброс в off_driver()). */
 extern uint8_t mode_current;
 
 /** @brief Default discrete mode at power-on (UI2). */

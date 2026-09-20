@@ -237,6 +237,10 @@ void off_driver(uint8_t reset_step, SoftStartSpeed_t ss_speed)
     driver_mode = MODE_OFF;
     direction = DIR_UP;
 
+    /* Свежий каскад защиты по напряжению на следующее включение:
+     * scan_voltage() стартует с потолка get_stepi(CMODE_TURBO) = MAX_STEP. */
+    mode_current = CMODE_TURBO;
+
     set_current(0, ss_speed);
     if ((ss_speed != SS_NO) && !step_tc)
         OFF_POWER();
@@ -330,7 +334,7 @@ void off_auto_repeat(void)
  * 160 Гц, а активный спад (лимитер/потолок) не обрывается мгновенно, а
  * ретаргетится с текущей позиции ss_init() — ступенчатых скачков нет.
  *
- * Упор рампинга в потолок по напряжению (volt_step_ratchet < MAX_STEP)
+ * Упор рампинга в потолок по напряжению (каскад урезал mode_current)
  * сигнализируется ERRO_RED. Термолимитер здесь не сигнализируется:
  * индикация привязана только к напряжению.
  */
@@ -338,7 +342,7 @@ void step_up_ui1(void)
 {
     if (step_user < max_step)
         set_current(step_user + 1u, SS_SLOW);
-    else if ((volt_step_ratchet < MAX_STEP) && !aux_is_active())
+    else if ((mode_current < CMODE_TURBO) && !aux_is_active())
         aux_err_now();
 }
 
@@ -389,14 +393,11 @@ void on_turbo_ui1(void)
         ps.start = start;
         ps.pr_step = step_user ? step_user : step_default;
         ps.use_prev = true;
-        /* Турбо = максимум: если потолок храповика по напряжению ниже
-         * MAX_STEP, запрошенная яркость недостижима — сигнализируем
-         * ERRO_RED независимо от предыдущего состояния драйвера
-         * (фикс «индикация работает через раз»: прежний гейт !start
-         * подавлял сигнал при включении турбо из OFF, а сравнение
-         * pr_step >= max_step флипало после автоснижения яркости
-         * по просадке АКБ). */
-        if (volt_step_ratchet < MAX_STEP)
+        /* Турбо = максимум: если каскад защиты по напряжению уже урезал
+         * потолок ниже CMODE_TURBO, запрошенная яркость недостижима —
+         * сигнализируем ERRO_RED независимо от предыдущего состояния
+         * драйвера (фикс «индикация работает через раз»). */
+        if (mode_current < CMODE_TURBO)
             aux_err_now();
         set_current(max_step, SS_FAST);
     }
@@ -423,11 +424,12 @@ void off_driver_false(void)
      * Турбо-сессия, запущенная двойным кликом из OFF (ps.use_prev &&
      * ps.start), в память не пишется: mode_current == CMODE_TURBO должен
      * быть отброшен — так же поступает гвард if(!ps.start) в off_driver()
-     * AVR. Условие mode_current != CMODE_OFF не даёт выключению из UI1
-     * (там mode_current не используется и всегда CMODE_OFF) затирать
-     * память UI2 нулём. Турбо из ON (ps.start == 0) не трогаем: его
-     * откатывает блок if(!ps.start) в off_driver(). */
-    if (mode_current != CMODE_OFF && !(ps.use_prev && ps.start))
+     * AVR. Условие (ui_table_idx == 2 || == 3) не даёт выключению из UI1
+     * (там mode_current — состояние каскада защиты по напряжению, а не
+     * выбранный режим) затирать память UI2. Турбо из ON (ps.start == 0)
+     * не трогаем: его откатывает блок if(!ps.start) в off_driver(). */
+    if (((ui_table_idx == 2) || (ui_table_idx == 3)) &&
+        (mode_current != CMODE_OFF) && !(ps.use_prev && ps.start))
         mode_default = mode_current;
     mode_current = CMODE_OFF;
     off_driver(false, SS_FAST);
@@ -1220,11 +1222,11 @@ __attribute__((noinline)) uint16_t get_stepi(uint8_t index)
     return modes[index];
 }
 
-/** @brief Clamp mode to voltage-limited ceiling. */
+/** @brief Clamp mode to voltage-limited ceiling (каскад защиты по
+ * напряжению ведёт volt_stop_mode вслед за mode_current). */
 static __attribute__((noinline)) uint8_t get_up_mode(uint8_t mode)
 {
-    uint8_t up_mode = MIN(volt_stop_mode, volt_max_mode);
-    return MIN(up_mode, mode);
+    return MIN(volt_stop_mode, mode);
 }
 
 /** @brief Set brightness for a UI2 mode with fast soft-start. */
@@ -1400,7 +1402,7 @@ static void handle_tactical(void)
              * вспыхивает на полном уровне и лишь затем проседает.  Термочасть
              * учтётся внутри set_current() через get_step_tc(). */
             uint16_t tgt = step_tactic ? step_tactic : step_default;
-            uint16_t cap = get_stepi(volt_max_mode);
+            uint16_t cap = get_stepi(mode_current);
             if (tgt > cap)
                 tgt = cap;
             set_current(tgt, SS_NO);
@@ -1537,26 +1539,9 @@ void ui_process(void)
             }
             if (ui_idx == 1)
             {
-                /* The UI1 ceiling is a sag ratchet.  A press starts a new
-                 * activation attempt, so clear a stale historical cap only
-                 * after a confirmed healthy voltage measurement
-                 * (vbat > 3100 мВ ⟺ vrefint_adc <= MV_GE(3101)). */
-                if (voltage_ok &&
-                    ((int32_t)vrefint_adc - (int32_t)ob_GetVc() <= (int32_t)MV_GE(3101u)))
-                {
-                    reset_max_step();
-                }
-
-                /* Never turn an uninitialised/failed zero sample into a
-                 * permanent low-voltage ratchet.  Any valid reading,
-                 * including a genuinely depleted cell, still follows the
-                 * normal low-voltage ceiling and shutdown paths. */
-                uint16_t v_max = MAX_STEP;
-                if (voltage_ok)
-                {
-                    v_max = ratchet_max_step();
-                }
-                max_step = (v_max > limiter) ? (uint16_t)(v_max - limiter) : 1u;
+                /* Потолок рампинга обновляется каскадом в scan_voltage()
+                 * (mode_current); здесь — лишь направление авто-рампа по
+                 * текущему потолку. */
                 stop_aux_if(IDM_BEACON, false);
                 if (step_user >= max_step || step_tc >= max_step) direction = DIR_DOWN;
             }

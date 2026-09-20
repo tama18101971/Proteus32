@@ -192,7 +192,8 @@ uint16_t get_exact_temp_adc(void);
  * защиты. Сравнение строгое (++count > UNDERVOLT_CONFIRM_COUNT), поэтому
  * защёлка включается на 4-м подряд попадании ниже порога; одиночный шум
  * или невалидная выборка сбрасывают счётчик. Используется scan_voltage()
- * (voff_count, voff_count_off — серия отсечения 2.70 В на raw-канале)
+ * (voff_count — серия снижения режима по каскаду для всех UI;
+ * voff_count_off — серия отсечения 2.70 В на raw-канале)
  * и strobe_voltage_low() (low_count). */
 #define UNDERVOLT_CONFIRM_COUNT  3u
 
@@ -244,40 +245,18 @@ bool beacon_low_voltage_update(void);
 /**
  * @brief Main battery protection loop (call after a successful adc_read()).
  *
- * Implements UI1 ramping and UI2 discrete mode voltage protection.
- * Updates volt_max_mode, volt_stop_mode, volt_step_ratchet.
+ * Unified confirmed mode cascade (mode_current) for ALL UIs; UI1/tactical
+ * clamp step_user to get_stepi(mode_current). Updates volt_stop_mode.
  */
 void scan_voltage(void);
 
-/** @brief Dynamic UI2 mode ceiling (monotonic latch, updated in scan_voltage). */
-extern uint8_t volt_max_mode;
-
 /**
- * @brief UI2 voltage latch — monotonic latch, only decreases during a sag.
- * NOT restored on voltage recovery (ТЗ). Reset to CMODE_TURBO only on
- * driver off/on (scan_voltage when !driver_is_active()).
+ * @brief Voltage latch — monotonic latch, only decreases during a sag
+ * (подтверждённый каскад mode_current, все UI). NOT restored on voltage
+ * recovery (ТЗ). Reset to CMODE_TURBO only on driver off/on
+ * (scan_voltage when !driver_is_active()).
  */
 extern uint8_t volt_stop_mode;
-
-/** @brief UI1 sag ratchet: monotonically decreasing step ceiling by voltage. */
-extern uint16_t volt_step_ratchet;
-
-/**
- * @brief Apply the UI1 sag ratchet and return the current ceiling.
- *
- * Lowers volt_step_ratchet to the unified ceiling (get_stepi(volt_max_mode),
- * same scale as UI2) when it is lower, then returns it.
- * This function has a side effect.
- */
-uint16_t ratchet_max_step(void);
-
-/**
- * @brief Clear the historical UI1 voltage ceiling after a confirmed recovery.
- *
- * Call only after a fresh voltage measurement is above the configured
- * recovery threshold; this does not disable the low-voltage step-down logic.
- */
-void reset_max_step(void);
 
 /**
  * @brief Battery protection for the strobe driver (no DAC writes).
