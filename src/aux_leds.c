@@ -99,11 +99,11 @@ typedef struct {
  * Each pulse uses the same modes[] index as the single-command profiles. */
 static const uint32_t strobe_sos[] = {
     /* S: ... */
-    MAKE_CMD_MS(HBL_LED, 0, 3, 126, 126, CMODE_TURBO, CMODE_OFF),
+    MAKE_CMD_MS(HBL_LED, 0, 3, 126, 126, CMODE_MAX, CMODE_OFF),
     /* O: --- */
-    MAKE_CMD_MS(HBL_LED, 0, 3, 376, 126, CMODE_TURBO, CMODE_OFF),
+    MAKE_CMD_MS(HBL_LED, 0, 3, 376, 126, CMODE_MAX, CMODE_OFF),
     /* S: ... */
-    MAKE_CMD_MS(HBL_LED, 0, 3, 126, 126, CMODE_TURBO, CMODE_OFF),
+    MAKE_CMD_MS(HBL_LED, 0, 3, 126, 126, CMODE_MAX, CMODE_OFF),
     /* Pause between SOS repetitions. */
     MAKE_CMD_MS(HBL_LED, 0, 0, 440, 440, CMODE_OFF, CMODE_OFF),
     AC_REP_ATSTART,
