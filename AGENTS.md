@@ -31,7 +31,7 @@ pio device monitor               460800 8N1
 - Poll (160 Hz / 6 ms): `button_tick() + ui_process() + ss_scan()`
 - Poll (30 Hz / 33 ms): `adc_read() + scan_limiters() + scan_voltage()`
 - 2 Hz / 500 ms: debug UART log (`[NORMAL] T=... F=... I=... L=... P=... S=... V=...`)
-- 5 s: `ob_Flush()` + EE-коммит по diff с тенью (записи только при явных изменениях настроек, см. Data storage); then sleep
+- 5 s: `wl_ob_flush()` + EE-коммит по diff с тенью (записи только при явных изменениях настроек, см. Data storage); then sleep
 - Sleep: `need_sleep` = STANDBY req (boot + 5 s tick; cleared by button wake); `is_sleep_mode` true after `AWU_Sleep_Now()` until button wake restore; при активном драйвере ниже `THERMAL_FAST_STEP` термосон идёт в ритме окон AUX (AWU принадлежит AUX FSM, `thermal_sleep_allowed()` допускает активный AUX), замеры АКБ/термо — на каждом aux-wake; паттерн закончился — возврат к AWU_4S; кнопочное пробуждение при активном AUX не обезоруживает AWU — паттерн продолжается в бодрствовании
 
 ### Subsystems
@@ -51,12 +51,12 @@ pio device monitor               460800 8N1
 
 ### Temperature calibration
 
-Two layers: **`tc`** (Option Bytes, `ob_GetTc/SetTc`, int8_t HW ADC correction, `get_exact_temp_adc = raw - tc`) and **`t_calibr`** (`EE.usr.t_calibr`, 1–15 clicks = 46–60 °C, default 5 = 50 °C, `get_thermal_setpoint()`). `calibration()` (`ui.c`, eng menu) → Option Bytes.
+Two layers: **`tc`** (Option Bytes, `OB_CFG->tc` overlay, int8_t HW ADC correction, `get_exact_temp_adc = raw - tc`) and **`t_calibr`** (`EE.usr.t_calibr`, 1–15 clicks = 46–60 °C, default 5 = 50 °C, `get_thermal_setpoint()`). `calibration()` (`ui.c`, eng menu) → Option Bytes.
 
 ### Data storage
 
-WL_FLASH v2.0.1 (vendored `libs/WL_FLASH`): wear-leveling record ring in `0x08003F00..0x08004000` (record 16 B, CRC-16, 4 pages × 4 slots = 16). Payload = `app_cfg_t` (9 B: `ui1` хранит UI1 step>>1, `uif` биты 0..4 флаги + биты 5..7 `default_ui2`, `aux`, `usr`, 10 nibble-packed magic slots) in `app_data.h`; `EE.fieldname` = `(*WL_DATA_AS(app_cfg_t))`. Boot: `wl_load()` → on fail `wl_init() + ee_defaults()`. **Сессия в RAM, конфиг во Flash:** сессионная яркость/режим (`step_default`/`mode_default`) живёт в SRAM (сохраняется Standby при выключенном фонаре); `off_driver()` EE не трогает — при повседневных вкл/выкл записей во Flash **0**. Коммит EE — только на 5-с тике по diff `EE` vs `cfg_shadow` (memcmp): пишут лишь явные действия (5 кликов `save_def_ui1/2`, меню, слоты, флаги, `ee_defaults`). Сбой записи: dirty-флаг остаётся → ретрай на следующем 5-с тике, ≤`WL_MAX_COMMIT_RETRY=3`, latches `WL_RETRY_EXHAUSTED` until reload; OB flush остаётся на 5-с тике. Формат pinned в `platformio.ini` (`-DWL_FORMAT_VERSION=4 -DWL_RECORD_SIZE=16 -DWL_CRC_BITS=16`; bump on payload change); v3→v4 сбрасывает настройки в дефолт (одноразово); `maximum_size = 16128` + `-Wl,--defsym=FLASH_SIZE=16128` + гейт `fw_size.py` ERROR_AT=16128 enforce limits. `WL_FLASH_LIGHT` removed upstream.
-- **Option Bytes** (`ob.c/h`): RAM-cached, flushed via `ob_Flush()`; calibration counters only (ml, tc, vc); magic slots moved to WL_FLASH v3.
+WL_FLASH v2.2.0 (vendored `libs/WL_FLASH`): wear-leveling record ring in `0x08003F00..0x08004000` (record 16 B, CRC-16, 4 pages × 4 slots = 16). Payload = `app_cfg_t` (9 B: `ui1` хранит UI1 step>>1, `uif` биты 0..4 флаги + биты 5..7 `default_ui2`, `aux`, `usr`, 10 nibble-packed magic slots) in `app_data.h`; `EE.fieldname` = `(*WL_DATA_AS(app_cfg_t))`. Boot: `wl_load()` → on fail `wl_init() + ee_defaults()`. **Сессия в RAM, конфиг во Flash:** сессионная яркость/режим (`step_default`/`mode_default`) живёт в SRAM (сохраняется Standby при выключенном фонаре); `off_driver()` EE не трогает — при повседневных вкл/выкл записей во Flash **0**. Коммит EE — только на 5-с тике по diff `EE` vs `cfg_shadow` (memcmp): пишут лишь явные действия (5 кликов `save_def_ui1/2`, меню, слоты, флаги, `ee_defaults`). Сбой записи: dirty-флаг остаётся → ретрай на следующем 5-с тике, ≤`WL_MAX_COMMIT_RETRY=3`, latches `WL_RETRY_EXHAUSTED` until reload; OB flush остаётся на 5-с тике. Формат pinned в `platformio.ini` (`-DWL_FORMAT_VERSION=4 -DWL_RECORD_SIZE=16 -DWL_CRC_BITS=16`; bump on payload change); v3→v4 сбрасывает настройки в дефолт (одноразово); `maximum_size = 16128` + `-Wl,--defsym=FLASH_SIZE=16128` + гейт `fw_size.py` ERROR_AT=16128 enforce limits. `WL_FLASH_LIGHT` removed upstream.
+- **Option Bytes** (`ob.h` overlay over the `wl_ob_*` module of WL_FLASH v2.2.0): RAM-cached, flushed via `wl_ob_flush()` in the persistence tick; calibration counters only (ml, tc, vc); change idiom `OB_CFG->field = x; wl_ob_mark_dirty();`.
 
 ### AUX LEDs / strobes (`aux_leds.c/h`)
 

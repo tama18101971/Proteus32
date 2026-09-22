@@ -7,6 +7,7 @@
  *   build_flags =
  *       -DWL_PAGE_COUNT=8
  *       -DWL_RECORD_SIZE=20
+ *       -DWL_SYSCLK_HZ=48000000
  *       -DWL_FLASH_DEBUG
  *
  * IMPORTANT: the EEPROM region lives at the end of Flash and must be
@@ -94,11 +95,131 @@
 #define WL_MAX_COMMIT_RETRY 3
 #endif
 
+/* ─── Option Bytes store (opt-in) ───────────────────────────────── */
+
+/* Define WL_OB_ENABLE to add the wl_ob_* API (src/wl_flash_ob.h): a small
+ * store for rarely-changed parameters in the Option Bytes region, in
+ * addition to the record ring. Off by default, so existing builds are
+ * completely unaffected. */
+
+#ifndef WL_OB_ENABLE
+#define WL_OB_ENABLE 0
+#endif
+
+#if WL_OB_ENABLE
+
+/* Number of user bytes kept in the Option Bytes area. The datasheet
+ * documents two Data bytes; anything above 4 sits past the register block
+ * and its persistence is not covered by the datasheet — verify against
+ * the part before raising this. Hard cap 16 (static asserted in
+ * wl_flash_ob.h). */
+#ifndef WL_OB_USER_BYTES
+#define WL_OB_USER_BYTES 4
+#endif
+
+/* Consecutive wl_ob_flush() failures tolerated before it stops writing
+ * and keeps reporting failure until the data changes again. Without a
+ * bound, an unusable OB region would be erase-cycled on every pass of
+ * the main loop. Cleared by wl_ob_mark_dirty(). */
+#ifndef WL_OB_MAX_FLUSH_RETRY
+#define WL_OB_MAX_FLUSH_RETRY 3
+#endif
+
+/* Base of the Option Bytes block. Do not change on CH32V00x. */
+#ifndef WL_OB_BASE_ADDR
+#define WL_OB_BASE_ADDR 0x1FFFF800UL
+#endif
+
+/* Start of the user area, byte i stored at WL_OB_USER_ADDR + i * 2 with
+ * the value in the low half-word byte — the controller writes the one's
+ * complement into the high byte automatically. The default sits past
+ * the six standard registers (RDPR, USER, Data0, Data1, WRPR0, WRPR1).
+ * Byte 0..3 at base+16 keeps the on-flash layout identical to the
+ * standalone OB drivers this module replaced, so values written by them
+ * load without migration. */
+#ifndef WL_OB_USER_ADDR
+#define WL_OB_USER_ADDR (WL_OB_BASE_ADDR + 16UL)
+#endif
+
+/* Hardware caveat: the OPTER erase clears the entire Option Bytes page,
+ * including the standard registers — read protection, boot settings,
+ * write protection. The back end therefore saves and reprograms them on
+ * every flush, and a failed or interrupted one leaves the whole area
+ * undefined until the next successful flush. Because USER=0xFF changes
+ * IWDG and NRST behaviour after a power-up glitch, keep only parameters
+ * that can safely fall back to defaults here. */
+
+/* Timeout for OB operations is the existing WL_FLASH_TIMEOUT above; no
+ * separate tunable. */
+
+#endif /* WL_OB_ENABLE */
+
+/* ─── Clock / timing ────────────────────────────────────────────── */
+
+/* Core clock in Hz. Used to rebase the Flash controller wait timeout
+ * onto real time; it does not configure the clock itself.
+ *
+ * The noneos-sdk builds boot at the silicon reset default (HSI, no PLL)
+ * whatever the board manifest says, which on CH32V00x is 24 MHz — so
+ * when nothing below applies, that is the assumed clock.
+ *
+ * Precedence:
+ *   1. an explicit -DWL_SYSCLK_HZ always wins;
+ *   2. a vendor SYSCLK_FREQ_* define (from system_ch32v00x.c) maps to
+ *      the clock it names. Deliberately literal, not the macro value:
+ *      a bare -DSYSCLK_FREQ_48MHZ_HSI without a value would otherwise
+ *      default to 1 and break the arithmetic;
+ *   3. the HSI reset default, 24 MHz.
+ *
+ * Declaring a clock higher than the real one only makes the timeout
+ * longer, never shorter — erring high is the safe direction. */
+#ifndef WL_SYSCLK_HZ
+#if defined(SYSCLK_FREQ_48MHZ_HSI) || defined(SYSCLK_FREQ_48MHz_HSE)
+#define WL_SYSCLK_HZ 48000000UL
+#elif defined(SYSCLK_FREQ_24MHZ_HSI) || defined(SYSCLK_FREQ_24MHz_HSE) \
+    || defined(SYSCLK_FREQ_HSI)
+#define WL_SYSCLK_HZ 24000000UL
+#elif defined(SYSCLK_FREQ_8MHz_HSI) || defined(SYSCLK_FREQ_8MHz_HSE) \
+    || defined(SYSCLK_FREQ_HSI_LP)
+#define WL_SYSCLK_HZ 8000000UL
+#else
+#define WL_SYSCLK_HZ 24000000UL
+#endif
+#endif
+
+/* Busy-wait budget for the Flash controller, in microseconds. Defaults
+ * to 100 ms — roughly 20x the worst-case ~5 ms page erase — which at
+ * 48 MHz works out to ~2.4 M loop iterations, the same order as the
+ * literal 2 M the library always used. */
+#ifndef WL_FLASH_TIMEOUT_US
+#define WL_FLASH_TIMEOUT_US 100000UL
+#endif
+
 /* Iterations to wait for the Flash controller before declaring a
- * hardware failure. Roughly 2 cycles per iteration; the default is
- * several orders of magnitude above the worst-case erase time. */
+ * hardware failure. Roughly 2 cycles per iteration. When not overridden
+ * it is derived from WL_FLASH_TIMEOUT_US and WL_SYSCLK_HZ entirely by
+ * preprocessor constant folding — no run-time division (RV32EC has no
+ * divider), no casts — so it stays usable in #if and _Static_assert.
+ *
+ * An explicit -DWL_FLASH_TIMEOUT still wins (backward compatibility). */
 #ifndef WL_FLASH_TIMEOUT
-#define WL_FLASH_TIMEOUT 2000000UL
+#define WL_FLASH_TIMEOUT \
+    ((WL_FLASH_TIMEOUT_US * (WL_SYSCLK_HZ / 1000000UL) + 1UL) / 2UL)
+#endif
+
+/* Compile-time sanity. The clock must lie in 1 MHz..400 MHz and the
+ * budget in 10 us..10 s — the upper bounds also keep the 32-bit product
+ * in the derivation above from overflowing. */
+#if WL_SYSCLK_HZ < 1000000UL || WL_SYSCLK_HZ > 400000000UL
+#error "WL_SYSCLK_HZ is outside the supported range (1 MHz..400 MHz)"
+#endif
+
+#if WL_FLASH_TIMEOUT_US < 10UL || WL_FLASH_TIMEOUT_US > 10000000UL
+#error "WL_FLASH_TIMEOUT_US is outside the supported range (10 us..10 s)"
+#endif
+
+#if WL_FLASH_TIMEOUT < 1UL
+#error "WL_FLASH_TIMEOUT would be zero - raise WL_FLASH_TIMEOUT_US or WL_SYSCLK_HZ"
 #endif
 
 /* Define WL_FLASH_DEBUG to get printf() tracing. Undefined by default,

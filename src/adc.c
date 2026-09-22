@@ -219,7 +219,7 @@ int16_t calc_temperature(uint16_t adcValue)
  */
 uint16_t get_exact_temp_adc(void)
 {
-    int16_t v = (int16_t)raw_temperature_adc - (int16_t)ob_GetTc();
+    int16_t v = (int16_t)raw_temperature_adc - (int16_t)OB_CFG->tc;
     if (v < ADC_MIN_VAL) v = ADC_MIN_VAL;
     if (v > ADC_MAX_VAL) v = ADC_MAX_VAL;
     return (uint16_t)v;
@@ -471,7 +471,7 @@ uint16_t vbat_to_mv_calibrated(void)
     if (!voltage_ok)
         return 0u;
 
-    int32_t effective_code = (int32_t)vrefint_adc - (int32_t)ob_GetVc();
+    int32_t effective_code = (int32_t)vrefint_adc - (int32_t)OB_CFG->vc;
     /* vbat_to_mv() uses 14 quotient bits; with a valid raw sample and the
      * documented vc range the normal lower bound is 129.  Treat an invalid
      * Option Bytes value or an impossible effective code as no reading. */
@@ -523,7 +523,7 @@ static uint8_t vdeep_count = 0;    /* серия backstop 2.50 В (raw) */
 int32_t adc_eff_vcode(void)
 {
     uint16_t code = voltage_ok ? vrefint_adc : VREF_SENTINEL;
-    return (int32_t)code - (int32_t)ob_GetVc();
+    return (int32_t)code - (int32_t)OB_CFG->vc;
 }
 
 /**
@@ -542,7 +542,7 @@ int32_t adc_eff_vcode(void)
 int32_t adc_eff_raw_vcode(void)
 {
     uint16_t code = voltage_ok ? vrefint_raw_adc : VREF_SENTINEL;
-    return (int32_t)code - (int32_t)ob_GetVc();
+    return (int32_t)code - (int32_t)OB_CFG->vc;
 }
 
 /**

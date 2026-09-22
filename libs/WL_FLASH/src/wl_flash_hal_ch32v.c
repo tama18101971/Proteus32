@@ -267,6 +267,151 @@ bool wl_hal_erase_page(uint32_t addr)
     return ok;
 }
 
+#if WL_OB_ENABLE
+
+/* ─── Option Bytes ──────────────────────────────────────────────── */
+
+/* Option byte mode bits. The vendor header casts them to uint16_t;
+ * widened here for use with the 32-bit CTLR. */
+#ifndef FLASH_CTLR_OPTPG
+#define FLASH_CTLR_OPTPG 0x0010UL
+#endif
+#ifndef FLASH_CTLR_OPTER
+#define FLASH_CTLR_OPTER 0x0020UL
+#endif
+
+/* The six standard registers of the Option Bytes block are contiguous
+ * half-words, so the block is walked as an array. */
+#define WL_OB_STD_COUNT 6
+
+/* Program one half-word with OPTPG already set and report controller
+ * errors. Shared by the standard-register restore and the user byte
+ * writes below. */
+static bool wl_ob_write(volatile uint16_t *addr, uint16_t value)
+{
+    *addr = value;
+    return wl_wait_idle() && !wl_took_error();
+}
+
+void wl_hal_ob_read(uint8_t *dst, uint32_t len)
+{
+    for (uint32_t i = 0u; i < len; i++)
+    {
+        dst[i] = *(volatile const uint8_t *)(WL_OB_USER_ADDR + i * 2u);
+    }
+}
+
+/* On-flash format, confirmed on silicon: every option byte cell stores
+ * the value in the low half-word byte and the hardware writes the
+ * one's complement into the high byte automatically — the value
+ * written into the high half is ignored. Programming clears bits only,
+ * so a cell must be erased before a new value fits. */
+bool wl_hal_ob_program(const uint8_t *src, uint32_t len)
+{
+    volatile uint16_t *ob = (volatile uint16_t *)WL_OB_BASE_ADDR;
+    uint8_t std[WL_OB_STD_COUNT];
+    uint32_t irq;
+    uint32_t i;
+    bool ok;
+
+    /* One masked window over the whole destructive sequence. An
+     * interrupt that programmed main Flash between the OPTER erase and
+     * the reprogramming would fight the controller for its mode state.
+     * The read-back verify runs after the window, like ob_Flush's did. */
+    irq = wl_irq_save();
+
+    wl_unlock();
+    ok = wl_wait_idle();
+
+    if (ok)
+    {
+        /* Save the standard registers byte-sized: the erase clears
+         * them, and they must go back exactly as they were. */
+        for (i = 0u; i < WL_OB_STD_COUNT; i++)
+        {
+            std[i] = (uint8_t)ob[i];
+        }
+
+        wl_clear_flags();
+
+        /* Option byte mode has its own key register. */
+        FLASH->OBKEYR = WL_KEY1;
+        FLASH->OBKEYR = WL_KEY2;
+
+        /* OPTER clears the entire Option Bytes page, standard
+         * registers included. OPTER and STRT must be two separate
+         * controller writes: a single write that sets both bits does
+         * not start the erase (confirmed on CH32V003F4P6 — the
+         * combined write completes with neither BSY nor any error
+         * flag, and the page stays intact). */
+        FLASH->CTLR |= (uint32_t)FLASH_CTLR_OPTER;
+        FLASH->CTLR |= (uint32_t)FLASH_CTLR_STRT;
+        ok = wl_wait_idle();
+        FLASH->CTLR &= ~(uint32_t)FLASH_CTLR_OPTER;
+        if (ok && wl_took_error())
+        {
+            ok = false;
+        }
+    }
+
+    if (ok)
+    {
+        /* Standard registers first: the window where the option bytes
+         * hold erased values, USER=0xFF among them, stays as short as
+         * the sequence allows. */
+        FLASH->CTLR |= (uint32_t)FLASH_CTLR_OPTPG;
+        for (i = 0u; i < WL_OB_STD_COUNT; i++)
+        {
+            ok = wl_ob_write(&ob[i], std[i]);
+            if (!ok)
+            {
+                break; /* first failure stops the sequence */
+            }
+        }
+    }
+
+    if (ok)
+    {
+        /* User bytes: one half-word each, value in the low byte, on the
+         * stride-2 layout. The hardware fills the high half with the
+         * complement on its own. */
+        for (i = 0u; i < len; i++)
+        {
+            ok = wl_ob_write((volatile uint16_t *)(WL_OB_USER_ADDR + i * 2u),
+                             src[i]);
+            if (!ok)
+            {
+                break;
+            }
+        }
+    }
+
+    FLASH->CTLR &= ~(uint32_t)FLASH_CTLR_OPTPG;
+    wl_lock();
+    wl_irq_restore(irq);
+
+    if (ok)
+    {
+        /* Read-back verify, stride-2 like the writes. On a mismatch the
+         * caller treats the area as undefined: the next wl_ob_init()
+         * hands the broken bytes to the application, whose magic check
+         * decides what to do. */
+        for (i = 0u; i < len; i++)
+        {
+            if (*(volatile const uint8_t *)(WL_OB_USER_ADDR + i * 2u) !=
+                src[i])
+            {
+                ok = false;
+                break;
+            }
+        }
+    }
+
+    return ok;
+}
+
+#endif /* WL_OB_ENABLE */
+
 #else /* WL_FLASH_HAL_MOCK */
 
 /* An empty translation unit is not valid C99. */

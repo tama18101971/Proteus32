@@ -1,6 +1,6 @@
 {
   "name": "WL_FLASH",
-  "version": "2.0.1",
+  "version": "2.2.0",
   "description": "Wear-levelling EEPROM emulation for WCH CH32V003: record ring over 64-byte Flash pages with CRC integrity checking, power-loss-safe writes, and a host-testable HAL seam",
   "keywords": ["eeprom", "flash", "wear-leveling", "ch32v003", "wch", "risc-v"],
   "repository": {
@@ -16,7 +16,7 @@
   "license": "MIT",
   "frameworks": "noneos-sdk",
   "platforms": "ch32v",
-  "headers": ["wl_flash.h", "wl_flash_config.h"],
+  "headers": ["wl_flash.h", "wl_flash_config.h", "wl_flash_ob.h"],
   "build": {
     "extraScript": "scripts/reserve_eeprom.py"
   },

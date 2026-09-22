@@ -554,7 +554,7 @@ int main(void)
              * old value and produces no flash write. Everyday on/off cycles
              * keep EE untouched (session brightness lives in SRAM), so the
              * memcmp below stays equal during normal use. */
-            ob_Flush();
+            (void)wl_ob_flush();
             if (memcmp(&cfg_shadow, WL_DATA_AS(app_cfg_t), sizeof(app_cfg_t)) != 0)
             {
                 wl_mark_dirty();

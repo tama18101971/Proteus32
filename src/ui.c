@@ -161,9 +161,9 @@ uint16_t get_step_tc(uint16_t step)
  */
 uint16_t get_min_level(uint16_t step)
 {
-    uint16_t ret = step ? (ob_GetMl() + BASE_MOON_LEVEL) : 0;
+    uint16_t ret = step ? (OB_CFG->ml + BASE_MOON_LEVEL) : 0;
 //    EE_PRINTF("[UI] min_level: ml=%u step=%u -> ret=%u\r\n",
-//              (unsigned)ob_GetMl(), (unsigned)step, (unsigned)ret);
+//              (unsigned)OB_CFG->ml, (unsigned)step, (unsigned)ret);
     return ret;
 }
 
@@ -668,8 +668,9 @@ void calibration(void)
     /* Отказ не трогает OB: предыдущая калибровка остаётся в силе. */
     if (ok)
     {
-        ob_SetVc((int8_t)vc_delta);
-        ob_SetTc((int8_t)tc_delta);
+        OB_CFG->vc = (int8_t)vc_delta;
+        OB_CFG->tc = (int8_t)tc_delta;
+        wl_ob_mark_dirty();
         clr_indicator(IND_GRN);
     }
     else
@@ -773,7 +774,7 @@ static bool menu_clicks_valid(uint8_t min_clicks, uint8_t max_clicks)
 void enter_ml_mode(void)
 {
 #if USE_MENU
-    enter_submode(MODE_MOON_LEVEL, ob_GetMl());
+    enter_submode(MODE_MOON_LEVEL, OB_CFG->ml);
 #endif
 }
 
@@ -835,7 +836,8 @@ void menu_clickX(void)
     switch (driver_mode)
     {
     case MODE_MOON_LEVEL:
-        ob_SetMl(clicks_count);
+        OB_CFG->ml = clicks_count;
+        wl_ob_mark_dirty();
         break;
 
     case MODE_CTK_H:
