@@ -105,7 +105,7 @@ static const uint32_t strobe_sos[] = {
     /* S: ... */
     MAKE_CMD_MS(HBL_LED, 0, 3, 126, 126, CMODE_MAX, CMODE_OFF),
     /* Pause between SOS repetitions. */
-    MAKE_CMD_MS(HBL_LED, 0, 0, 440, 440, CMODE_OFF, CMODE_OFF),
+    MAKE_CMD_MS(HBL_LED, 0, 0, 2500, 2500, CMODE_OFF, CMODE_OFF),
     AC_REP_ATSTART,
 };
 
