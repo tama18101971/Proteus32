@@ -106,7 +106,7 @@ _Static_assert(SYSCLK_HZ >= 8000000u && SYSCLK_HZ <= 48000000u,
  * одновременно не помещается). Принимаемый риск при отключении:
  * без LSI строб не отсчитает первый OFF-полупериод и может залипнуть
  * на ON-яркости, термосон AWU_4S не разбудит MCU. */
-#define USE_LSI_GUARD 0
+#define USE_LSI_GUARD 1
 #endif
 #ifndef USE_STROBE_ADC_GUARD
 #define USE_STROBE_ADC_GUARD 1  /* Прекращение строба при устойчивом отказе АЦП
