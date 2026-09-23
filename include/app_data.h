@@ -95,7 +95,6 @@ _Static_assert(((uint16_t)((uint8_t)(510u >> 1) << 1)) == 510u, "ui1 step>>1 qua
 
 #define UIF_SET_UI_INDEX(uif, val)    ((uif) = CFG_SET_FIELD(uif, UIF_UI_INDEX_MASK, UIF_UI_INDEX_SHIFT, val))
 #define UIF_SET_OFF_BCKL(uif, val)    ((uif) = CFG_SET_FIELD(uif, UIF_OFF_BCKL_MASK, UIF_OFF_BCKL_SHIFT, val))
-#define UIF_SET_USE_MEMORY(uif, val)  ((uif) = CFG_SET_FIELD(uif, UIF_USE_MEMORY_MASK, UIF_USE_MEMORY_SHIFT, val))
 #define UIF_SET_EAUX_ONOFF(uif, val)  ((uif) = CFG_SET_FIELD(uif, UIF_EAUX_ONOFF_MASK, UIF_EAUX_ONOFF_SHIFT, val))
 
 #define UIF_GET_UI2(uif)              CFG_GET_FIELD(uif, UIF_UI2_MASK, UIF_UI2_SHIFT)
@@ -119,7 +118,6 @@ _Static_assert(((uint16_t)((uint8_t)(510u >> 1) << 1)) == 510u, "ui1 step>>1 qua
 #define USRF_GET_LOCK_MIN_TIME(usr)   CFG_GET_FIELD(usr, USRF_LOCK_MIN_TIME_MASK, USRF_LOCK_MIN_TIME_SHIFT)
 
 #define USRF_SET_TCALIBR(usr, val)        ((usr) = CFG_SET_FIELD(usr, USRF_TCALIBR_MASK, USRF_TCALIBR_SHIFT, val))
-#define USRF_SET_ID_PLUS_SID(usr, val)    ((usr) = CFG_SET_FIELD(usr, USRF_ID_PLUS_SID_MASK, USRF_ID_PLUS_SID_SHIFT, val))
 #define USRF_SET_LOCK_MIN_EN(usr, val)    ((usr) = CFG_SET_FIELD(usr, USRF_LOCK_MIN_EN_MASK, USRF_LOCK_MIN_EN_SHIFT, val))
 #define USRF_SET_LOCK_MIN_TIME(usr, val)  ((usr) = CFG_SET_FIELD(usr, USRF_LOCK_MIN_TIME_MASK, USRF_LOCK_MIN_TIME_SHIFT, val))
 

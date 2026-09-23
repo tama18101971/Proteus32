@@ -21,7 +21,6 @@
  * so all tick counts are scaled by 4/3 and rounded.
  * @{
  */
-#define BTN_TICK_HZ            160     /**< Main loop tick rate used for button FSM */
 #define BTN_DEBOUNCE_TICKS     3       /**< ~18.8 ms debounce time */
 #define BTN_HOLD_TICKS         100     /**< ~625 ms hold detection */
 #define BTN_REPEAT_TICKS       4       /**< ~25 ms hold repeat interval */

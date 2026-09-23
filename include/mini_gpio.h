@@ -22,8 +22,6 @@
 #define CFG_OUT_PP_10M   0x01
 /** @brief Output push-pull 2 MHz */
 #define CFG_OUT_PP_2M    0x02
-/** @brief Output push-pull 50 MHz */
-#define CFG_OUT_PP_50M   0x03
 /** @brief Input with pull-up / pull-down */
 #define CFG_IN_PULL      0x08
 /** @brief Floating input (high-Z) */

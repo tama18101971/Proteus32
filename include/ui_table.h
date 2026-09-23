@@ -106,9 +106,8 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout);
 /* -- Magic slot (36) -- */
 #define ENTER_MAGIC_MODE    36
 
-/* -- Shared magic-slot handlers (37..38) -- */
-#define SELECT_SLOT         37
-#define SLOT_CLICKX         38
+/* Индексы 37..38 зарезервированы за select_slot()/slotN_clickX() (main_op[]);
+ * вызываются напрямую из диспетчера, макросы-индексы им не нужны. */
 
 /* -- UI2 actions (39..48) -- */
 #define MODE_UP_UI2         39

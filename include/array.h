@@ -47,7 +47,4 @@ typedef enum {
 #define SLOT_DEFAULT_6C   SLOT_BACKLIGHT
 #define SLOT_DEFAULT_6CH  SLOT_IPSMODE
 
-/** @brief Function pointer table for magic slot dispatch, defined in ui_table.c. */
-extern void (* const main_op[])(void);
-
 #endif /* INC_ARRAY_H_ */

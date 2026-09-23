@@ -68,7 +68,7 @@ void dac_pwrpin_restore(void)
      * A strobe wake must not create a low pulse that power-cycles the DAC. */
     DAC_PWR_PORT->BSHR = DAC_PWR_PIN;
     GPIO_PinConfig(DAC_PWR_PORT, DAC_PWR_PIN, CFG_OUT_PP_2M);
-    DAC_PWR_PORT->BSHR = DAC_PWR_PIN;
+    //DAC_PWR_PORT->BSHR = DAC_PWR_PIN;
 }
 
 /**

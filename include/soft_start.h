@@ -30,9 +30,6 @@ typedef enum {
 	SS_FAST = 7 /**< Fast ramp: 7 steps per call */
 } SoftStartSpeed_t;
 
-/** @brief Enable soft start processing. */
-#define on_ss() do { ss_enable = true; } while (0)
-
 /**
  * @brief Soft start state structure.
  *
