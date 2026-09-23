@@ -20,6 +20,14 @@
  *                         CMODE_NOACTION for a direct-step HBL command
  *   [31:29] brightness1 — modes[] index for 2nd half-period (0..6)
  *
+ * USE_IND_RGB=1: поле cycle отсутствует, его бит отдан device:
+ *   [3:0]   device     — channel: 1=RED, 2=GRN, 4=HBL, 8=BLUE
+ * Остальные поля на прежних местах, поэтому команды с cycle=0 кодируются
+ * байт-идентично дефолтному формату. Зацикливание (бывший cycle=1)
+ * оформляется массивом {cmd, AC_REP_ATSTART}. Как и раньше, LED-команда
+ * обязана иметь ненулевые биты >= 5 (тайминги/яркость): полностью нулевые
+ * тайминги попадают в пространство системных команд (AUX_IS_SYS_CMD).
+ *
  * Half-period time: (prescaler_value × win) / 128000 seconds
  * Parameters set via MAKE_CMD(device, cycle, count, psc0, win0, psc1, win1, brightness0, brightness1)
  *
@@ -43,8 +51,18 @@
 typedef enum {
 	RED_LED = 0b001,   /**< Red LED */
 	GRN_LED	= 0b010,   /**< Green LED */
-	HBL_LED	= 0b100    /**< мощный диод */
+	HBL_LED	= 0b100,   /**< мощный диод */
+#if USE_IND_RGB
+	BLUE_LED = 0b1000  /**< Blue LED (PC6) */
+#endif
 } LED_Bits_t;
+
+#if USE_IND_RGB
+/** @brief Все GPIO-каналы индикатора (без HBL). */
+#define AUX_GPIO_LEDS	((LED_Bits_t)(RED_LED | GRN_LED | BLUE_LED))
+#else
+#define AUX_GPIO_LEDS	((LED_Bits_t)(RED_LED | GRN_LED))
+#endif
 
 /**
  * @brief Voltage warning levels (determine blink frequency).
@@ -143,8 +161,12 @@ _Static_assert(sizeof(union AUX_Cmd_u) == 4, "AUX_Cmd_u must be 32 bits");
  * Bit positions match the table in the file header comment.  The static
  * asserts below pin the layout at compile time: no overlap, no gaps. */
 
+#if USE_IND_RGB
+#define AUX_DEVICE_SHIFT	0u   /**< Bits 0..3:   channel mask (+BLUE_LED) */
+#else
 #define AUX_DEVICE_SHIFT	0u   /**< Bits 0..2:   channel mask */
 #define AUX_CYCLE_SHIFT		3u   /**< Bit 3:       0=once, 1=looped */
+#endif
 #define AUX_COUNT_SHIFT		4u   /**< Bits 4..7:   repeat count (0..15) */
 #define AUX_PSC0_SHIFT		8u   /**< Bits 8..10:  AWU prescaler, 1st half-period */
 #define AUX_WIN0_SHIFT		11u  /**< Bits 11..16: AWU window, 1st half-period */
@@ -153,8 +175,12 @@ _Static_assert(sizeof(union AUX_Cmd_u) == 4, "AUX_Cmd_u must be 32 bits");
 #define AUX_BR0_SHIFT		26u  /**< Bits 26..28: brightness index, 1st half-period */
 #define AUX_BR1_SHIFT		29u  /**< Bits 29..31: brightness index, 2nd half-period */
 
+#if USE_IND_RGB
+#define AUX_DEVICE_MASK		(0x0FUL << AUX_DEVICE_SHIFT)
+#else
 #define AUX_DEVICE_MASK		(0x07UL << AUX_DEVICE_SHIFT)
 #define AUX_CYCLE_MASK		(0x01UL << AUX_CYCLE_SHIFT)
+#endif
 #define AUX_COUNT_MASK		(0x0FUL << AUX_COUNT_SHIFT)
 #define AUX_PSC0_MASK		(0x07UL << AUX_PSC0_SHIFT)
 #define AUX_WIN0_MASK		(0x3FUL << AUX_WIN0_SHIFT)
@@ -163,6 +189,24 @@ _Static_assert(sizeof(union AUX_Cmd_u) == 4, "AUX_Cmd_u must be 32 bits");
 #define AUX_BR0_MASK		(0x07UL << AUX_BR0_SHIFT)
 #define AUX_BR1_MASK		(0x07UL << AUX_BR1_SHIFT)
 
+#if USE_IND_RGB
+_Static_assert((AUX_DEVICE_MASK & (AUX_COUNT_MASK | AUX_PSC0_MASK |
+		AUX_WIN0_MASK | AUX_PSC1_MASK | AUX_WIN1_MASK |
+		AUX_BR0_MASK | AUX_BR1_MASK)) == 0u &&
+		(AUX_COUNT_MASK & (AUX_PSC0_MASK | AUX_WIN0_MASK | AUX_PSC1_MASK |
+		AUX_WIN1_MASK | AUX_BR0_MASK | AUX_BR1_MASK)) == 0u &&
+		(AUX_PSC0_MASK & (AUX_WIN0_MASK | AUX_PSC1_MASK | AUX_WIN1_MASK |
+		AUX_BR0_MASK | AUX_BR1_MASK)) == 0u &&
+		(AUX_WIN0_MASK & (AUX_PSC1_MASK | AUX_WIN1_MASK |
+		AUX_BR0_MASK | AUX_BR1_MASK)) == 0u &&
+		(AUX_PSC1_MASK & (AUX_WIN1_MASK | AUX_BR0_MASK | AUX_BR1_MASK)) == 0u &&
+		(AUX_WIN1_MASK & (AUX_BR0_MASK | AUX_BR1_MASK)) == 0u,
+		"AUX command fields overlap");
+_Static_assert((AUX_DEVICE_MASK | AUX_COUNT_MASK |
+		AUX_PSC0_MASK | AUX_WIN0_MASK | AUX_PSC1_MASK | AUX_WIN1_MASK |
+		AUX_BR0_MASK | AUX_BR1_MASK) == 0xFFFFFFFFUL,
+		"AUX command fields leave a gap");
+#else
 _Static_assert((AUX_DEVICE_MASK & (AUX_CYCLE_MASK | AUX_COUNT_MASK |
 		AUX_PSC0_MASK | AUX_WIN0_MASK | AUX_PSC1_MASK | AUX_WIN1_MASK |
 		AUX_BR0_MASK | AUX_BR1_MASK)) == 0u &&
@@ -181,12 +225,19 @@ _Static_assert((AUX_DEVICE_MASK | AUX_CYCLE_MASK | AUX_COUNT_MASK |
 		AUX_PSC0_MASK | AUX_WIN0_MASK | AUX_PSC1_MASK | AUX_WIN1_MASK |
 		AUX_BR0_MASK | AUX_BR1_MASK) == 0xFFFFFFFFUL,
 		"AUX command fields leave a gap");
+#endif
 
 #define AUX_FIELD(word, mask, shift) \
 	((uint8_t)(((uint32_t)(word) & (uint32_t)(mask)) >> (shift)))
 
 #define AUX_DEVICE(word)	AUX_FIELD((word), AUX_DEVICE_MASK, AUX_DEVICE_SHIFT)
+#if USE_IND_RGB
+/* Поля cycle в RGB-формате нет: зацикливание — массивом с AC_REP_ATSTART.
+ * Акцессор оставлен константой 0, чтобы handle_aux_cmd не ветвился. */
+#define AUX_CYCLE(word)		0u
+#else
 #define AUX_CYCLE(word)		AUX_FIELD((word), AUX_CYCLE_MASK, AUX_CYCLE_SHIFT)
+#endif
 #define AUX_COUNT(word)		AUX_FIELD((word), AUX_COUNT_MASK, AUX_COUNT_SHIFT)
 #define AUX_PSC0(word)		AUX_FIELD((word), AUX_PSC0_MASK, AUX_PSC0_SHIFT)
 #define AUX_WIN0(word)		AUX_FIELD((word), AUX_WIN0_MASK, AUX_WIN0_SHIFT)
@@ -251,8 +302,21 @@ typedef enum {
  */
 typedef enum {
 	BCK_COLOR_RED =	0U,
-	BCK_COLOR_GRN
+	BCK_COLOR_GRN,
+#if USE_IND_RGB
+	BCK_COLOR_BLUE          /**< Только RGB: третий цвет подсветки (PC6) */
+#endif
 } BCK_Color_t;
+
+#if USE_IND_RGB
+/** @brief Индексы типа маяка в EE.aux (RGB-раскладка): значение = клики меню - 1. */
+typedef enum {
+	BT_RED = 0U,   /**< RED_LED */
+	BT_GRN,        /**< GRN_LED */
+	BT_BLUE,       /**< BLUE_LED */
+	BT_HBL         /**< HBL_LED */
+} Beacon_Type_t;
+#endif
 
 /** @brief Single command buffer for start_aux_cmd(). */
 extern union AUX_Cmd_u aux_cmd;
@@ -486,6 +550,20 @@ bool handle_aux(void);
  *                     или CMODE_NOACTION для прямого шага HBL
  * @param brightness1  индекс modes[] 2-го полупериода (0=выкл, 1..6=уровень)
  */
+#if USE_IND_RGB
+/* RGB-формат: поля cycle нет (бит 3 отдан device). Параметр cycle оставлен
+ * в сигнатуре ради мест вызова, но обязан быть 0 — зацикливание
+ * оформляется массивом {cmd, AC_REP_ATSTART}. */
+#define MAKE_CMD(device, cycle, count, psc0, win0, psc1, win1, brightness0, brightness1) \
+	((uint32_t)((device) & 0xFu) << AUX_DEVICE_SHIFT        | \
+	 ((uint32_t)((count) & 0xFu) << AUX_COUNT_SHIFT)        | \
+	 ((uint32_t)((psc0) & 0x7u) << AUX_PSC0_SHIFT)          | \
+	 ((uint32_t)((win0) & 0x3Fu) << AUX_WIN0_SHIFT)         | \
+	 ((uint32_t)((psc1) & 0x7u) << AUX_PSC1_SHIFT)          | \
+	 ((uint32_t)((win1) & 0x3Fu) << AUX_WIN1_SHIFT)         | \
+	 ((uint32_t)((brightness0) & 0x7u) << AUX_BR0_SHIFT)    | \
+	 ((uint32_t)((brightness1) & 0x7u) << AUX_BR1_SHIFT))
+#else
 #define MAKE_CMD(device, cycle, count, psc0, win0, psc1, win1, brightness0, brightness1) \
 	((uint32_t)((device) & 0x7u) << AUX_DEVICE_SHIFT        | \
 	 ((uint32_t)((cycle) & 0x1u) << AUX_CYCLE_SHIFT)        | \
@@ -496,6 +574,7 @@ bool handle_aux(void);
 	 ((uint32_t)((win1) & 0x3Fu) << AUX_WIN1_SHIFT)         | \
 	 ((uint32_t)((brightness0) & 0x7u) << AUX_BR0_SHIFT)    | \
 	 ((uint32_t)((brightness1) & 0x7u) << AUX_BR1_SHIFT))
+#endif
 
 /**
  * @brief Round an AWU window for a requested period.
@@ -591,6 +670,21 @@ _Static_assert(INFO_RED == 0x0789C311UL && INFO_GRN == 0x0783C222UL &&
 /* Round-trip layout test: all fields at their maximum value must fill the
  * whole 32-bit word and decode back identically, pinning the bit format
  * independently of any bitfield ABI. */
+#if USE_IND_RGB
+#define AUX_LAYOUT_TEST_CMD MAKE_CMD(0xFu, 0u, 15u, 7u, 63u, 7u, 63u, 7u, 7u)
+_Static_assert(AUX_LAYOUT_TEST_CMD == 0xFFFFFFFFUL,
+		"MAKE_CMD layout does not tile the 32-bit word");
+_Static_assert(AUX_DEVICE(AUX_LAYOUT_TEST_CMD) == 0xFu &&
+		AUX_CYCLE(AUX_LAYOUT_TEST_CMD) == 0u &&
+		AUX_COUNT(AUX_LAYOUT_TEST_CMD) == 15u &&
+		AUX_PSC0(AUX_LAYOUT_TEST_CMD) == 7u &&
+		AUX_WIN0(AUX_LAYOUT_TEST_CMD) == 63u &&
+		AUX_PSC1(AUX_LAYOUT_TEST_CMD) == 7u &&
+		AUX_WIN1(AUX_LAYOUT_TEST_CMD) == 63u &&
+		AUX_BR0(AUX_LAYOUT_TEST_CMD) == 7u &&
+		AUX_BR1(AUX_LAYOUT_TEST_CMD) == 7u,
+		"AUX command encode/decode round-trip failed");
+#else
 #define AUX_LAYOUT_TEST_CMD MAKE_CMD(0x7u, 1u, 15u, 7u, 63u, 7u, 63u, 7u, 7u)
 _Static_assert(AUX_LAYOUT_TEST_CMD == 0xFFFFFFFFUL,
 		"MAKE_CMD layout does not tile the 32-bit word");
@@ -604,6 +698,7 @@ _Static_assert(AUX_DEVICE(AUX_LAYOUT_TEST_CMD) == 0x7u &&
 		AUX_BR0(AUX_LAYOUT_TEST_CMD) == 7u &&
 		AUX_BR1(AUX_LAYOUT_TEST_CMD) == 7u,
 		"AUX command encode/decode round-trip failed");
+#endif
 #undef AUX_LAYOUT_TEST_CMD
 
 #endif /* AUX_LEDS_H_ */

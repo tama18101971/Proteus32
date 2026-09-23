@@ -120,7 +120,11 @@ void ee_defaults(void)
     AUXF_SET_BCKLIGHT_TYPE(EE.aux, BCK_TYPE_ON);
     AUXF_SET_BEACON_MODE(EE.aux, BCON_1S);
     AUXF_SET_BEACON_ON(EE.aux, 1);
+#if USE_IND_RGB
+    AUXF_SET_BEACON_TYPE(EE.aux, BT_GRN);   /* RGB: индекс 0..3, не маска */
+#else
     AUXF_SET_BEACON_TYPE(EE.aux, GRN_LED);
+#endif
 
     EE.usr = 0;
     USRF_SET_LOCK_MIN_EN(EE.usr, 1);
@@ -797,8 +801,13 @@ void menu_clickX(void)
         0u,  /* MODE_MAGIC */
         3u,  /* MODE_UIS */
         4u,  /* MODE_BM */
+#if USE_IND_RGB
+        4u,  /* MODE_BT: R/G/B/HBL */
+        3u,  /* MODE_BL: R/G/B */
+#else
         3u,  /* MODE_BT */
         2u,  /* MODE_BL */
+#endif
         2u,  /* MODE_LM_EN */
         4u,  /* MODE_LM_TIME */
 #if USE_EX_AUX
@@ -849,7 +858,11 @@ void menu_clickX(void)
         break;
 
     case MODE_BT:
+#if USE_IND_RGB
+        AUXF_SET_BEACON_TYPE(EE.aux, clicks_count - 1u);  /* индекс BT_RED..BT_HBL */
+#else
         AUXF_SET_BEACON_TYPE(EE.aux, (uint8_t)(1u << (clicks_count - 1u)));
+#endif
         break;
 
     case MODE_BL:
@@ -967,6 +980,9 @@ __attribute__((noinline)) void menu_entry_flash(uint8_t cnt, uint16_t on_ms, LED
     {
         if (device & RED_LED) on_red_h();
         if (device & GRN_LED) on_grn_h();
+#if USE_IND_RGB
+        if (device & BLUE_LED) on_blue_h();
+#endif
 
         wait_ms(on_ms);
 
@@ -1101,7 +1117,11 @@ void enter_bm_mode(void)
 void enter_bt_mode(void)
 {
 #if USE_MENU
+#if USE_IND_RGB
+    enter_submode(MODE_BT, (uint8_t)(AUXF_GET_BEACON_TYPE(EE.aux) + 1u));
+#else
     enter_submode(MODE_BT, (uint8_t)((AUXF_GET_BEACON_TYPE(EE.aux) >> 1) + 1u));
+#endif
 #endif
 }
 

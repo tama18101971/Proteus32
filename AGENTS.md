@@ -17,6 +17,9 @@ pio run                          build
 pio run -t clean; pio run        clean rebuild
 pio run -t upload                flash via WCH-Link
 pio device monitor               460800 8N1
+pio run -e Proteus32-RGB         RGB-индикатор (USE_IND_RGB=1: PC7=R, PC4=G, PC6=B;
+                                 exaux выключен, раскладка EE.aux своя — старой в этом
+                                 варианте не существует, WL_FORMAT_VERSION общий)
 ```
 
 ## ⚠️ Hardware constraints

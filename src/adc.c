@@ -590,6 +590,9 @@ __attribute__((noinline, noreturn)) void down_forever(void)
      *    сажал разряженный АКБ. */
     off_red();
     off_grn();
+#if USE_IND_RGB
+    off_blue();
+#endif
     dac_pwrpin_off();
 
     /* 1. Индикация критического разряда: одна красная вспышка 2 с.

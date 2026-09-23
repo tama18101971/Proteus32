@@ -117,13 +117,42 @@ static const uint32_t strobe_bike2[] = {
     AC_REP_ATSTART,
 };
 
-/* A profile may be one packed command or an arbitrary command array.  New
- * multi-phase strobes only need an array and one descriptor below. */
+#if USE_IND_RGB
+/* В RGB-формате нет cycle-бита: однокомандные зацикленные профили
+ * оформлены 2-элементными массивами {cmd, AC_REP_ATSTART}. FSM догоняет
+ * PER_NEXT в том же wake, тёмной паузы между циклами нет. */
+static const uint32_t strobe_30_30[] = {
+    MAKE_CMD_MS(HBL_LED, 0, 1, 30, 30, CMODE_TURBO, CMODE_OFF),
+    AC_REP_ATSTART,
+};
+static const uint32_t strobe_60_1s[] = {
+    MAKE_CMD_MS(HBL_LED, 0, 1, 60, 1000, CMODE_MAX, CMODE_OFF),
+    AC_REP_ATSTART,
+};
+static const uint32_t strobe_60_4s[] = {
+    MAKE_CMD_MS(HBL_LED, 0, 1, 60, 4000, CMODE_MAX, CMODE_OFF),
+    AC_REP_ATSTART,
+};
+static const uint32_t strobe_60_2s[] = {
+    MAKE_CMD_MS(HBL_LED, 0, 1, 60, 2000, CMODE_TURBO, CMODE_MID),
+    AC_REP_ATSTART,
+};
+#endif
+
+/* A profile may be one packed command or an arbitrary command array.  New 
+ * multi-phase strobes only need an array and one descriptor below. */ 
 static const strobe_profile_t strobe_commands[STROBE_COUNT] = {
+#if USE_IND_RGB
+    { STROBE_PROFILE_ARRAY,   { .array = strobe_30_30 } }, /* 30ms / 30ms */
+    { STROBE_PROFILE_ARRAY,   { .array = strobe_60_1s } }, /* 60ms / ~1s */
+    { STROBE_PROFILE_ARRAY,   { .array = strobe_60_4s } }, /* 60ms / 4s */
+    { STROBE_PROFILE_ARRAY,   { .array = strobe_60_2s } }, /* 60ms / 2s */
+#else
     { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD_MS(HBL_LED, 1, 0, 30, 30, CMODE_TURBO, CMODE_OFF) } }, /* 30ms / 30ms */
     { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD_MS(HBL_LED, 1, 0, 60, 1000, CMODE_MAX, CMODE_OFF) } }, /* 60ms / ~1s */
     { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD_MS(HBL_LED, 1, 0, 60, 4000, CMODE_MAX, CMODE_OFF) } }, /* 60ms / 4s */
     { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD_MS(HBL_LED, 1, 0, 60, 2000, CMODE_TURBO, CMODE_MID) } }, /* 60ms / 2s */
+#endif
     { STROBE_PROFILE_ARRAY,   { .array = strobe_bike2 } }, /* bike strobe 2 */
     { STROBE_PROFILE_ARRAY,   { .array = strobe_sos } },
 };
@@ -192,6 +221,11 @@ void smart_off_leds(LED_Bits_t channel) {
 	if (channel & GRN_LED) {
 		(bck_on && AUXF_GET_BCKLIGHT_COLOR(EE.aux) == BCK_COLOR_GRN) ? on_grn_l() : off_grn();
 	}
+#if USE_IND_RGB
+	if (channel & BLUE_LED) {
+		(bck_on && AUXF_GET_BCKLIGHT_COLOR(EE.aux) == BCK_COLOR_BLUE) ? on_blue_l() : off_blue();
+	}
+#endif
 }
 
 /**
@@ -249,7 +283,7 @@ void off_aux_cmd(bool stop_lsi) {
 	p_aux = NULL;
 	current_buf = NULL;
 
-	smart_off_leds(RED_LED | GRN_LED | HBL_LED);
+	smart_off_leds((LED_Bits_t)(AUX_GPIO_LEDS | HBL_LED));
 
 	if (stop_lsi) {
 		AWU_stop(true);
@@ -374,6 +408,12 @@ static __attribute__((noinline)) void SetBrightness(LED_Bits_t device, uint8_t b
 		if (brightness) on_grn_h();
 		else smart_off_leds(GRN_LED);
 	}
+#if USE_IND_RGB
+	if (device & BLUE_LED) {
+		if (brightness) on_blue_h();
+		else smart_off_leds(BLUE_LED);
+	}
+#endif
 	if (device & HBL_LED) {
 		/* HBL uses the same discrete brightness index as UI2.  Do not call
 		 * set_current(): it changes step_user and can power down the DAC. */
@@ -623,9 +663,17 @@ bool beacon_is_cycle_start(void)
 {
 	if (!is_aux_mode(IDM_BEACON)) return false;
 	if (aux_ctl.period == PER_INIT) return true;
-	if (EnableArrayProcessing) {
+	if (EnableArrayProcessing) { 
+#if USE_IND_RGB
+		/* Одиночная вспышка — массив {cmd, AC_REP_ATSTART} (граница цикла на
+		 * arr_index==0), двойная — {cmd, cmd, AC_REP_ATSTART} (на arr_index==1).
+		 * Общий признак границы: следующий элемент — системная команда. */
+		return (aux_ctl.period == PER_END) &&
+		       AUX_IS_SYS_CMD(current_buf[aux_ctl.arr_index + 1u]);
+#else
 		return (aux_ctl.period == PER_END) && (aux_ctl.arr_index == 1);
-	} else {
+#endif
+	} else { 
 		return (aux_ctl.period == PER_END);
 	}
 }
@@ -728,9 +776,16 @@ void start_aux_beacon(void) {
 	static const uint8_t bcon_psc1[] = {AWU_PSC_2048, AWU_PSC_10240, AWU_PSC_10240, AWU_PSC_61440};
 	static const uint8_t bcon_win1[] = {63,           25,            50,            17};
 
-	uint8_t mode = AUXF_GET_BEACON_MODE(EE.aux) & 0x03;
-	uint8_t br0 = (AUXF_GET_BEACON_TYPE(EE.aux) & HBL_LED) ? CMODE_MIN : 1;
-	LED_Bits_t dev = (LED_Bits_t)AUXF_GET_BEACON_TYPE(EE.aux);
+	uint8_t mode = AUXF_GET_BEACON_MODE(EE.aux) & 0x03; 
+#if USE_IND_RGB
+	/* beacon_type — индекс 0..3 (BT_RED..BT_HBL), а не маска канала. */
+	static const uint8_t bcon_dev[] = {RED_LED, GRN_LED, BLUE_LED, HBL_LED};
+	LED_Bits_t dev = (LED_Bits_t)bcon_dev[AUXF_GET_BEACON_TYPE(EE.aux) & 0x03];
+	uint8_t br0 = (dev == HBL_LED) ? CMODE_MIN : 1;
+#else
+	uint8_t br0 = (AUXF_GET_BEACON_TYPE(EE.aux) & HBL_LED) ? CMODE_MIN : 1; 
+	LED_Bits_t dev = (LED_Bits_t)AUXF_GET_BEACON_TYPE(EE.aux); 
+#endif
 
 	if (beacon_low_voltage || vwarning_fired) {
 		/* Двойная вспышка: 50 мс ON / 150 мс OFF, затем 50 мс ON / период OFF
@@ -741,19 +796,32 @@ void start_aux_beacon(void) {
 		beacon_double_buf[2] = AC_REP_ATSTART;
 		start_aux_array(beacon_double_buf, AWU_120MS);
 		aux_ctl.idmode = IDM_BEACON;
-	} else {
+	} else { 
+#if USE_IND_RGB
+		/* Поля cycle в RGB-формате нет: одиночная вспышка зацикливается
+		 * 2-элементным массивом в том же beacon_double_buf (+0 RAM; buf[2]
+		 * не читается). FSM догоняет PER_NEXT в том же wake — тайминги
+		 * совпадают с прежней cycle=1 командой. */
+		beacon_double_buf[0] = MAKE_CMD(dev, 0, 1,
+			AWU_PSC_256, 25, bcon_psc1[mode], bcon_win1[mode],
+			br0, 0);
+		beacon_double_buf[1] = AC_REP_ATSTART;
+		start_aux_array(beacon_double_buf, AWU_120MS);
+		aux_ctl.idmode = IDM_BEACON;
+#else
 		uint32_t cmd = MAKE_CMD(dev, 1, 0,
 			AWU_PSC_256, 25, bcon_psc1[mode], bcon_win1[mode],
 			br0, 0);
 		start_aux_cmd(cmd, IDM_BEACON, AWU_120MS);
-	}
+#endif
+	} 
 }
 
 /**
  * @brief Обновить состояние фоновой подсветки по настройкам EE.aux
  */
 void aux_refresh_backlight(void) {
-	smart_off_leds(RED_LED | GRN_LED);
+	smart_off_leds(AUX_GPIO_LEDS);
 }
 
 #if USE_EX_AUX

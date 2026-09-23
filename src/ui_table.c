@@ -165,8 +165,8 @@ static const dispatch_t eng_table[] = {
 static const dispatch_t usr_table[] = {
     /* -- First level: MODE_OFF -- */
     { MODE_OFF, 1, 0, false, true,  ENTER_BM_MODE },        /* 1 клик: период маяка (EE.aux.beacon_mode, 1..4) */
-    { MODE_OFF, 2, 0, false, true,  ENTER_BT_MODE },        /* 2 клика: цвет маяка  (EE.aux.beacon_type, 1..3) */
-    { MODE_OFF, 3, 0, false, true,  ENTER_BL_MODE },        /* 3 клика: цвет подсветки (EE.aux.bcklight_color, 1..2) */
+    { MODE_OFF, 2, 0, false, true,  ENTER_BT_MODE },        /* 2 клика: цвет маяка  (EE.aux.beacon_type, 1..3; RGB: 1..4) */
+    { MODE_OFF, 3, 0, false, true,  ENTER_BL_MODE },        /* 3 клика: цвет подсветки (EE.aux.bcklight_color, 1..2; RGB: 1..3) */
     { MODE_OFF, 4, 0, false, true,  ENTER_UIS_MODE },       /* 4 клика: выбор UI (EE.uif.ui_index, 1..3) */
     { MODE_OFF, 5, 0, false, true,  ENTER_MAGIC_MODE },     /* 5 кликов: настройка magic-слотов (slot_set, 1..12) */
     { MODE_OFF, 6, 0, false, true,  ENTER_LM_EN_MODE },     /* 6 кликов: вкл/выкл подсветки блокировки (1..2) */

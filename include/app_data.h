@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "wl_flash.h"
+#include "proteus_config.h"
 
 /* =========================================================================
  * UIF bit definitions (1 byte: bits 0..7)
@@ -28,7 +29,24 @@ _Static_assert((UIF_UI_INDEX_MASK | UIF_OFF_BCKL_MASK | UIF_USE_MEMORY_MASK | UI
 
 /* =========================================================================
  * AUX bit definitions (1 byte: bits 0..7)
+ * =========================================================================
+ * USE_IND_RGB=1: третий цвет требует 2 бита под цвет подсветки, поэтому
+ * beacon_type сжат с 3-битной маски до 2-битного индекса (BT_RED..BT_HBL,
+ * aux_leds.h). Это единственный формат RGB-варианта: старой раскладки в нём
+ * не существует, WL_FORMAT_VERSION общий и не меняется.
  * ========================================================================= */
+#if USE_IND_RGB
+#define AUXF_BCKLIGHT_TYPE_SHIFT   0u
+#define AUXF_BCKLIGHT_TYPE_MASK    (0x01u << AUXF_BCKLIGHT_TYPE_SHIFT)
+#define AUXF_BCKLIGHT_COLOR_SHIFT  1u
+#define AUXF_BCKLIGHT_COLOR_MASK   (0x03u << AUXF_BCKLIGHT_COLOR_SHIFT)
+#define AUXF_BEACON_ON_SHIFT       3u
+#define AUXF_BEACON_ON_MASK        (0x01u << AUXF_BEACON_ON_SHIFT)
+#define AUXF_BEACON_MODE_SHIFT     4u
+#define AUXF_BEACON_MODE_MASK      (0x03u << AUXF_BEACON_MODE_SHIFT)
+#define AUXF_BEACON_TYPE_SHIFT     6u   /* индекс BT_RED..BT_HBL, не маска */
+#define AUXF_BEACON_TYPE_MASK      (0x03u << AUXF_BEACON_TYPE_SHIFT)
+#else
 #define AUXF_BCKLIGHT_TYPE_SHIFT   0u
 #define AUXF_BCKLIGHT_TYPE_MASK    (0x01u << AUXF_BCKLIGHT_TYPE_SHIFT)
 #define AUXF_BCKLIGHT_COLOR_SHIFT  1u
@@ -37,8 +55,9 @@ _Static_assert((UIF_UI_INDEX_MASK | UIF_OFF_BCKL_MASK | UIF_USE_MEMORY_MASK | UI
 #define AUXF_BEACON_ON_MASK        (0x01u << AUXF_BEACON_ON_SHIFT)
 #define AUXF_BEACON_MODE_SHIFT     3u
 #define AUXF_BEACON_MODE_MASK      (0x03u << AUXF_BEACON_MODE_SHIFT)
-#define AUXF_BEACON_TYPE_SHIFT     5u
+#define AUXF_BEACON_TYPE_SHIFT     5u   /* маска канала RED_LED/GRN_LED/HBL_LED */
 #define AUXF_BEACON_TYPE_MASK      (0x07u << AUXF_BEACON_TYPE_SHIFT)
+#endif
 
 _Static_assert((AUXF_BCKLIGHT_TYPE_MASK & (AUXF_BCKLIGHT_COLOR_MASK | AUXF_BEACON_ON_MASK | AUXF_BEACON_MODE_MASK | AUXF_BEACON_TYPE_MASK)) == 0u &&
                (AUXF_BCKLIGHT_COLOR_MASK & (AUXF_BEACON_ON_MASK | AUXF_BEACON_MODE_MASK | AUXF_BEACON_TYPE_MASK)) == 0u &&
@@ -77,7 +96,11 @@ _Static_assert((USRF_TCALIBR_MASK | USRF_ID_PLUS_SID_MASK | USRF_LOCK_MIN_EN_MAS
 /* Encode/decode round-trip verification */
 _Static_assert(CFG_GET_FIELD(CFG_SET_FIELD(0, UIF_UI_INDEX_MASK, UIF_UI_INDEX_SHIFT, 3), UIF_UI_INDEX_MASK, UIF_UI_INDEX_SHIFT) == 3, "UIF ui_index round-trip");
 _Static_assert(CFG_GET_FIELD(CFG_SET_FIELD(0, AUXF_BEACON_MODE_MASK, AUXF_BEACON_MODE_SHIFT, 3), AUXF_BEACON_MODE_MASK, AUXF_BEACON_MODE_SHIFT) == 3, "AUXF beacon_mode round-trip");
+#if USE_IND_RGB
+_Static_assert(CFG_GET_FIELD(CFG_SET_FIELD(0, AUXF_BEACON_TYPE_MASK, AUXF_BEACON_TYPE_SHIFT, 3), AUXF_BEACON_TYPE_MASK, AUXF_BEACON_TYPE_SHIFT) == 3, "AUXF beacon_type round-trip");
+#else
 _Static_assert(CFG_GET_FIELD(CFG_SET_FIELD(0, AUXF_BEACON_TYPE_MASK, AUXF_BEACON_TYPE_SHIFT, 7), AUXF_BEACON_TYPE_MASK, AUXF_BEACON_TYPE_SHIFT) == 7, "AUXF beacon_type round-trip");
+#endif
 _Static_assert(CFG_GET_FIELD(CFG_SET_FIELD(0, USRF_TCALIBR_MASK, USRF_TCALIBR_SHIFT, 15), USRF_TCALIBR_MASK, USRF_TCALIBR_SHIFT) == 15, "USRF t_calibr round-trip");
 _Static_assert(CFG_GET_FIELD(CFG_SET_FIELD(0, USRF_LOCK_MIN_TIME_MASK, USRF_LOCK_MIN_TIME_SHIFT, 3), USRF_LOCK_MIN_TIME_MASK, USRF_LOCK_MIN_TIME_SHIFT) == 3, "USRF lock_min_time round-trip");
 _Static_assert(CFG_GET_FIELD(CFG_SET_FIELD(0, UIF_UI2_MASK, UIF_UI2_SHIFT, 7), UIF_UI2_MASK, UIF_UI2_SHIFT) == 7, "UIF ui2 round-trip");

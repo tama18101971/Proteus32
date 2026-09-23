@@ -76,6 +76,9 @@ _Static_assert(SYSCLK_HZ >= 8000000u && SYSCLK_HZ <= 48000000u,
  * Код использует #if USE_X, поэтому неопределённый макрос тоже
  * выключает функцию (как раньше #ifdef). */
 
+#ifndef USE_IND_RGB
+#define USE_IND_RGB 0       // RGB-индикатор: PC7=red, PC4=green, PC6=blue (вместо двухканального красного PC7+PC6). Сборка: PLATFORMIO_BUILD_FLAGS="-DUSE_IND_RGB=1" или env Proteus32-RGB
+#endif
 #ifndef USE_BATTIND
 #define USE_BATTIND 1       // Индикация уровня заряда батареи вспышками AUX-светодиодов (slot_batt_ind, aux_leds.c)
 #endif
@@ -84,6 +87,14 @@ _Static_assert(SYSCLK_HZ >= 8000000u && SYSCLK_HZ <= 48000000u,
 #endif
 #ifndef USE_EX_AUX
 #define USE_EX_AUX 1        // Расширенные AUX-режимы: предупреждение о низком напряжении (start_exaux_voltage) и доп. команды в UI
+#endif
+#if USE_IND_RGB
+/* RGB-вариант: третий LED-канал + exaux вместе не помещаются во Flash
+ * (лимит 16128 Б), поэтому в этом варианте драйвера расширенных AUX-режимов
+ * нет вообще. Формат EE.aux тоже свой (app_data.h): старый здесь не
+ * существует, поэтому WL_FORMAT_VERSION не меняется. */
+#undef USE_EX_AUX
+#define USE_EX_AUX 0
 #endif
 #ifndef USE_STROBE
 #define USE_STROBE 1        // Стробоскоп: режим MODE_STROB, профили strobe_sos[], переключение up_strobe (ui.c)
