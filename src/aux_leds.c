@@ -120,7 +120,7 @@ static const uint32_t strobe_bike2[] = {
 /* Dual-phase strobe, loops back to the start after the last pause.
  * Phase A: 7 Hz, 50 % duty — 72 ms ON + 72 ms OFF, count=7 → ~1 s of
  *          strobing (7 periods = 1008 ms, i.e. 7 flashes per second),
- *          then a ~1 s dark pause.  Exact 7 Hz at 50 % needs 71.43 ms
+ *          then a ~0.5 s dark pause.  Exact 7 Hz at 50 % needs 71.43 ms
  *          halves, which is not representable: half-periods >=64 ms use
  *          PSC_256 with a 2 ms quantum, so the nearest exact-50 % pairs
  *          are 70/70 ms (period 140 → 7.14 Hz, +2.0 %) and 72/72 ms
@@ -129,7 +129,7 @@ static const uint32_t strobe_bike2[] = {
  * Phase B: ~15 Hz, 40 % duty — 27 ms ON + 40 ms OFF (67 ms period =
  *          14.93 Hz, duty 40.3 %), count=7 → ~0.47 s of strobing
  *          (0.5 s would need 7.5 periods — not representable), then a
- *          ~2 s dark pause (1000+1000 ms, each rounds to 1008 ms).
+ *          ~1 s dark pause (500+500 ms, each rounds to 1008 ms).
  * Pauses use count=0: the FSM runs exactly one pass over both (dark)
  * half-periods, same idiom as the SOS pause element.  All timings other
  * than the pauses encode exactly (72 ms, 27 ms, 40 ms → integer windows). */
@@ -137,7 +137,7 @@ static const uint32_t strobe_dual[] = {
     MAKE_CMD_MS(HBL_LED, 0, 7, 72, 72, CMODE_TURBO, CMODE_OFF),
     MAKE_CMD_MS(HBL_LED, 0, 0, 250, 250, CMODE_OFF, CMODE_OFF),
     MAKE_CMD_MS(HBL_LED, 0, 7, 27, 40, CMODE_TURBO, CMODE_OFF),
-    MAKE_CMD_MS(HBL_LED, 0, 0, 1000, 1000, CMODE_OFF, CMODE_OFF),
+    MAKE_CMD_MS(HBL_LED, 0, 0, 500, 500, CMODE_OFF, CMODE_OFF),
     AC_REP_ATSTART,
 };
 
