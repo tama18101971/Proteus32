@@ -117,6 +117,34 @@ static const uint32_t strobe_bike2[] = {
     AC_REP_ATSTART,
 };
 
+/* Dual-phase strobe, loops back to the start after the last pause.
+ * Phase A: 5 Hz, 50 % duty — 100 ms ON + 100 ms OFF, count=5 → exactly
+ *          1 s of strobing (5 periods), then a ~1 s dark pause.
+ * Phase B: ~15 Hz, 40 % duty — 27 ms ON + 40 ms OFF (67 ms period =
+ *          14.93 Hz, duty 40.3 %), count=7 → ~0.47 s of strobing
+ *          (0.5 s would need 7.5 periods — not representable), then a
+ *          ~2 s dark pause (1000+1000 ms, each rounds to 1008 ms).
+ * Pauses use count=0: the FSM runs exactly one pass over both (dark)
+ * half-periods, same idiom as the SOS pause element.  All timings other
+ * than the pauses encode exactly (100 ms, 27 ms, 40 ms → integer windows). */
+static const uint32_t strobe_dual[] = {
+    MAKE_CMD_MS(HBL_LED, 0, 5, 100, 100, CMODE_TURBO, CMODE_OFF),
+    MAKE_CMD_MS(HBL_LED, 0, 0, 500, 500, CMODE_OFF, CMODE_OFF),
+    MAKE_CMD_MS(HBL_LED, 0, 7, 27, 40, CMODE_TURBO, CMODE_OFF),
+    MAKE_CMD_MS(HBL_LED, 0, 0, 1000, 1000, CMODE_OFF, CMODE_OFF),
+    AC_REP_ATSTART,
+};
+
+/* strobe_gpt: 10 Hz, 50 % duty — 50 ms ON + 50 ms OFF (both encode
+ * exactly: PSC_128 x win 50 and PSC_512 x win 25), count=8 → exactly
+ * 8 flashes = 0.8 s series, then a ~2 s dark pause (1000+1000 ms, each
+ * rounds to 1008 ms), then AC_REP_ATSTART loops back to the start. */
+static const uint32_t strobe_gpt[] = {
+    MAKE_CMD_MS(HBL_LED, 0, 8, 50, 50, CMODE_TURBO, CMODE_OFF),
+    MAKE_CMD_MS(HBL_LED, 0, 0, 1000, 1000, CMODE_OFF, CMODE_OFF),
+    AC_REP_ATSTART,
+};
+
 #if USE_IND_RGB
 /* В RGB-формате нет cycle-бита: однокомандные зацикленные профили
  * оформлены 2-элементными массивами {cmd, AC_REP_ATSTART}. FSM догоняет
@@ -144,11 +172,15 @@ static const uint32_t strobe_60_2s[] = {
 static const strobe_profile_t strobe_commands[STROBE_COUNT] = {
 #if USE_IND_RGB
     { STROBE_PROFILE_ARRAY,   { .array = strobe_30_30 } }, /* 30ms / 30ms */
+    { STROBE_PROFILE_ARRAY,   { .array = strobe_dual } }, /* 5Hz 50% 1s/1s pause + 15Hz 40% 0.5s/2s pause */
+    { STROBE_PROFILE_ARRAY,   { .array = strobe_gpt } }, /* 10Hz 50% 0.8s (8 flashes) / 2s pause */
     { STROBE_PROFILE_ARRAY,   { .array = strobe_60_1s } }, /* 60ms / ~1s */
     { STROBE_PROFILE_ARRAY,   { .array = strobe_60_4s } }, /* 60ms / 4s */
     { STROBE_PROFILE_ARRAY,   { .array = strobe_60_2s } }, /* 60ms / 2s */
 #else
     { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD_MS(HBL_LED, 1, 0, 30, 30, CMODE_TURBO, CMODE_OFF) } }, /* 30ms / 30ms */
+    { STROBE_PROFILE_ARRAY,   { .array = strobe_dual } }, /* 5Hz 50% 1s/1s pause + 15Hz 40% 0.5s/2s pause */
+    { STROBE_PROFILE_ARRAY,   { .array = strobe_gpt } }, /* 10Hz 50% 0.8s (8 flashes) / 2s pause */
     { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD_MS(HBL_LED, 1, 0, 60, 1000, CMODE_MAX, CMODE_OFF) } }, /* 60ms / ~1s */
     { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD_MS(HBL_LED, 1, 0, 60, 4000, CMODE_MAX, CMODE_OFF) } }, /* 60ms / 4s */
     { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD_MS(HBL_LED, 1, 0, 60, 2000, CMODE_TURBO, CMODE_MID) } }, /* 60ms / 2s */
