@@ -28,8 +28,12 @@ CompileFlags:
     - -DCH32V00X
     - -DCH32V00x
     - -DCH32V003F4
-    - -DWL_FORMAT_VERSION=3
-    - -DWL_RECORD_SIZE=20
+    # Keep in sync with platformio.ini build_flags (WL_FLASH payload layout +
+    # Option-Bytes overlay); stale values make clangd/Serena mis-parse app_cfg_t
+    # and drop all WL_OB_ENABLE-gated code paths.
+    - -DWL_OB_ENABLE
+    - -DWL_FORMAT_VERSION=4
+    - -DWL_RECORD_SIZE=16
     - -DWL_CRC_BITS=16
     - -DSYSCLK_FREQ_24MHz_HSI=24000000
     - -DSYSCLK_FREQ_24MHZ_HSI=24000000
