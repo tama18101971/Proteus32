@@ -609,17 +609,29 @@ void slot_block(void)
     }
     else
     {
+        /* Чистая тёмная блокировка: маяк следует глобальной настройке,
+         * вооружение из «Блокировка + маяк» снимается (инвариант:
+         * beacon_lock_armed ⟺ тёмная блокировка пришла из slot_block_beacon). */
+        beacon_lock_armed = false;
         driver_mode = MODE_BLOCK;
         block_ack(false, false);
     }
 #endif
 }
 
-/** @brief Enter block + beacon combo mode. */
+/** @brief Enter block + beacon combo mode.
+ *
+ * Тёмная блокировка (MODE_BLOCK0) с вооружённым на время блокировки поисковым
+ * маяком: beacon_lock_armed обходит выключенную настройку AUXF_BEACON_ON, но не
+ * пишет в EE (флаг сессионный). Период/цвет маяка — из EE.aux как есть.
+ * start_aux_beacon() здесь не вызывается: красная вспышка подтверждения
+ * (aux_off) занимает AUX-канал — маяк стартует на первом OFF-сне (main.c).
+ */
 void slot_block_beacon(void)
 {
 #if USE_BLOCK
     driver_mode = MODE_BLOCK0;
+    beacon_lock_armed = true;
     aux_off();
 #endif
 }
@@ -635,6 +647,9 @@ void unblock_drv(void)
 {
 #if USE_BLOCK
     lock_light_ticks = 0;
+    /* Единственный выход из блокировки: вооружённый маяк снимается,
+     * на ближайшем OFF-сне маяк вернётся к глобальной настройке. */
+    beacon_lock_armed = false;
     bool was_on = (driver_mode == MODE_BLOCK_ON);
     if (driver_mode == MODE_BLOCK_ON || driver_mode == MODE_BLOCK_LIGHT)
         driver_mode = MODE_ON;

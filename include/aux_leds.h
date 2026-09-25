@@ -336,6 +336,8 @@ extern const uint32_t *current_buf;
 extern bool beacon_low_voltage;
 /** @brief true = exaux warning indication fired this battery session; beacon double-flashes after off. */
 extern bool vwarning_fired;
+/** @brief true = locator beacon armed for the current lockout (session-only, not persisted to EE). */
+extern bool beacon_lock_armed;
 
 /* ===== API functions ===== */
 
@@ -388,6 +390,11 @@ void start_aux_strobe(uint8_t index);
 
 /**
  * @brief Start beacon mode from EEPROM settings.
+ *
+ * The beacon starts when it is enabled in EEPROM (AUXF_BEACON_ON) or armed by
+ * the lockout slot «Block + beacon» (beacon_lock_armed); the period and colour
+ * always come from EEPROM.  Menu mute, the ADC-failure latch and an already
+ * active AUX command still gate the start.  No EEPROM write is performed.
  */
 void start_aux_beacon(void);
 

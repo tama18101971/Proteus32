@@ -662,6 +662,7 @@ bool handle_aux(void) {
 bool beacon_low_voltage = false;
 static uint32_t beacon_double_buf[3];
 bool vwarning_fired = false;
+bool beacon_lock_armed = false;   /* слот «Блокировка + маяк»: маяк вооружён на время блокировки */
 
 #if USE_BEACON_ADC_GUARD
 /* ── Защита маяка от устойчивого отказа АЦП (USE_BEACON_ADC_GUARD) ──
@@ -785,12 +786,16 @@ void beacon_battery_check(void)
  *   - beacon_mode: частота моргания (BCON_1S..BCON_8S — пауза OFF)
  *   - beacon_type: цвет светодиода (RED_LED=1, GRN_LED=2, HBL_LED=4)
  *
+ * Маяк стартует, если включён в EEPROM ИЛИ вооружён блокировкой
+ * (beacon_lock_armed, слот «Блокировка + маяк»); период/цвет всегда из EEPROM.
+ * Мьют меню, защёлка отказа АЦП и занятость AUX-канала не обходятся.
+ *
  * Одиночная вспышка при нормальном напряжении (>= 3.2 В).
  * Двойная вспышка при пониженном напряжении (< 3.1 В) или если в этой сессии
  * АКБ срабатывала exaux-предупредительная индикация (vwarning_fired).
  */
 void start_aux_beacon(void) {
-	if (!AUXF_GET_BEACON_ON(EE.aux)) return;
+	if (!AUXF_GET_BEACON_ON(EE.aux) && !beacon_lock_armed) return;
 	if (menu_beacon_mute) return;   /* сессионный мьют во время меню */
 #if USE_BEACON_ADC_GUARD
 	/* Защёлка ADC-отказа: маяк без проверки АКБ не запускается ни одним
