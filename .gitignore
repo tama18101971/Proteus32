@@ -1,4 +1,5 @@
 .pio
+.cache/
 .kilo/
 compile_commands.json
 .env
@@ -7,9 +8,6 @@ compile_commands.json
 .vscode/launch.json
 .vscode/ipch
 .vscode/extensions.json
-
-# clangd
-.clangd
 
 #serena
 .serena

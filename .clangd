@@ -1,29 +1,18 @@
 CompileFlags:
-  CompilationDatabase: compile_commands.json
+  CompilationDatabase: .
+  Compiler: clang
   # GCC-only / WCH-specific flags that clangd's clang rejects (rejection makes
   # clangd fall back to flagless parsing -> "file not found" cascade):
   Remove: [-march=*, -mabi=*, -msmall-data-limit=*, -fmessage-length=*, -msave-restore, -flto]
-  # Flags that make every TU parse correctly even when the compile DB entry
-  # is rejected (driver riscv-wch-elf-gcc.exe is not queryable by clangd):
   Add:
     - -target
     - riscv32
     - -I
-    - C:/Sonet5/Proteus32/include
-    - -isystem
-    - C:/.platformio/packages/toolchain-riscv/riscv-wch-elf/include
-    - -isystem
-    - C:/Sonet5/Proteus32/libs/WL_FLASH/src
-    - -isystem
-    - C:/.platformio/packages/framework-wch-noneos-sdk/Core/ch32v00x
-    - -isystem
-    - C:/.platformio/packages/framework-wch-noneos-sdk/Peripheral/ch32v00x/inc
-    - -isystem
-    - C:/.platformio/packages/framework-wch-noneos-sdk/Startup
-    - -isystem
-    - C:/.platformio/packages/framework-wch-noneos-sdk/System/ch32v00x
-    - -isystem
-    - C:/.platformio/packages/framework-wch-noneos-sdk/Debug/ch32v00x
+    - include
+    - -I
+    - src
+    - -I
+    - libs/WL_FLASH/src
     - -DCH32V003
     - -DCH32V00X
     - -DCH32V00x
