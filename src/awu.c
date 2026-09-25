@@ -64,39 +64,39 @@ typedef struct
 } awu_cfg_t;
 
 static const awu_cfg_t awu_lut[] = {
-    {PWR_AWUPSC_128, 1},    /* AWU_1MS   = (128 * 1) / 128000 = 0.001s */
-    {PWR_AWUPSC_128, 15},   /* AWU_15MS  = (128  * 15) / 128000 = 0.015s  */
-    {PWR_AWUPSC_128, 30},   /* AWU_30MS  = (128  * 30) / 128000 = 0.030s  */
-    {PWR_AWUPSC_256, 30},   /* AWU_60MS  = (256  * 30) / 128000 = 0.060s  */
-    {PWR_AWUPSC_256, 60},   /* AWU_120MS = (256  * 60) / 128000 = 0.120s  */
-    {PWR_AWUPSC_512, 63},   /* AWU_250MS = (512  * 63) / 128000 = 0.252s  */
-    {PWR_AWUPSC_1024, 63},  /* AWU_500MS = (1024 * 63) / 128000 = 0.504s  */
-    {PWR_AWUPSC_2048, 63},  /* AWU_1S    = (2048 * 63) / 128000 = 1.008s  */
-    {PWR_AWUPSC_10240, 25}, /* AWU_2S    = (10240* 25) / 128000 = 2.0s    */
-    {PWR_AWUPSC_10240, 50}, /* AWU_4S    = (10240* 50) / 128000 = 4.0s    */
-    {PWR_AWUPSC_61440, 17}, /* AWU_8S    = (61440* 17) / 128000 = 8.16s   */
-    {PWR_AWUPSC_61440, 33}, /* AWU_16S   = (61440* 33) / 128000 = 16.32s  */
+    {PWR_AWUPSC_128, 15},   /* AWU_15MS  = (128  * 15) / 128000 = 0.015s */
+    {PWR_AWUPSC_256, 30},   /* AWU_60MS  = (256  * 30) / 128000 = 0.060s */
+    {PWR_AWUPSC_256, 60},   /* AWU_120MS = (256  * 60) / 128000 = 0.120s */
+    {PWR_AWUPSC_2048, 63},  /* AWU_1S    = (2048 * 63) / 128000 = 1.008s */
+    {PWR_AWUPSC_10240, 50}, /* AWU_4S    = (10240* 50) / 128000 = 4.0s   */
 };
 
 #define AWU_TICKS_COUNT (sizeof(awu_lut) / sizeof(awu_lut[0]))
+
+/* awu_tick_t (awu.h) indexes this table directly: the enum and the table must
+ * describe the same set of intervals or a preset silently programs the wrong
+ * prescaler/window.  AWU_TICKS_LAST — конец перечисления, поэтому добавление
+ * пресета в awu.h без строки здесь ломает сборку. */
+_Static_assert((int)AWU_TICKS_LAST == (int)AWU_TICKS_COUNT,
+               "awu_lut[] must have exactly one row per awu_tick_t preset");
+_Static_assert((int)AWU_IMMEDIATELY >= (int)AWU_TICKS_COUNT && (int)AWU_IMMEDIATELY <= 31,
+               "AWU_IMMEDIATELY must stay outside awu_lut[] and fit c.li");
 
 /* ============================================================
  * AWU_set_delay — настройка prescaler и window
  * ============================================================ */
 /**
  * @brief Установка задержки AWU по индексу из таблицы.
- * @param awu_tick Индекс интервала (AWU_15MS..AWU_16S).
- * @return true если индекс валиден, false если выходит за границы таблицы.
+ * @param awu_tick Индекс интервала (awu_tick_t из awu.h).
+ *
+ * Диапазон не проверяется: все вызовы передают литерал из awu_tick_t, а
+ * AWU_IMMEDIATELY отсекается вызывающими (start_aux_cmd/start_aux_array)
+ * до обращения сюда.  Неверный индекс запрограммирует посторонний интервал.
  */
-bool AWU_set_delay(awu_tick_t awu_tick)
+void AWU_set_delay(awu_tick_t awu_tick)
 {
-    if (awu_tick >= AWU_TICKS_COUNT)
-        return false;
-
     PWR->AWUPSC = awu_lut[awu_tick].psc;   /* Запись предделителя (биты 3:0 регистра AWUPSC) */
     PWR->AWUWR = awu_lut[awu_tick].window; /* Запись значения окна (биты 5:0 регистра AWUWR) */
-
-    return true;
 }
 
 /**

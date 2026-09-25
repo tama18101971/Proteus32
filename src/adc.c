@@ -134,10 +134,10 @@ static uint16_t ema_avg;
 static bool ema_seeded;
 static bool adc_ready;
 
-/** @brief Initialise EMA filter with seed value. */
-void ema_init(uint16_t seed)
+/** @brief Clear the EMA filter (first sample seeds it unfiltered). */
+static void ema_clear(void)
 {
-    ema_avg = seed;
+    ema_avg = 0;
     ema_seeded = false;
 }
 
@@ -300,7 +300,7 @@ void adc_init(void)
             return;
 
     adc_ready = true;
-    ema_init(0);
+    ema_clear();
 }
 
 /**
@@ -516,14 +516,26 @@ static uint8_t vdeep_count = 0;    /* серия backstop 2.50 В (raw) */
 #define VREF_SENTINEL 1023u
 
 /**
- * @brief Калиброванный код Vrefint с учётом vc и валидности выборки.
- * @return (vrefint_adc - vc) при voltage_ok, иначе VREF_SENTINEL - vc
+ * @brief Общий пересчёт кода Vrefint: калибровка vc и подмена при
+ *        невалидной выборке.
+ * @param code Сырой код Vrefint (отфильтрованный или raw).
+ * @return (code - vc) при voltage_ok, иначе VREF_SENTINEL - vc
  *         (аналог «критически низкого напряжения» прежнего vbat_mv == 0).
+ */
+static int32_t vcode_of(uint16_t code)
+{
+    if (!voltage_ok)
+        code = VREF_SENTINEL;
+    return (int32_t)code - (int32_t)OB_CFG->vc;
+}
+
+/**
+ * @brief Калиброванный код Vrefint с учётом vc и валидности выборки.
+ * @return (vrefint_adc - vc) при voltage_ok, иначе VREF_SENTINEL - vc.
  */
 int32_t adc_eff_vcode(void)
 {
-    uint16_t code = voltage_ok ? vrefint_adc : VREF_SENTINEL;
-    return (int32_t)code - (int32_t)OB_CFG->vc;
+    return vcode_of(vrefint_adc);
 }
 
 /**
@@ -541,8 +553,7 @@ int32_t adc_eff_vcode(void)
  * scan_voltage()). */
 int32_t adc_eff_raw_vcode(void)
 {
-    uint16_t code = voltage_ok ? vrefint_raw_adc : VREF_SENTINEL;
-    return (int32_t)code - (int32_t)OB_CFG->vc;
+    return vcode_of(vrefint_raw_adc);
 }
 
 /**

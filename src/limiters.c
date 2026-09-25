@@ -2,7 +2,7 @@
  * @file limiters.c
  * @brief Thermal and electrical limiter coordinator
  *
- * Implements sys_init(), scan_limiters() and reset_limiters().
+ * Implements scan_limiters() and reset_limiters().
  * Thermal limiter configuration and runtime state are defined here
  * (see thermal_limiter.h/c for the PI controller implementation).
  */
@@ -112,13 +112,9 @@ static void update_limiters(uint16_t exact_adc)
     }
 }
 
-/** @brief Initialise thermal limiter state. */
-void sys_init(void)
-{
-    ThermalLimiter_Init(&state);
-}
-
-/** @brief Scan thermal limiter once for a fresh fast-phase ADC sample. */
+/**
+ * @brief Scan thermal limiter once for a fresh fast-phase ADC sample.
+ */
 void scan_limiters(void)
 {
     if ((raw_temperature_adc == ADC_MIN_VAL) ||

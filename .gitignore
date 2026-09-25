@@ -21,3 +21,5 @@ build/
 Proteus32Flasher.spec
 
 .playwright-mcp/
+
+compile_commands-rgb.json

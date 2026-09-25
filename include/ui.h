@@ -305,13 +305,6 @@ void ee_defaults(void);
  ******************************************************************************/
 
 /**
- * @brief Get minimum DAC level for a given step (prevents flicker at low PWM).
- * @param step 9-bit step value.
- * @return Minimum 12-bit DAC value.
- */
-uint16_t get_min_level(uint16_t step);
-
-/**
  * @brief Convert 9-bit perceptual step to 12-bit DAC value (cubic curve).
  * @param val 9-bit step (0..511).
  * @return 12-bit DAC value (0..4095).

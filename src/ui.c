@@ -142,6 +142,13 @@ void ee_defaults(void)
 }
 
 /**
+ * @brief Check whether a ui_table_idx selects a discrete (UI2/UI3) interface.
+ * @param idx ui_table_idx value (1..3 for interfaces, 5/6 for menus).
+ * @return true for the discrete brightness interfaces UI2 (2) and UI3 (3).
+ */
+#define UI_IS_DISCRETE(idx) ((idx) == 2U || (idx) == 3U)
+
+/**
  * @brief Clamp brightness target to thermal ceiling.
  * @param step Requested brightness step.
  * @return min(step, MAX_STEP - limiter) when step > 0, or 0 when off/fault.
@@ -151,7 +158,7 @@ uint16_t get_step_tc(uint16_t step)
     if (thermal_fault_active() || !step)
         return 0u;
 
-    if ((ui_table_idx == 2U || ui_table_idx == 3U) && (step <= modes[CMODE_MID]))
+    if (UI_IS_DISCRETE(ui_table_idx) && (step <= modes[CMODE_MID]))
         return step;
 
     uint16_t tc_step = (MAX_STEP > limiter) ? (uint16_t)(MAX_STEP - limiter) : 1u;
@@ -163,12 +170,9 @@ uint16_t get_step_tc(uint16_t step)
  * @param step If non-zero, returns moon level offset; otherwise 0.
  * @return ml + BASE_MOON_LEVEL or 0.
  */
-uint16_t get_min_level(uint16_t step)
+static inline uint16_t get_min_level(uint16_t step)
 {
-    uint16_t ret = step ? (OB_CFG->ml + BASE_MOON_LEVEL) : 0;
-//    EE_PRINTF("[UI] min_level: ml=%u step=%u -> ret=%u\r\n",
-//              (unsigned)OB_CFG->ml, (unsigned)step, (unsigned)ret);
-    return ret;
+    return step ? (uint16_t)(OB_CFG->ml + BASE_MOON_LEVEL) : 0u;
 }
 
 /**
@@ -433,7 +437,7 @@ void off_driver_false(void)
      * (там mode_current — состояние каскада защиты по напряжению, а не
      * выбранный режим) затирать память UI2. Турбо из ON (ps.start == 0)
      * не трогаем: его откатывает блок if(!ps.start) в off_driver(). */
-    if (((ui_table_idx == 2) || (ui_table_idx == 3)) &&
+    if (UI_IS_DISCRETE(ui_table_idx) &&
         (mode_current != CMODE_OFF) && !(ps.use_prev && ps.start))
         mode_default = mode_current;
     mode_current = CMODE_OFF;
@@ -498,6 +502,27 @@ static __attribute__((noinline)) void block_ack(bool light_on, bool unlock)
  *  Slot action functions
  ******************************************************************************/
 
+/**
+ * @brief Shared body of the five "flip an EE flag bit and show it" slots.
+ *
+ * The toggling slots (backlight type, beacon on, memory recall, ext-aux warn,
+ * IPS mode) differ only in which byte and which bit they flip, so the flip,
+ * the read-back and the indication live here once.  All five flags passed
+ * below are one bit wide (each *_MASK is 0x01u << *_SHIFT).  app_data.h also
+ * holds wider fields (UIF_UI_INDEX_MASK, UIF_UI2_MASK, USRF_TCALIBR_MASK,
+ * AUXF_BCKLIGHT_COLOR_MASK, AUXF_BEACON_MODE_MASK, USRF_LOCK_MIN_TIME_MASK) —
+ * this helper must NOT be used for those: it only ever touches bit 0.
+ * @param field EE byte to flip in place.
+ * @param shift Bit position of the flag inside that byte.
+ */
+static __attribute__((noinline)) void slot_toggle_ack(volatile uint8_t *field,
+                                                       uint8_t shift)
+{
+    uint8_t val = (uint8_t)(*field ^ (uint8_t)(1u << shift));
+    *field = val;
+    clr_indicator((ind_clr_t)((val >> shift) & 1u));
+}
+
 /** @brief Enter tactical momentary mode (slot). */
 void slot_tactical(void)
 {
@@ -508,23 +533,20 @@ void slot_tactical(void)
 /** @brief Toggle backlight type (slot). */
 void slot_backlight(void)
 {
-    EE.aux ^= AUXF_BCKLIGHT_TYPE_MASK;
-    clr_indicator((ind_clr_t)AUXF_GET_BCKLIGHT_TYPE(EE.aux));
+    slot_toggle_ack(&EE.aux, AUXF_BCKLIGHT_TYPE_SHIFT);
     aux_refresh_backlight();
 }
 
 /** @brief Toggle beacon on/off (slot). */
 void slot_beacon(void)
 {
-    EE.aux ^= AUXF_BEACON_ON_MASK;
-    clr_indicator((ind_clr_t)AUXF_GET_BEACON_ON(EE.aux));
+    slot_toggle_ack(&EE.aux, AUXF_BEACON_ON_SHIFT);
 }
 
 /** @brief Toggle memory recall (slot). */
 void slot_memory(void)
 {
-    EE.uif ^= UIF_USE_MEMORY_MASK;
-    clr_indicator((ind_clr_t)UIF_GET_USE_MEMORY(EE.uif));
+    slot_toggle_ack(&EE.uif, UIF_USE_MEMORY_SHIFT);
 }
 
 /** @brief Empty slot — no operation. */
@@ -1152,8 +1174,7 @@ void ui_invalid_selection(void)
 void slot_eauxmode(void)
 {
 #if USE_EX_AUX
-    EE.uif ^= UIF_EAUX_ONOFF_MASK;
-    clr_indicator((ind_clr_t)UIF_GET_EAUX_ONOFF(EE.uif));
+    slot_toggle_ack(&EE.uif, UIF_EAUX_ONOFF_SHIFT);
 #endif
 }
 
@@ -1161,8 +1182,7 @@ void slot_eauxmode(void)
 void slot_ipsmode(void)
 {
 #if USE_MENU
-    EE.usr ^= USRF_ID_PLUS_SID_MASK;
-    clr_indicator((ind_clr_t)USRF_GET_ID_PLUS_SID(EE.usr));
+    slot_toggle_ack(&EE.usr, USRF_ID_PLUS_SID_SHIFT);
 #endif
 }
 
@@ -1701,7 +1721,7 @@ void ui_process(void)
             tick_5s_reset();
             /* UI2 handles long clicks on release.  Do not dispatch the same
              * long gesture again when its click-sequence timeout expires. */
-            if ((ui_idx == 2U || ui_idx == 3U) && evt->long_mask)
+            if (UI_IS_DISCRETE(ui_idx) && evt->long_mask)
                 break;
             ui_table_lookup(driver_mode, evt, true);
             break;

@@ -191,8 +191,8 @@ static const strobe_profile_t strobe_commands[STROBE_COUNT] = {
 /**
  * @brief Запуск пошаговой обработки массива команд
  * @param pArray — указатель на массив uint32_t команд в Flash или RAM
- * @param delay  — начальная задержка перед первым полупериодом (awu_tick_t:
- *                 AWU_15MS, AWU_120MS, AWU_250MS, AWU_500MS, AWU_1S и т.д.)
+ * @param delay  — начальная задержка перед первым полупериодом (предустановка
+ *                 из awu_tick_t: AWU_15MS, AWU_60MS, AWU_120MS, AWU_1S, AWU_4S)
  *                 или AWU_IMMEDIATELY для немедленного запуска первого элемента
  *
  * Сбрасывает структуру состояния, устанавливает флаг EnableArrayProcessing
@@ -382,10 +382,11 @@ static uint32_t set_aux_count(uint8_t count) {
  * @brief Запуск одиночной AUX-команды
  * @param command   — 32-битная команда
  * @param idm_mode  — режим индикации (IDM_BEACON, IDM_VWARNING, IDM_STROBE, IDM_OTHER)
- * @param delay     — начальная задержка перед первым полупериодом (awu_tick_t:
- *                    AWU_15MS, AWU_250MS, AWU_500MS, AWU_1S и т.д.) или
- *                    AWU_IMMEDIATELY для немедленного запуска первого шага.
- *                    После первого шага AWU переключается на psc0/win0 команды.
+ * @param delay     — начальная задержка перед первым полупериодом (предустановка
+ *                    из awu_tick_t: AWU_15MS, AWU_60MS, AWU_120MS, AWU_1S,
+ *                    AWU_4S) или AWU_IMMEDIATELY для немедленного запуска
+ *                    первого шага. После первого шага AWU переключается на
+ *                    psc0/win0 команды.
  *
  * Таймер AWU настраивается в handle_aux_cmd при обработке PER_FIRST.
  */

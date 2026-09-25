@@ -30,20 +30,20 @@
 void uart_tc_wait(void);
 #endif
 
-/** @brief Preset AWU delay intervals. */
+/** @brief Preset AWU delay intervals (index into awu_lut[] in awu.c).
+ *
+ * Only the intervals the firmware actually arms are listed: every entry costs
+ * 2 bytes of flash.  AWU_set_delay() takes no range check, so the enum and
+ * awu_lut[] must stay in lockstep — AWU_TICKS_LAST is pinned against the table
+ * length by a _Static_assert in awu.c, so a preset added to this enum without a
+ * matching awu_lut[] row fails the build. */
 typedef enum {
-	AWU_1MS = 0,  /**< 1 ms */
-	AWU_15MS,     /**< 15 ms */
-	AWU_30MS,     /**< 30 ms */
-	AWU_60MS,     /**< 60 ms */
-	AWU_120MS,    /**< 120 ms */
-	AWU_250MS,    /**< 250 ms */
-	AWU_500MS,    /**< 500 ms */
-	AWU_1S,       /**< 1 second */
-	AWU_2S,       /**< 2 seconds */
-	AWU_4S,       /**< 4 seconds */
-	AWU_8S,       /**< 8 seconds */
-	AWU_16S       /**< 16 seconds */
+	AWU_15MS = 0,  /**< 15 ms  = (128  * 15) / 128000 */
+	AWU_60MS,      /**< 60 ms  = (256  * 30) / 128000 */
+	AWU_120MS,     /**< 120 ms = (256  * 60) / 128000 */
+	AWU_1S,        /**< 1 s    = (2048 * 63) / 128000 */
+	AWU_4S,        /**< 4 s    = (10240 * 50) / 128000 */
+	AWU_TICKS_LAST /**< Sentinel: not a preset; must equal AWU_TICKS_COUNT. */
 } awu_tick_t;
 
 /**
@@ -55,8 +55,6 @@ typedef enum {
  * sites is emitted as a compressed c.li, saving Flash on RV32EC.
  */
 #define AWU_IMMEDIATELY ((awu_tick_t)0x0CU)
-_Static_assert(((int)AWU_16S < (int)AWU_IMMEDIATELY) && ((int)AWU_IMMEDIATELY <= 31),
-               "AWU_IMMEDIATELY must stay outside the preset enum and fit c.li");
 
 //extern volatile uint8_t awu_event; /**< AWU event flag, set in ISR */
 extern volatile uint8_t is_sleep_mode; /**< Non-zero when MCU is in STANDBY */
@@ -85,10 +83,9 @@ void AWU_int_init(void);
 
 /**
  * @brief Set AWU delay from preset table.
- * @param time_aux Requested delay interval.
- * @return true if the interval was set successfully.
+ * @param time_aux Requested delay interval (awu_tick_t preset).
  */
-bool AWU_set_delay(awu_tick_t time_aux);
+void AWU_set_delay(awu_tick_t time_aux);
 
 /**
  * @brief Set AWU prescaler and window directly.

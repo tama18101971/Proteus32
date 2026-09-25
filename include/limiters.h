@@ -24,11 +24,6 @@
 uint16_t get_thermal_setpoint(void);
 
 /**
- * @brief System initialisation (clock, GPIO, peripherals).
- */
-void sys_init(void);
-
-/**
  * @brief Scan thermal and electrical limiters during the fast thermal phase.
  */
 void scan_limiters(void);

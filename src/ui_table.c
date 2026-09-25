@@ -15,14 +15,28 @@
 #include "array.h"
 #include "ob.h"
 
-#if USE_EX_AUX
-#define MAIN_OP_COUNT (EAUX_CLICKX + 1)
-#else
-#define MAIN_OP_COUNT (LM_TIME_CLICKX + 1)
-#endif
+#define MAIN_OP_COUNT MAIN_OP_LAST
 
 /* Current UI index used for table selection. Defined in ui.c. */
 extern uint8_t ui_table_idx;
+
+/* ui_table_lookup отсекает режимы блокировки проверкой принадлежности к
+ * BLOCK_MODE_MASK.  Обычные режимы (MODE_BLOCK_C, MODE_OFF, MODE_ON,
+ * MODE_STROB) живут в том же числовом диапазоне 0..MODE_BLOCK_LIGHT, поэтому
+ * множество задаётся маской, а не сравнением «mode <= MODE_BLOCK_LIGHT».
+ *
+ * Верхняя граница 0..31 — условие корректности самой маски. */
+#define BLOCK_MODE_MASK ((1u << MODE_BLOCK) | (1u << MODE_BLOCK0) | \
+                         (1u << MODE_BLOCK_ON) | (1u << MODE_BLOCK_LIGHT))
+
+_Static_assert((MODE_BLOCK <= MODE_BLOCK_LIGHT) && (MODE_BLOCK0 <= MODE_BLOCK_LIGHT) &&
+               (MODE_BLOCK_ON <= MODE_BLOCK_LIGHT) && (MODE_BLOCK_LIGHT <= 31),
+               "all lockout modes must fit in 0..31 for BLOCK_MODE_MASK to work");
+
+/* has_block_click_slot() жёстко перебирает байты 1..4 slots_packed — младшие
+ * нибблы слотов 2,4,6,8.  Раскладка верна ровно при 10 слотах по 4 бита. */
+_Static_assert(SLOTS_COUNT == 10 && sizeof(((app_cfg_t *)0)->slots_packed) == 5,
+               "has_block_click_slot() nibble layout assumes 10 slots x 4 bits");
 
 /* The slot which entered MODE_BLOCK/MODE_BLOCK0.  Standby preserves RAM, so
  * the same gesture can unlock after a button wake without a flash write. */
@@ -40,15 +54,16 @@ static bool block_click_pending;
 static bool has_block_click_slot(void)
 {
 #if USE_MAGIC_SLOTS
-    for (uint8_t slot = 2u; slot < SLOTS_COUNT; slot += 2u)
+    /* Слоты 2,4,6,8 — это младшие нибблы байтов 1..4 массива slots_packed,
+     * поэтому проверяются без вызова slot_get() (по одному чтению на байт). */
+    for (uint8_t byte = 1u; byte < 5u; byte++)
     {
-        if (slot_get(slot) == SLOT_BLOCK)
+        if ((EE.slots_packed[byte] & 0x0Fu) == SLOT_BLOCK)
             return true;
     }
 #endif
     return false;
 }
-
 /**
  * @brief Check whether an event is the unlock gesture for a slot.
  * @param slot    Slot index (0..SLOTS_COUNT-1).
@@ -151,9 +166,8 @@ static const dispatch_t eng_table[] = {
     { MODE_OFF, 5,  0, false, true,  CALIBRATION },
     { MODE_OFF, 15, 0, false, true,  RESET2DEF },
     { MODE_OFF, 0,  0, true,  false, MENU_EXIT },
-
-    /* -- Sub-modes -- */
-    { MODE_MOON_LEVEL, 0, 0, false, true,  ML_CLICKX },
+    /* Подрежим MODE_MOON_LEVEL обрабатывается общей проверкой в
+     * ui_table_lookup() (см. комментарий у usr_table). */
 };
 
 #define ENG_TABLE_SIZE (sizeof(eng_table) / sizeof(eng_table[0]))
@@ -177,21 +191,14 @@ static const dispatch_t usr_table[] = {
 #endif
     { MODE_OFF, 0, 0, true,  false, MENU_EXIT },
 
-    /* -- Sub-modes -- */
-    { MODE_BM,      0, 0, false, true,  BM_CLICKX },
-    { MODE_BT,      0, 0, false, true,  BT_CLICKX },
-    { MODE_BL,      0, 0, false, true,  BL_CLICKX },
-    { MODE_UIS,     0, 0, false, true,  UIS_CLICKX },
-    { MODE_LM_EN,   0, 0, false, true,  LM_EN_CLICKX },
-    { MODE_LM_TIME, 0, 0, false, true,  LM_TIME_CLICKX },
-    { MODE_CTK_H,   0, 0, false, true,  CHTK_CLICKX },
-#if USE_EX_AUX
-    { MODE_EAUX,    0, 0, false, true,  EAUX_CLICKX },
-#endif
-
     /* -- Magic mode -- */
-    { MODE_MAGIC, 0,  0, true,  false, EXIT_MAGIC_MODE },
+    { MODE_MAGIC, 0, 0, true,  false, EXIT_MAGIC_MODE },
 };
+
+/* Подрежимы ввода кликов (MODE_MOON_LEVEL, MODE_CTK_H, MODE_UIS..MODE_LM_TIME,
+ * MODE_EAUX) разбирает ui_table_lookup() напрямую вызовом menu_clickX() —
+ * девять одинаковых строк «mode + любые клики» и девять указателей
+ * main_op[] на один и тот же menu_clickX были чистым дублем. */
 
 #define USR_TABLE_SIZE (sizeof(usr_table) / sizeof(usr_table[0]))
 
@@ -237,10 +244,11 @@ static uint8_t execute_slot(uint8_t slot)
     if (driver_mode == MODE_ON && op_idx != SLOT_BLOCK)
         return 0;
 
-    if (op_idx < MAIN_OP_COUNT && main_op[op_idx])
+    if (op_idx < MAIN_OP_COUNT)
     {
         off_auto_repeat();
         main_op[op_idx]();
+        /* Блокирующие режимы разбросаны по enum (0, 1, 6), диапазон не подходит. */
         if (driver_mode == MODE_BLOCK || driver_mode == MODE_BLOCK0 ||
             driver_mode == MODE_BLOCK_ON)
             block_slot_idx = slot;
@@ -266,7 +274,7 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout)
 {
     uint8_t idx = ui_table_idx;
 
-    if (mode == MODE_BLOCK || mode == MODE_BLOCK0 || mode == MODE_BLOCK_ON || mode == MODE_BLOCK_LIGHT)
+    if (mode <= MODE_BLOCK_LIGHT && ((1u << mode) & BLOCK_MODE_MASK))
     {
         if (block_slot_idx < SLOTS_COUNT)
         {
@@ -364,6 +372,24 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout)
         return 1;
     }
 
+    /* Подрежимы ввода кликов: заменяют девять одинаковых строк «mode + любые
+     * клики» в eng_table/usr_table. Диапазон MODE_UIS..MODE_LM_TIME
+     * непрерывен; MODE_MOON_LEVEL, MODE_CTK_H и (USE_EX_AUX) MODE_EAUX стоят
+     * вне его, MODE_MAGIC/MODE_CTK_A ввода кликов не имеют. Условие
+     * повторяет бывшую строку таблицы: clicks/long_mask — любые, hold=false,
+     * wait_timeout=true. */
+    if (timeout && evt->type != BTN_EVT_HOLD
+        && (mode == MODE_MOON_LEVEL || mode == MODE_CTK_H
+            || (mode >= MODE_UIS && mode <= MODE_LM_TIME)
+#if USE_EX_AUX
+            || mode == MODE_EAUX
+#endif
+           ))
+    {
+        menu_clickX();
+        return 1;
+    }
+
     /* Magic slot range handling */
     if (timeout && (evt->type == BTN_EVT_CLICK_SEQ))
     {
@@ -397,7 +423,7 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout)
         if (!dispatch_matches(entry, mode, evt, timeout)) continue;
 
         uint8_t op_idx = entry->op_index;
-        if (op_idx < MAIN_OP_COUNT && main_op[op_idx])
+        if (op_idx < MAIN_OP_COUNT)
         {
             main_op[op_idx]();
             return 1;
@@ -429,63 +455,52 @@ void (* const main_op[])(void) = {
     /*12*/ slot_ui_select,
 
     /*13*/ up_strobe,
-    /*14*/ slot_empty,   /* бывший back_strobe: индексы опкодов зафиксированы,
-                           * содержимое никогда не достижимо из таблиц */
-    /*15*/ off_strobe,
-    /*16*/ unblock_drv,
-    /*17*/ off_driver_false,
+    /*14*/ off_strobe,
+    /*15*/ unblock_drv,
+    /*16*/ off_driver_false,
 
-    /*18*/ on_xmode_ui1,
-    /*19*/ on_rumpup_ui1,
-    /*20*/ on_rumpdown_ui1,
-    /*21*/ on_turbo_ui1,
-    /*22*/ calibration,
+    /*17*/ on_xmode_ui1,
+    /*18*/ on_rumpup_ui1,
+    /*19*/ on_rumpdown_ui1,
+    /*20*/ on_turbo_ui1,
+    /*21*/ calibration,
 
-    /*23*/ enter_ml_mode,
-    /*24*/ save_def_ui1,
-    /*25*/ save_def_ui2,
+    /*22*/ enter_ml_mode,
+    /*23*/ save_def_ui1,
+    /*24*/ save_def_ui2,
 
-    /*26*/ menu_clickX,
+    /*25*/ menu_exit,
 
-    /*27*/ menu_exit,
+    /*26*/ enter_chtk_mode,
 
-    /*28*/ enter_chtk_mode,
-    /*29*/ menu_clickX,
+    /*27*/ enter_bm_mode,
+    /*28*/ enter_bt_mode,
+    /*29*/ enter_bl_mode,
 
-    /*30*/ enter_bm_mode,
-    /*31*/ menu_clickX,
+    /*30*/ enter_magic_mode,
 
-    /*32*/ enter_bt_mode,
-    /*33*/ menu_clickX,
+    /*31*/ mode_up_ui2,
+    /*32*/ on_turbo_ui2,
+    /*33*/ on_min_ui2,
+    /*34*/ on_moon_ui2,
+    /*35*/ on_xmode_ui2,
+    /*36*/ mode_down_ui2,
+    /*37*/ step_down_ui2,
+    /*38*/ enter_uis_mode,
+    /*39*/ reset2def,
 
-    /*34*/ enter_bl_mode,
-    /*35*/ menu_clickX,
-
-    /*36*/ enter_magic_mode,
-
-    /*37..38*/
-    select_slot, slotN_clickX,
-
-    /*39..48*/
-    mode_up_ui2,
-    on_turbo_ui2,
-    on_min_ui2,
-    on_moon_ui2,
-    on_xmode_ui2,
-    mode_down_ui2,
-    step_down_ui2,
-    enter_uis_mode,
-    menu_clickX,
-    reset2def,
-
-    /*49..52*/
-    enter_lm_en_mode,
-    menu_clickX,
-    enter_lm_time_mode,
-    menu_clickX,
+    /*40*/ enter_lm_en_mode,
+    /*41*/ enter_lm_time_mode,
 #if USE_EX_AUX
-    /*53..54*/
-    enter_eaux_mode,
-    menu_clickX,
+    /*42*/ enter_eaux_mode,
 #endif
 };
+
+/* Удалённые записи: бывший back_strobe (недостижим из таблиц), select_slot() и
+ * slotN_clickX() (вызываются напрямую из ui_table_lookup), а также девять
+ * дублирующихся указателей на menu_clickX (подрежимы меню теперь разбирает
+ * ui_table_lookup напрямую). Индексы идут подряд — иначе op_index в таблицах
+ * разъедутся молча. */
+_Static_assert(sizeof(main_op) / sizeof(main_op[0]) == MAIN_OP_LAST,
+               "main_op[] size must match MAIN_OP_LAST (ui_table.h)");
+

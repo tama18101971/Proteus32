@@ -26,6 +26,11 @@ CompileFlags:
     - -DWL_CRC_BITS=16
     - -DSYSCLK_FREQ_24MHz_HSI=24000000
     - -DSYSCLK_FREQ_24MHZ_HSI=24000000
+    # -Oz is a build_src_flags entry, applied to src/*.c on top of the
+    # platform's -Os (last -O* wins).  Kept here so the parsed configuration
+    # matches the real per-TU optimisation level; clang only accepts it for
+    # size, and its inlining heuristics otherwise differ from the build.
+    - -Oz
     - -Wno-ignored-attributes
 Diagnostics:
   UnusedIncludes: None

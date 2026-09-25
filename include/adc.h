@@ -15,8 +15,8 @@
  *   adc_stop()  — fully stop ADC (clock off, GPIO Hi-Z)
  *
  * EMA filter (Exponential Moving Average):
- *   ema_init()  — initialise filter with seed value
- *   ema_update() — update filter with new raw value
+ *   ema_update() — update filter with new raw value (seeds itself on the first
+ *                  sample, so no explicit init is needed)
  *
  * Temperature table: -20..+80°C, 1°C step
  */
@@ -67,12 +67,6 @@ int16_t calc_temperature(uint16_t adcValue);
  * shift=3: alpha=1/8,  lag ~8 samples.
  * Higher shift = smoother but slower response. */
 #define EMA_SHIFT 4
-
-/**
- * @brief Initialise EMA filter with a seed value.
- * @param seed Initial filter value.
- */
-void     ema_init(uint16_t seed);
 
 /**
  * @brief Update EMA filter with new raw sample.

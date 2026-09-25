@@ -63,74 +63,68 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout);
 
 /* -- Reserved: 12 -- */
 
-/* -- UI1 strobe / block (13..17); 14 = зарезервирован (ранее BACK_STROBE_UI1) -- */
+/*
+ *  Индексы 0..12 заморожены: 0..11 — содержимое magic-слотов (FUN_Index_t,
+ *  persist-ятся в EE нибблами), 12 — SLOT_UI_SELECT (верхняя граница
+ *  SLOT_OP_LAST).  Всё, что выше, — внутренние номера main_op[] и может быть
+ *  перенумеровано свободно: недостижимые и дублирующиеся записи удалены,
+ *  индексы идут подряд (проверяется _Static_assert в ui_table.c).
+ */
+
+/* -- UI1 strobe / block (13..16) -- */
 #define UP_STROBE_UI1       13
-#define OFF_STROBE_UI1      15
-#define UNBLOCK_DRV         16
-#define OFF_DRV_FALSE       17
+#define OFF_STROBE_UI1      14
+#define UNBLOCK_DRV         15
+#define OFF_DRV_FALSE       16
 
-/* -- UI1 brightness / mode (18..22) -- */
-#define ON_XMODE_UI1        18
-#define ON_RUMPUP_UI1       19
-#define ON_RUMPDOWN_UI1     20
-#define ON_TURBO_UI1        21
-#define CALIBRATION         22
+/* -- UI1 brightness / mode (17..21) -- */
+#define ON_XMODE_UI1        17
+#define ON_RUMPUP_UI1       18
+#define ON_RUMPDOWN_UI1     19
+#define ON_TURBO_UI1        20
+#define CALIBRATION         21
 
-/* -- Engineering menu: enter (23..25) -- */
-#define ENTER_ML_MODE       23
-#define SAVE_DEF_UI1        24
-#define SAVE_DEF_UI2        25
+/* -- Engineering menu: enter (22..24) -- */
+#define ENTER_ML_MODE       22
+#define SAVE_DEF_UI1        23
+#define SAVE_DEF_UI2        24
 
-/* -- Engineering menu: click actions (26) -- */
-#define ML_CLICKX           26
+/* -- Menu exit (25).  Подрежимы ввода кликов (menu_clickX) вызываются из
+ *    ui_table_lookup напрямую и указателей main_op[] не имеют. -- */
+#define MENU_EXIT           25
 
-/* -- Menu exit (27) -- */
-#define MENU_EXIT           27
+/* -- User menu: enter (26..30) -- */
+#define ENTER_CHTK_MODE     26
+#define ENTER_BM_MODE       27
+#define ENTER_BT_MODE       28
+#define ENTER_BL_MODE       29
+#define ENTER_MAGIC_MODE    30
 
-/* -- User menu: thermocontrol (28..29) -- */
-#define ENTER_CHTK_MODE     28
-#define CHTK_CLICKX         29
+/* -- UI2 actions (31..39) -- */
+#define MODE_UP_UI2         31
+#define ON_TURBO_UI2        32
+#define ON_MIN_UI2          33
+#define ON_MOON_UI2         34
+#define ON_XMODE_UI2        35
+#define MODE_DOWN_UI2       36
+#define STEP_DOWN_UI2       37
+#define ENTER_UIS_MODE      38
+#define RESET2DEF           39
 
-/* -- User menu: beacon mode (30..31) -- */
-#define ENTER_BM_MODE       30
-#define BM_CLICKX           31
-
-/* -- User menu: beacon type (32..33) -- */
-#define ENTER_BT_MODE       32
-#define BT_CLICKX           33
-
-/* -- User menu: backlight (34..35) -- */
-#define ENTER_BL_MODE       34
-#define BL_CLICKX           35
-
-/* -- Magic slot (36) -- */
-#define ENTER_MAGIC_MODE    36
-
-/* Индексы 37..38 зарезервированы за select_slot()/slotN_clickX() (main_op[]);
- * вызываются напрямую из диспетчера, макросы-индексы им не нужны. */
-
-/* -- UI2 actions (39..48) -- */
-#define MODE_UP_UI2         39
-#define ON_TURBO_UI2        40
-#define ON_MIN_UI2          41
-#define ON_MOON_UI2         42
-#define ON_XMODE_UI2        43
-#define MODE_DOWN_UI2       44
-#define STEP_DOWN_UI2       45
-#define ENTER_UIS_MODE      46
-#define UIS_CLICKX          47
-#define RESET2DEF           48
-
-/* -- User menu: lockout min-light (49..52) -- */
-#define ENTER_LM_EN_MODE    49
-#define LM_EN_CLICKX        50
-#define ENTER_LM_TIME_MODE  51
-#define LM_TIME_CLICKX      52
+/* -- User menu: lockout min-light (40..41) -- */
+#define ENTER_LM_EN_MODE    40
+#define ENTER_LM_TIME_MODE  41
 
 #if USE_EX_AUX
-/* -- User menu: extended aux voltage warning (53..54) -- */
-#define ENTER_EAUX_MODE     53
-#define EAUX_CLICKX         54
+/* -- User menu: extended aux voltage warning (42) -- */
+#define ENTER_EAUX_MODE     42
+#endif
+
+/* -- Верхняя граница (не включительно) для dispatch_t::op_index -- */
+#if USE_EX_AUX
+#define MAIN_OP_LAST        43
+#else
+#define MAIN_OP_LAST        42
 #endif
 
 /*******************************************************************************

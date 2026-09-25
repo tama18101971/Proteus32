@@ -202,8 +202,6 @@ int main(void)
 
     EE_PRINTF("\r\nBoot...\r\n");
 
-    sys_init();
-
     AWU_init();
     AWU_int_init();
     AWU_set_delay(AWU_15MS);
@@ -445,17 +443,12 @@ int main(void)
 
         if (thermal_sleep && !thermal_sleep_allowed())
         {
+            /* Ветви различались только сбросом need_sleep: у активного драйвера
+             * запрос сна снимается, у погасшего остаётся для следующего окна. */
             if (driver_is_active())
-            {
                 need_sleep = false;
-                sleep_owner = SLEEP_OWNER_NORMAL;
-                thermal_sleep = false;
-            }
-            else
-            {
-                sleep_owner = SLEEP_OWNER_NORMAL;
-                thermal_sleep = false;
-            }
+            sleep_owner = SLEEP_OWNER_NORMAL;
+            thermal_sleep = false;
         }
 
         if (Pressed)
