@@ -457,6 +457,43 @@ static __attribute__((noinline)) void clr_indicator(ind_clr_t ind_clr)  // бы�
         aux_off();  // red
 }
 
+/**
+ * @brief Подтверждение «прерыванием света»: гашение 30 мс и восстановление
+ *        запрошенного уровня (индикация как при сохранении яркости).
+ *
+ * DAC остаётся запитан (out_set_stc, а не set_current): свет именно мигает,
+ * а не перезапускается; step_user/soft-start/лимитер не затрагиваются.
+ * Вызывать только при горящем драйвере.
+ *
+ * noinline: три точки вызова (save_def_blink, slot_block, unblock_drv) —
+ * одиночная копия с jal дешевле встроенных копий (как clr_indicator).
+ */
+static __attribute__((noinline)) void blink_light(void)
+{
+    out_set_stc(0);
+    wait_ms(30);
+    out_set_stc(get_step_tc(step_user));
+}
+
+/**
+ * @brief Подтверждение блокировки/разблокировки.
+ * @param light_on Свет горел до переключения режима.
+ * @param unlock   true — разблокировка (aux_on), false — блокировка (aux_off).
+ *
+ * При выключенном exaux и горящем свете подтверждение даётся прерыванием
+ * света (blink_light(), как при сохранении яркости); иначе — прежней AUX-
+ * вспышкой (красная при блокировке, зелёная при разблокировке).
+ */
+static __attribute__((noinline)) void block_ack(bool light_on, bool unlock)
+{
+    if (light_on && !(EE.uif & UIF_EAUX_ONOFF_MASK))
+        blink_light();
+    else if (unlock)
+        aux_on();
+    else
+        aux_off();
+}
+
 /*******************************************************************************
  *  Slot action functions
  ******************************************************************************/
@@ -534,15 +571,25 @@ void off_strobe(void)
 #endif
 }
 
-/** @brief Enter block (locator beacon) mode. */
+/** @brief Enter block (locator beacon) mode.
+ *
+ * Индикация: при горящем свете (MODE_ON → MODE_BLOCK_ON) и выключенном
+ * exaux подтверждение даётся прерыванием света (blink_light(), как при
+ * сохранении яркости); иначе — прежняя красная вспышка aux_off().
+ */
 void slot_block(void)
 {
 #if USE_BLOCK
     if (driver_mode == MODE_ON)
+    {
         driver_mode = MODE_BLOCK_ON;
+        block_ack(true, false);
+    }
     else
+    {
         driver_mode = MODE_BLOCK;
-    aux_off();
+        block_ack(false, false);
+    }
 #endif
 }
 
@@ -555,16 +602,23 @@ void slot_block_beacon(void)
 #endif
 }
 
-/** @brief Exit block mode, return to normal. */
+/** @brief Exit block mode, return to normal.
+ *
+ * Индикация симметрична slot_block(): если до разблокировки свет горел
+ * (MODE_BLOCK_ON) и exaux выключен — прерывание света (blink_light());
+ * иначе — прежняя зелёная вспышка aux_on(). MODE_BLOCK_LIGHT (мини-свет)
+ * оставлен на прежней индикации.
+ */
 void unblock_drv(void)
 {
 #if USE_BLOCK
     lock_light_ticks = 0;
+    bool was_on = (driver_mode == MODE_BLOCK_ON);
     if (driver_mode == MODE_BLOCK_ON || driver_mode == MODE_BLOCK_LIGHT)
         driver_mode = MODE_ON;
     else
         driver_mode = MODE_OFF;
-    aux_on();
+    block_ack(was_on, true);
 #endif
 }
 
@@ -704,7 +758,7 @@ void calibration(void)
  * зелёная вспышка aux_on() (2 × 224 мс, как при разблокировке), основной
  * свет не прерывается (DAC не трогаем). При выключенном exaux — прежняя
  * логика: без подсветки (UIF_OFF_BCKL) подтверждение даётся коротким
- * гашением (out_set_stc(0) + пауза 30 мс), иначе — той же зелёной вспышкой.
+ * гашением (blink_light()), иначе — той же зелёной вспышкой.
  * Отказ LSI/AWU (USE_LSI_GUARD): start_aux_cmd() молча выходит, зелёная
  * вспышка не показывается — как у прочих AUX-индикаций (aux_err/aux_dang);
  * фолбэк на гашение света не добавлен ради экономии Flash.
@@ -715,10 +769,7 @@ static void save_def_blink(void)
     /* exaux снимает гашение: подтверждаем зелёной вспышкой (aux_on, 2 × 224 мс),
      * основной свет не прерываем. */
     if (UIF_GET_OFF_BCKL(EE.uif) && !(EE.uif & UIF_EAUX_ONOFF_MASK))
-    {
-        out_set_stc(0); wait_ms(30);
-        out_set_stc(get_step_tc(step_user));
-    }
+        blink_light();
     else
         clr_indicator(IND_GRN);
 }

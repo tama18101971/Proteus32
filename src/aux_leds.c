@@ -920,8 +920,11 @@ void slot_batt_ind(void) {
 
 /**
  * @brief Включение (две зелёные вспышки)
+ *
+ * noinline: два вызова (clr_indicator, block_ack) — одиночная копия с jal
+ * дешевле двух встроенных копий константы INFO_GRN (как aux_off).
  */
-void aux_on(void) {
+__attribute__((noinline)) void aux_on(void) {
 	start_aux_cmd(INFO_GRN, IDM_OTHER, AWU_60MS);
 }
 
