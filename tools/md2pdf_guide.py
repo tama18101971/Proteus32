@@ -17,7 +17,7 @@ Supported Markdown subset (deliberately small, so the source stays hand-editable
     <!-- widths: 30,70 -->  column width ratios for the next table
     ---                  thin separator
     *text*               final small-print paragraph
-Inline: **bold**, *italic*, `code`.
+Inline: **bold**, *italic*, `code`, {{red:текст}} (красный цвет).
 """
 
 from __future__ import annotations
@@ -50,7 +50,7 @@ from reportlab.platypus import (
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "docs" / "РУКОВОДСТВО_ПОЛЬЗОВАТЕЛЯ.md"
 DST = ROOT / "docs" / "Руководство_пользователя_Proteus32.pdf"
-PAGE_FOOTER = "Фонарь Proteus32 — инструкция для начинающего"
+PAGE_FOOTER = "Фонарь с драйвером Proteus 32 — инструкция пользователя"
 
 FONTS = {
     "Body": "C:/Windows/Fonts/segoeui.ttf",
@@ -72,6 +72,7 @@ NOTE_BG = colors.HexColor("#f2f7fb")
 WARN_BG = colors.HexColor("#fdf4ec")
 WARN_BAR = colors.HexColor("#c46a10")
 NOTE_BAR = ACCENT
+RED_HEX = "#c00000"
 
 
 # --------------------------------------------------------------------------- fonts
@@ -158,6 +159,14 @@ def inline(text: str) -> str:
     text = re.sub(r"`([^`]+)`", r'<font face="Mono" size="9">\1</font>', text)
     text = re.sub(r"\*\*([^*]+)\*\*", r"<b>\1</b>", text)
     text = re.sub(r"(?<![\*\w])\*([^*]+)\*(?!\w)", r"<i>\1</i>", text)
+    # Красный выделенный фрагмент: {{red:текст}}. Применяется последним,
+    # чтобы внутри него уже работали **bold** и *italic*.
+    text = re.sub(
+        r"\{\{red:(.*?)\}\}",
+        rf'<font color="{RED_HEX}">\1</font>',
+        text,
+        flags=re.S,
+    )
     return text
 
 
