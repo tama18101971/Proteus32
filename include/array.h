@@ -16,7 +16,7 @@ typedef enum {
 	SLOT_OP_EMPTY,        /**< Empty/unconfigured slot */
 	SLOT_BATT_IND,        /**< Battery indicator */
 	SLOT_STROBE,          /**< Tactical strobe */
-	SLOT_BLOCK_BEACON,    /**< Block beacon (block + beacon combo) */
+	SLOT_BLOCK_BEACON,    /**< Block beacon (lock + locator beacon armed for the lockout, session-only) */
 	SLOT_BLOCK,           /**< Block / locator beacon */
 	SLOT_TACTICAL,        /**< Tactical momentary */
 	SLOT_BACKLIGHT,       /**< Backlight / auxiliary light */
