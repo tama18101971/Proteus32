@@ -151,10 +151,6 @@ static const uint32_t strobe_gpt[] = {
 /* В RGB-формате нет cycle-бита: однокомандные зацикленные профили
  * оформлены 2-элементными массивами {cmd, AC_REP_ATSTART}. FSM догоняет
  * PER_NEXT в том же wake, тёмной паузы между циклами нет. */
-static const uint32_t strobe_30_30[] = {
-    MAKE_CMD_MS(HBL_LED, 0, 1, 30, 30, CMODE_TURBO, CMODE_OFF),
-    AC_REP_ATSTART,
-};
 static const uint32_t strobe_60_1s[] = {
     MAKE_CMD_MS(HBL_LED, 0, 1, 60, 1000, CMODE_MAX, CMODE_OFF),
     AC_REP_ATSTART,
@@ -173,14 +169,12 @@ static const uint32_t strobe_60_2s[] = {
  * multi-phase strobes only need an array and one descriptor below. */ 
 static const strobe_profile_t strobe_commands[STROBE_COUNT] = {
 #if USE_IND_RGB
-    { STROBE_PROFILE_ARRAY,   { .array = strobe_30_30 } }, /* 30ms / 30ms */
     { STROBE_PROFILE_ARRAY,   { .array = strobe_mix } }, /* 4 series 45/27x7, 30/30x10, 27/45x8, 40/60x6 ms, ~2.28 s cycle, no pause */
     { STROBE_PROFILE_ARRAY,   { .array = strobe_gpt } }, /* 10Hz 50% 0.8s (8 flashes) / 2s pause */
     { STROBE_PROFILE_ARRAY,   { .array = strobe_60_1s } }, /* 60ms / ~1s */
     { STROBE_PROFILE_ARRAY,   { .array = strobe_60_4s } }, /* 60ms / 4s */
     { STROBE_PROFILE_ARRAY,   { .array = strobe_60_2s } }, /* 60ms / 2s */
 #else
-    { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD_MS(HBL_LED, 1, 0, 30, 30, CMODE_TURBO, CMODE_OFF) } }, /* 30ms / 30ms */
     { STROBE_PROFILE_ARRAY,   { .array = strobe_mix } }, /* 4 series 45/27x7, 30/30x10, 27/45x8, 40/60x6 ms, ~2.28 s cycle, no pause */
     { STROBE_PROFILE_ARRAY,   { .array = strobe_gpt } }, /* 10Hz 50% 0.8s (8 flashes) / 2s pause */
     { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD_MS(HBL_LED, 1, 0, 60, 1000, CMODE_MAX, CMODE_OFF) } }, /* 60ms / ~1s */

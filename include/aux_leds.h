@@ -287,7 +287,7 @@ typedef enum {
 } Beacon_Mode_t;
 
 /** @brief Number of selectable AWU/DAC strobe profiles. */
-#define STROBE_COUNT 8u
+#define STROBE_COUNT 7u
 
 /**
  * @brief Backlight type (off/on).
