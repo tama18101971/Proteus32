@@ -117,14 +117,18 @@ static const uint32_t strobe_bike2[] = {
     AC_REP_ATSTART,
 };
 
-/* strobe_mix: three flash series of increasing speed, then a dark pause,
- * looping forever via AC_REP_ATSTART.  ON/OFF windows encode exactly at
- * PSC_128 (1 ms/LSB), except the dark pause (PSC_512, win 63 = 252 ms):
- *   Phase 1: count=7,  45 ms ON / 27 ms OFF  -> 7 flashes,  ~14 Hz, 504 ms
- *   Phase 2: count=10, 30 ms ON / 30 ms OFF -> 10 flashes, ~17 Hz, 600 ms
- *   Phase 3: count=8,  20 ms ON / 40 ms OFF -> 8 flashes,   60 ms period, 480 ms
- *   Phase 4: count=0, 250+250 ms dark                     -> 504 ms pause
- * Total cycle ~2.09 s, then AC_REP_ATSTART loops back to the start. */
+/* strobe_mix: four HBL flash series, then AC_REP_ATSTART loops back to the
+ * start.  The loop point is chained in the SAME AWU wake (handle_aux() catches
+ * PER_NEXT), so there is no dark pause between cycles.  count is the number of
+ * complete ON/OFF pairs; every flash is CMODE_TURBO, every gap CMODE_OFF.
+ * All half-periods are <= 63 ms, so they encode exactly at AWU_PSC_128
+ * (1 ms/LSB) — no window rounding, no PSC_512 clamp:
+ *   #1: count=7,  45 ms ON / 27 ms OFF ->  7 flashes,  72 ms period, ~13.9 Hz, 62 % duty, 504 ms
+ *   #2: count=10, 30 ms ON / 30 ms OFF -> 10 flashes, 60 ms period, ~16.7 Hz, 50 % duty, 600 ms
+ *   #3: count=8,  27 ms ON / 45 ms OFF ->  8 flashes,  72 ms period, ~13.9 Hz, 37 % duty, 576 ms
+ *   #4: count=6,  40 ms ON / 60 ms OFF ->  6 flashes, 100 ms period,  10 Hz,   40 % duty, 600 ms
+ * Total cycle ~2.28 s (504 + 600 + 576 + 600 ms), all timings nominal for a
+ * 128 kHz LSI (period = psc_value * win / 128 ms). */
 static const uint32_t strobe_mix[] = {
     MAKE_CMD_MS(HBL_LED, 0, 7, 45, 27, CMODE_TURBO, CMODE_OFF),
     MAKE_CMD_MS(HBL_LED, 0, 10, 30, 30, CMODE_TURBO, CMODE_OFF),
@@ -170,14 +174,14 @@ static const uint32_t strobe_60_2s[] = {
 static const strobe_profile_t strobe_commands[STROBE_COUNT] = {
 #if USE_IND_RGB
     { STROBE_PROFILE_ARRAY,   { .array = strobe_30_30 } }, /* 30ms / 30ms */
-    { STROBE_PROFILE_ARRAY,   { .array = strobe_mix } }, /* 7Hz 50% 1s/1s pause + 15Hz 40% 0.5s strobe + ~1s pause */
+    { STROBE_PROFILE_ARRAY,   { .array = strobe_mix } }, /* 4 series 45/27x7, 30/30x10, 27/45x8, 40/60x6 ms, ~2.28 s cycle, no pause */
     { STROBE_PROFILE_ARRAY,   { .array = strobe_gpt } }, /* 10Hz 50% 0.8s (8 flashes) / 2s pause */
     { STROBE_PROFILE_ARRAY,   { .array = strobe_60_1s } }, /* 60ms / ~1s */
     { STROBE_PROFILE_ARRAY,   { .array = strobe_60_4s } }, /* 60ms / 4s */
     { STROBE_PROFILE_ARRAY,   { .array = strobe_60_2s } }, /* 60ms / 2s */
 #else
     { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD_MS(HBL_LED, 1, 0, 30, 30, CMODE_TURBO, CMODE_OFF) } }, /* 30ms / 30ms */
-    { STROBE_PROFILE_ARRAY,   { .array = strobe_mix } }, /* 7Hz 50% 1s/1s pause + 15Hz 40% 0.5s strobe + ~1s pause */
+    { STROBE_PROFILE_ARRAY,   { .array = strobe_mix } }, /* 4 series 45/27x7, 30/30x10, 27/45x8, 40/60x6 ms, ~2.28 s cycle, no pause */
     { STROBE_PROFILE_ARRAY,   { .array = strobe_gpt } }, /* 10Hz 50% 0.8s (8 flashes) / 2s pause */
     { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD_MS(HBL_LED, 1, 0, 60, 1000, CMODE_MAX, CMODE_OFF) } }, /* 60ms / ~1s */
     { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD_MS(HBL_LED, 1, 0, 60, 4000, CMODE_MAX, CMODE_OFF) } }, /* 60ms / 4s */
