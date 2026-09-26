@@ -20,6 +20,11 @@
  *                         marker for the battery-indicator HBL command)
  *   [31:29] brightness1 — modes[] index 2nd half-period
  *
+ * In the RGB build (USE_IND_RGB=1) the AUX word has no cycle bit — bit 3 is
+ * given to device (see aux_leds.h) — so looped profiles are 2-element arrays
+ * {cmd, AC_REP_ATSTART} and the strobe profile table holds pointers only,
+ * without the type discriminator of the default build.
+ *
  * Array command elements:
  *   Each element is either an LED command (AUX_IS_SYS_CMD == false)
  *   or a system command (AUX_IS_SYS_CMD == true):
@@ -28,7 +33,7 @@
  *     AC_REP_ATSTEPS — loop from specified step
  *
  * Created: 22.02.2020
- * Modified: 28.08.2026
+ * Modified: 26.09.2026
  * Author: Tamagotchi
  */
 
@@ -82,6 +87,11 @@ static uint16_t aux_hbl_step;
 #define AUX_HBL_DIRECT_STEP CMODE_NOACTION
 
 #if USE_STROBE
+/* Тип профиля нужен только дефолтной сборке: там цикл кодируется битом
+ * cycle в команде (профиль — одиночная команда либо массив). В RGB-сборке
+ * cycle-бита нет (см. aux_leds.h), каждый зацикленный профиль — массив
+ * {cmd, AC_REP_ATSTART}, и таблица — просто массив указателей. */
+#if !USE_IND_RGB
 typedef enum {
     STROBE_PROFILE_COMMAND = 0,
     STROBE_PROFILE_ARRAY,
@@ -94,6 +104,7 @@ typedef struct {
         const uint32_t *array;
     } value;
 } strobe_profile_t;
+#endif
 
 /* SOS is the former buf_sos_red[] pattern, moved to the main HBL/DAC output.
  * Each pulse uses the same modes[] index as the single-command profiles. */
@@ -165,25 +176,36 @@ static const uint32_t strobe_60_2s[] = {
 };
 #endif
 
-/* A profile may be one packed command or an arbitrary command array.  New 
- * multi-phase strobes only need an array and one descriptor below. */ 
-static const strobe_profile_t strobe_commands[STROBE_COUNT] = {
+/* A profile may be one packed command or an arbitrary command array.  New
+ * multi-phase strobes only need an array and one descriptor below.
+ * The two tables below (RGB pointer array / default descriptor array) must
+ * stay in the same order: strobe_index is positional, so a reordering
+ * applied to only one of them gives the two variants different strobes. */
 #if USE_IND_RGB
-    { STROBE_PROFILE_ARRAY,   { .array = strobe_mix } }, /* 4 series 45/27x7, 30/30x10, 27/45x8, 40/60x6 ms, ~2.28 s cycle, no pause */
-    { STROBE_PROFILE_ARRAY,   { .array = strobe_gpt } }, /* 10Hz 50% 0.8s (8 flashes) / 2s pause */
-    { STROBE_PROFILE_ARRAY,   { .array = strobe_60_1s } }, /* 60ms / ~1s */
-    { STROBE_PROFILE_ARRAY,   { .array = strobe_60_4s } }, /* 60ms / 4s */
-    { STROBE_PROFILE_ARRAY,   { .array = strobe_60_2s } }, /* 60ms / 2s */
+static const uint32_t *const strobe_profiles[STROBE_COUNT] = {
+    strobe_mix,   /* 4 series 45/27x7, 30/30x10, 27/45x8, 40/60x6 ms, ~2.28 s cycle, no pause */
+    strobe_gpt,   /* 10Hz 50% 0.8s (8 flashes) / 2s pause */
+    strobe_60_1s, /* 60ms / ~1s */
+    strobe_60_4s, /* 60ms / 4s */
+    strobe_60_2s, /* 60ms / 2s */
+    strobe_bike2, /* bike strobe 2 */
+    strobe_sos,
+};
+_Static_assert(sizeof(strobe_profiles) / sizeof(strobe_profiles[0]) == STROBE_COUNT,
+               "strobe_profiles[] must cover STROBE_COUNT");
 #else
+static const strobe_profile_t strobe_commands[STROBE_COUNT] = {
     { STROBE_PROFILE_ARRAY,   { .array = strobe_mix } }, /* 4 series 45/27x7, 30/30x10, 27/45x8, 40/60x6 ms, ~2.28 s cycle, no pause */
     { STROBE_PROFILE_ARRAY,   { .array = strobe_gpt } }, /* 10Hz 50% 0.8s (8 flashes) / 2s pause */
     { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD_MS(HBL_LED, 1, 0, 60, 1000, CMODE_MAX, CMODE_OFF) } }, /* 60ms / ~1s */
     { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD_MS(HBL_LED, 1, 0, 60, 4000, CMODE_MAX, CMODE_OFF) } }, /* 60ms / 4s */
     { STROBE_PROFILE_COMMAND, { .command = MAKE_CMD_MS(HBL_LED, 1, 0, 60, 2000, CMODE_TURBO, CMODE_MID) } }, /* 60ms / 2s */
-#endif
     { STROBE_PROFILE_ARRAY,   { .array = strobe_bike2 } }, /* bike strobe 2 */
     { STROBE_PROFILE_ARRAY,   { .array = strobe_sos } },
 };
+_Static_assert(sizeof(strobe_commands) / sizeof(strobe_commands[0]) == STROBE_COUNT,
+               "strobe_commands[] must cover STROBE_COUNT");
+#endif
 #endif
 
 /**
@@ -458,7 +480,9 @@ static __attribute__((noinline)) void SetBrightness(LED_Bits_t device, uint8_t b
  */
 void start_aux_strobe(uint8_t index)
 {
+#if !USE_IND_RGB
 	const strobe_profile_t *profile;
+#endif
 
 #if USE_LSI_GUARD
 	/* Без LSI строб не отсчитает первый OFF-полупериод (луч залип бы на
@@ -484,6 +508,12 @@ void start_aux_strobe(uint8_t index)
 	 * пути из slot_strobe(), где рельс уже включён on_driver(). */
 	ON_POWER();
 
+#if USE_IND_RGB
+	/* RGB: cycle-бита в команде нет — все профили массивы, дискриминатора
+	 * нет. Старт через общий обработчик массивов (как дефолтная ветка ниже). */
+	start_aux_array(strobe_profiles[index], AWU_IMMEDIATELY);
+	aux_ctl.idmode = IDM_STROBE;
+#else
 	profile = &strobe_commands[index];
 	if (profile->type == STROBE_PROFILE_COMMAND) {
 		start_aux_cmd(profile->value.command, IDM_STROBE, AWU_IMMEDIATELY);
@@ -491,6 +521,7 @@ void start_aux_strobe(uint8_t index)
 		start_aux_array(profile->value.array, AWU_IMMEDIATELY);
 		aux_ctl.idmode = IDM_STROBE;
 	}
+#endif
 }
 #else
 /** @brief Stub when strobe support is disabled. */
