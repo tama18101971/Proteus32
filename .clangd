@@ -1,3 +1,15 @@
+# clangd configuration (shared by every machine — no absolute paths here).
+#
+# Include paths are NOT listed below: they can only come from
+# compile_commands.json, which is per-machine by construction. clangd needs
+# `directory` and the PlatformIO package dirs (~/.platformio/packages/...) to
+# be absolute and expands neither $VAR/%VAR% nor ~ inside
+# compile_commands.json, so a committed database is only valid on the machine
+# that produced it. Hence `compile_commands.json` is gitignored and must be
+# regenerated after every clone with:  python tools/gen_compile_db.py
+# Without it clangd silently loses every -I and reports "file not found"
+# cascades: the -I entries below are then resolved against the *source file's*
+# own directory, not against the project root.
 CompileFlags:
   CompilationDatabase: .
   Compiler: clang
@@ -7,12 +19,21 @@ CompileFlags:
   Add:
     - -target
     - riscv32
+    # Project-relative, so they survive a moved/renamed checkout. Needed for
+    # files the database has no entry for (new sources, headers): clangd then
+    # infers a command from the nearest database entry and keeps the project
+    # root as the working directory.
     - -I
     - include
     - -I
     - src
+    # WL_FLASH moved from a vendored libs/WL_FLASH (removed in d242824) to the
+    # lib_deps remote pin; the real path is env-specific
+    # (.pio/libdeps/<env>/WL_FLASH/src) and the database supplies it. This
+    # entry only covers a database generated before the dependency was
+    # installed; it is inert until .pio/libdeps/Proteus32 exists.
     - -I
-    - libs/WL_FLASH/src
+    - .pio/libdeps/Proteus32/WL_FLASH/src
     - -DCH32V003
     - -DCH32V00X
     - -DCH32V00x

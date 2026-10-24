@@ -20,7 +20,17 @@ pio device monitor               460800 8N1
 pio run -e Proteus32-RGB         RGB-индикатор (USE_IND_RGB=1: PC7=R, PC4=G, PC6=B;
                                  exaux выключен, раскладка EE.aux своя — старой в этом
                                  варианте не существует, WL_FORMAT_VERSION общий)
+python tools/gen_compile_db.py    compile_commands.json для clangd/Serena —
+                                 обязателен после клона и после смены build_flags
 ```
+
+### Editor tooling (clangd / Serena), multi-machine
+
+- **`.clangd` (tracked, machine-independent)** содержит только `-target riscv32`, `-D*` и проектные `-I include` / `-I src`. Пути include **не** хранятся в нём: они приходят только из `compile_commands.json`.
+- **`compile_commands.json` — всегда локальный файл, не коммитится.** clangd требует абсолютный `directory` и абсолютные пути к пакетам PlatformIO (`~/.platformio/packages/...`, `.pio/libdeps/<env>/WL_FLASH/src`) и **не подставляет** ни `$VAR`/`%VAR%`, ни `~` (проверено на clangd 19.1.2). Поэтому переносимый (относительный) вариант невозможен: БД пересоздаётся на каждой машине — `python tools/gen_compile_db.py` (после клона, после смены `build_flags`).
+- **Всегда ровно одно окружение:** `pio run -t compiledb` без `-e` обходит оба env из `platformio.ini`, и последний перезаписывает файл — `Proteus32-RGB` оставляет в БД `-DUSE_IND_RGB=1`, что меняет раскладку `app_cfg_t`/`aux_leds.h` и ~44 `#if USE_IND_RGB`. Скрипт это проверяет и ругается.
+- **Без БД clangd ломается каскадно:** fallback-команда строится с рабочим каталогом = каталог *исходника*, поэтому относительные `-I include` / `-I src` из `.clangd` резолвятся как `src/include` → «file not found» вместо нормального разбора. Признак: `Failed to find compilation database` в логе LSP.
+- **`.serena` синхронизируется** (`project.yml` + `memories/`), кроме `cache/` и `project.local.yml` — их исключает вложенный `.serena/.gitignore`. В корневом `.gitignore` правила `.serena` быть не должно: новые memories иначе молча выпадают из git. Serena игнорирует файлы из `.gitignore` (`ignore_all_files_in_gitignore: true`), т.е. исходники WL_FLASH в `.pio/libdeps/` в индекс не попадают — `wl_ob_*` ищутся только в заголовках `include/ob.h`, `include/app_data.h`.
 
 ## ⚠️ Hardware constraints
 
