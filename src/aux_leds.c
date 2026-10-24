@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /**
  * @file aux_leds.c
  * @brief AUX LED control module (red, green, backlight)

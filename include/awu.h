@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /**
  * @file awu.h
  * @brief Auto Wake-Up timer (AWU) for CH32V003

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /**
  * @file adc.c
  * @brief ADC driver for NTC temperature and Vbat measurement

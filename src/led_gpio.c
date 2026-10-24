@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /**
  * @file led_gpio.c
  * @brief GPIO LED driver: default — red (PC7/PC6) + green (PC4);

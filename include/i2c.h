@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /**
  * @file i2c.h
  * @brief Компактный master-transmitter драйвер I2C1 для CH32V003

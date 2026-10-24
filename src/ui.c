@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /**
  * @file ui.c
  * @brief UI action functions + ui_process dispatcher

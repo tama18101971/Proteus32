@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /*
  * awu.c — Реализация Auto Wake-Up таймера для CH32V003
  *

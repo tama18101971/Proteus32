@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /**
  * @file dac.h
  * @brief DAC7571 I2C DAC driver (12-bit)

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /**
  * @file    thermal_limiter.c
  * @brief   Zero-multiplication continuous PI Thermal Power Limiter with

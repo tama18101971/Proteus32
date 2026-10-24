@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /**
  * @file timers.h
  * @brief System tick timer (TIM2, 1 ms period)
