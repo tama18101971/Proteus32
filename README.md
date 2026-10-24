@@ -3,6 +3,9 @@
 [![MCU](https://img.shields.io/badge/MCU-CH32V003-blue.svg)](https://www.wch-ic.com/products/CH32V003.html)
 [![Architecture](https://img.shields.io/badge/Arch-RISC--V%2032--bit-orange.svg)]()
 [![Hardware](https://img.shields.io/badge/Hardware-Proteus%20IID-green.svg)]()
+[![Firmware](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](license.md)
+[![Hardware license](https://img.shields.io/badge/hardware%20license-CERN--OHL--S--2.0-yellow.svg)](license.md)
+[![Docs license](https://img.shields.io/badge/docs%20license-CC--BY--SA--4.0-lightgrey.svg)](license.md)
 
 **Proteus 32** — это продвинутая прошивка для драйвера светодиодного фонаря с управлением одной тактовой кнопкой.
 
@@ -142,3 +145,15 @@ pio device monitor           # мониторинг UART (460800 8N1)
 ## 📄 Документация
 
 Полное описание всех режимов, таблиц индикации и пошаговые примеры настройки приведены в [Руководстве пользователя (docs/РУКОВОДСТВО_ПОЛЬЗОВАТЕЛЯ.md)](docs/РУКОВОДСТВО_ПОЛЬЗОВАТЕЛЯ.md) / [PDF-версии](docs/Руководство_пользователя_Proteus32.pdf) в репозитории.
+
+---
+
+## 📜 Лицензия
+
+Проект распространяется на условиях смешанного лицензирования:
+
+* **Прошивка и исходный код** — [GPL-3.0-or-later](LICENSES/GPL-3.0.txt)
+* **Аппаратная часть и схемы** — [CERN-OHL-S-2.0](LICENSES/CERN-OHL-S-2.0.txt)
+* **Документация и медиа** — [CC-BY-SA-4.0](LICENSES/CC-BY-SA-4.0.txt)
+
+Подробности — в файле [license.md](license.md).
