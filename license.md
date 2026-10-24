@@ -1,6 +1,6 @@
 # Licensing Terms
 
-Copyright (c) 2026 tama18101971
+Copyright (c) 2026 Dmitriy Gorin
 
 This repository contains both hardware design files and firmware source code.
 Different licenses apply to different parts of the project:
