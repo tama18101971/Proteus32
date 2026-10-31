@@ -123,7 +123,7 @@
 
 ### Оболочка BootUI
 
-<img src="docs/bootui_screenshot.jpg" alt="Оболочка BootUI" width="830" height="786">
+<img src="docs/bootui_screenshot.jpg" alt="Оболочка BootUI" width="830" height="786" style="max-width: 830px; width: 100%; height: auto;">
 
 ---
 
