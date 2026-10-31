@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /**
  * @file limiters.c
  * @brief Thermal and electrical limiter coordinator

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #ifndef MINI_PRINTF_H
 #define MINI_PRINTF_H
 

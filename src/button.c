@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /**
  * @file button.c
  * @brief Pure FSM for button press pattern recognition

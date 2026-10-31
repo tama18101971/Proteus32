@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /**
  * @file soft_start.h
  * @brief Smooth brightness transitions (soft start)

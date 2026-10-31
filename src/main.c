@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /**
  * @file main.c
  * @brief Entry point and main loop for Proteus32 firmware
@@ -215,7 +217,7 @@ int main(void)
     dac_pwrpin_init();
     dac_pwrpin_on();
     i2c_init(400000);
-    dac7571_set_voltage(0);
+    dac_set_voltage(0);
     OFF_POWER();
 
     (void)ob_Init();

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /**
  * @file led_gpio.h
  * @brief GPIO LED control (no PWM)

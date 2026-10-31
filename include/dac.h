@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /**
  * @file dac.h
  * @brief DAC7571 I2C DAC driver (12-bit)
@@ -27,9 +29,18 @@
 #define DAC_H
 
 #include "i2c.h"
+#include "proteus_config.h"
 
 /** @brief DAC7571 I2C 7-bit address (A0 = GND). */
 #define DAC7571_I2C_ADDR    0x4C
+
+#if USE_DAC_MCP4725
+/** @brief Active DAC I2C 7-bit address (MCP4725). */
+#define DAC_I2C_ADDR        MCP4725_I2C_ADDR
+#else
+/** @brief Active DAC I2C 7-bit address (DAC7571). */
+#define DAC_I2C_ADDR        DAC7571_I2C_ADDR
+#endif
 
 /** @brief Maximum 12-bit DAC value. */
 #define DAC_MAX_VALUE       4095
@@ -65,6 +76,7 @@ void dac_pwrpin_off(void);
  * @param data_12bit 12-bit value (0-4095).
  * @return I2C_OK or I2C_NACK.
  */
-uint8_t dac7571_set_voltage(uint16_t data_12bit);
+uint8_t dac_set_voltage(uint16_t data_12bit);
+#define dac7571_set_voltage dac_set_voltage
 
 #endif /* DAC_H */

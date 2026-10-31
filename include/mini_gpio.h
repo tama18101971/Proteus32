@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /**
  * @file mini_gpio.h
  * @brief CH32V003 GPIO configuration helpers

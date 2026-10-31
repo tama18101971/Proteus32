@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /**
  * @file button_gpio.h
  * @brief Button GPIO handler (EXTI Line3 on PC3)

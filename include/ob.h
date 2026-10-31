@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /**
  * @file ob.h
  * @brief Оверлей пользовательских данных в Option Bytes (WL_FLASH v2.2.0)

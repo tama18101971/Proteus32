@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /*
  * timers.c — Таймер 2 (1 мс системный тик)
  *

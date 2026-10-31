@@ -1,6 +1,8 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /**
  * @file dac.c
- * @brief DAC7571 I2C DAC driver
+ * @brief I2C DAC driver (DAC7571 / MCP4725)
  *
  * DAC7571 connected via I2C1 (PC1=SDA, PC2=SCL).
  * 12-bit resolution for LED brightness control.
@@ -100,7 +102,7 @@ void dac_pwrpin_off(void)
  * @param data_12bit: значение от 0 до DAC_MAX_VALUE (12 бит)
  * @return I2C_OK или I2C_NACK
  */
-uint8_t dac7571_set_voltage(uint16_t data_12bit)
+uint8_t dac_set_voltage(uint16_t data_12bit)
 {
     // 1. Защита от выхода за границы 12-битного разрешения
     if (data_12bit > DAC_MAX_VALUE)
@@ -123,7 +125,7 @@ uint8_t dac7571_set_voltage(uint16_t data_12bit)
 
     // 3. Низкоуровневая транзакция с пошаговым контролем ошибок
     if (i2c_start() != I2C_OK ||
-        i2c_send_addr(DAC7571_I2C_ADDR, I2C_DIR_TX) != I2C_OK ||
+        i2c_send_addr(DAC_I2C_ADDR, I2C_DIR_TX) != I2C_OK ||
         i2c_write_byte(byte_msb) != I2C_OK ||
         i2c_write_byte(byte_lsb) != I2C_OK ||
         i2c_stop() != I2C_OK)

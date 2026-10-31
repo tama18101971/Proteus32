@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include "mini_printf.h"
 #include "ch32v00x.h"
 #include "proteus_config.h"
