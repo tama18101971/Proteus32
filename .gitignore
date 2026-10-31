@@ -31,3 +31,4 @@ build/
 Proteus32Flasher.spec
 
 .playwright-mcp/
+.serena/logs/health-checks/
