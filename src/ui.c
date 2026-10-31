@@ -201,7 +201,7 @@ void out_set_stc(uint16_t step)
 {
     uint16_t out = getBright_CRT_9to12Bit(step) + get_min_level(step);
     if (out > DAC_MAX_VALUE) out = DAC_MAX_VALUE;
-    dac7571_set_voltage(out);
+    dac_set_voltage(out);
 }
 
 /**
