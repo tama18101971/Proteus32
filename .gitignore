@@ -2,6 +2,9 @@
 .cache/
 .kilo/
 
+# zcode: per-session AI plans, machine-local
+.zcode/plans/
+
 # compile_commands.json is per-machine by construction: clangd needs an
 # absolute `directory` plus absolute PlatformIO package dirs and expands
 # neither $VAR/%VAR% nor ~ in it, so a committed copy is only valid on the
