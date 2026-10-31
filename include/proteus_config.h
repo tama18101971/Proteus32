@@ -78,6 +78,12 @@ _Static_assert(SYSCLK_HZ >= 8000000u && SYSCLK_HZ <= 48000000u,
  * Код использует #if USE_X, поэтому неопределённый макрос тоже
  * выключает функцию (как раньше #ifdef). */
 
+#ifndef USE_DAC_MCP4725
+#define USE_DAC_MCP4725 0   // 0 = DAC7571 (I2C 0x4C, дефолт), 1 = MCP4725 (I2C 0x60). Сборка: PLATFORMIO_BUILD_FLAGS="-DUSE_DAC_MCP4725=1" или env Proteus32-MCP4725
+#endif
+#ifndef MCP4725_I2C_ADDR
+#define MCP4725_I2C_ADDR 0x60u // 7-битный I2C адрес MCP4725 (A0 на GND)
+#endif
 #ifndef USE_IND_RGB
 #define USE_IND_RGB 0       // RGB-индикатор: PC7=red, PC4=green, PC6=blue (вместо двухканального красного PC7+PC6). Сборка: PLATFORMIO_BUILD_FLAGS="-DUSE_IND_RGB=1" или env Proteus32-RGB
 #endif

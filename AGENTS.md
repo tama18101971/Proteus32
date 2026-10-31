@@ -20,6 +20,9 @@ pio device monitor               460800 8N1
 pio run -e Proteus32-RGB         RGB-индикатор (USE_IND_RGB=1: PC7=R, PC4=G, PC6=B;
                                  exaux выключен, раскладка EE.aux своя — старой в этом
                                  варианте не существует, WL_FORMAT_VERSION общий)
+pio run -e Proteus32-MCP4725     ЦАП MCP4725 (USE_DAC_MCP4725=1, адрес 0x60)
+pio run -e Proteus32-RGB-MCP4725 ЦАП MCP4725 + RGB-индикатор
+pio run -e mcp4725-init          Сервисная микропрошивка однократной записи 0 В в EEPROM MCP4725
 python tools/gen_compile_db.py    compile_commands.json для clangd/Serena —
                                  обязателен после клона и после смены build_flags
 ```
@@ -56,7 +59,7 @@ python tools/gen_compile_db.py    compile_commands.json для clangd/Serena —
 - **Save-as-default ack** (`save_def_blink()`, `ui.c`): 5 clicks + hold (UI1/UI2 → `save_def_ui1/2`) — 30 ms light gap; with exaux on (`UIF_EAUX_ONOFF`, user menu item 9) no gap: 2 green flashes (`aux_on()`/`INFO_GRN`, same as unlock).
 - **Block/unblock ack** (`slot_block()`/`unblock_drv()`, `ui.c`; slot 5 = 4 quick clicks): with the light on and exaux off — light gap (`blink_light()`, 30 ms, shared with the save ack); with exaux on — unchanged `aux_off()`/`aux_on()` (red/green); light off — red/green in both cases; MODE_BLOCK_LIGHT keeps the old indication.
 - **Soft start** (`soft_start.c`): `ss_init(target, current, speed)`, `ss_scan()` @160 Hz; speeds `SS_NO=0, SS_SLOW=1, SS_FAST=7`; `out_set_stc()` → `OFF_POWER()` at 0.
-- **DAC** (`dac.c/h`): DAC7571 (12-bit) via I2C (PC1=SDA, PC2=SCL, PD0=pwr ctrl `dac_pwrpin_on/off`); 9-bit `step` → 12-bit via cubic gamma `(step^3) >> 15`. On failure `dac7571_set_voltage()` reinitialises I2C once (`i2c_init()`) — bus timeout cannot wedge writes (audit B1; timeout paths emit STOP).
+- **DAC** (`dac.c/h`): DAC7571 / MCP4725 (12-bit) via I2C (PC1=SDA, PC2=SCL, PD0=pwr ctrl `dac_pwrpin_on/off`); выбор ЦАП при компиляции через `USE_DAC_MCP4725` (0 = DAC7571 @ 0x4C, 1 = MCP4725 @ 0x60). 9-bit `step` → 12-bit via cubic gamma `(step^3) >> 15`. При сбое `dac_set_voltage()` выполняет реинициализацию I2C (`i2c_init()`). Сервисная утилита `tools/mcp4725_init/mcp4725_init.c` (`pio run -e mcp4725-init -t upload`) однократно прошивает 0 В в EEPROM MCP4725 для устранения заводской 50% предвспышки.
 - **LED GPIO** (`led_gpio.c/h`): direct-drive (no PWM). PC4=green, PC7=red push-pull, PC6=red low-side (pull-up); `on_red_h/l`, `off_red` switch pin mode (output-high/input-pullup/output-low) for brightness.
 
 ### Thermal limiter (`thermal_limiter.c/h`, config in `src/limiters.c`, tuning guide in `TUNING.md`)
