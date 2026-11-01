@@ -360,36 +360,25 @@ uint8_t ui_table_lookup(uint8_t mode, const btn_evt_t *evt, bool timeout)
         }
     }
 
-    /* Sub-modes HOLD -> MENU_EXIT (MODE_EAUX sits after the contiguous
-     * UIS..LM_TIME range and needs its own check). */
-    if (evt->type == BTN_EVT_HOLD &&
-        ((mode >= MODE_UIS && mode <= MODE_LM_TIME) ||
-         mode == MODE_CTK_H || mode == MODE_MOON_LEVEL
+    /* Подрежимы ввода кликов: HOLD -> MENU_EXIT, timeout -> menu_clickX() */
+    if ((mode >= MODE_UIS && mode <= MODE_LM_TIME) ||
+        mode == MODE_CTK_H || mode == MODE_MOON_LEVEL
 #if USE_EX_AUX
-         || mode == MODE_EAUX
+        || mode == MODE_EAUX
 #endif
-        ))
+       )
     {
-        menu_exit();
-        return 1;
-    }
-
-    /* Подрежимы ввода кликов: заменяют девять одинаковых строк «mode + любые
-     * клики» в eng_table/usr_table. Диапазон MODE_UIS..MODE_LM_TIME
-     * непрерывен; MODE_MOON_LEVEL, MODE_CTK_H и (USE_EX_AUX) MODE_EAUX стоят
-     * вне его, MODE_MAGIC/MODE_CTK_A ввода кликов не имеют. Условие
-     * повторяет бывшую строку таблицы: clicks/long_mask — любые, hold=false,
-     * wait_timeout=true. */
-    if (timeout && evt->type != BTN_EVT_HOLD
-        && (mode == MODE_MOON_LEVEL || mode == MODE_CTK_H
-            || (mode >= MODE_UIS && mode <= MODE_LM_TIME)
-#if USE_EX_AUX
-            || mode == MODE_EAUX
-#endif
-           ))
-    {
-        menu_clickX();
-        return 1;
+        if (evt->type == BTN_EVT_HOLD)
+        {
+            menu_exit();
+            return 1;
+        }
+        if (timeout)
+        {
+            menu_clickX();
+            return 1;
+        }
+        return 0;
     }
 
     /* Magic slot range handling */

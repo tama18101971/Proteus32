@@ -134,13 +134,11 @@ void ee_defaults(void)
 
     CFG_SET_UI1(EE, DEFAULT_STEP);
 
-    static const uint8_t def_slots[SLOTS_COUNT] = {
-        SLOT_DEFAULT_1CH, SLOT_DEFAULT_2CH, SLOT_DEFAULT_3C, SLOT_DEFAULT_3CH,
-        SLOT_DEFAULT_4C,  SLOT_DEFAULT_4CH, SLOT_DEFAULT_5C, SLOT_DEFAULT_5CH,
-        SLOT_DEFAULT_6C,  SLOT_DEFAULT_6CH
-    };
-    for (uint8_t i = 0; i < SLOTS_COUNT; i++)
-        slot_set(i, def_slots[i]);
+    EE.slots_packed[0] = (uint8_t)((SLOT_DEFAULT_2CH << 4) | (SLOT_DEFAULT_1CH & 0x0Fu));
+    EE.slots_packed[1] = (uint8_t)((SLOT_DEFAULT_3CH << 4) | (SLOT_DEFAULT_3C & 0x0Fu));
+    EE.slots_packed[2] = (uint8_t)((SLOT_DEFAULT_4CH << 4) | (SLOT_DEFAULT_4C & 0x0Fu));
+    EE.slots_packed[3] = (uint8_t)((SLOT_DEFAULT_5CH << 4) | (SLOT_DEFAULT_5C & 0x0Fu));
+    EE.slots_packed[4] = (uint8_t)((SLOT_DEFAULT_6CH << 4) | (SLOT_DEFAULT_6C & 0x0Fu));
 }
 
 /**
@@ -185,15 +183,11 @@ static inline uint16_t get_min_level(uint16_t step)
 uint16_t getBright_CRT_9to12Bit(uint16_t val)
 {
     if (val < 2) return val;
-    if (val < 10) return 1;
+    if (val < 32) return 1;
     if (val >= MAX_STEP) return DAC_MAX_VALUE;
 
     uint32_t x = val;
-    uint32_t result = (x * x * x) >> 15;
-
-    if (result == 0) result = 1;
-
-    return (uint16_t)result;
+    return (uint16_t)((x * x * x) >> 15);
 }
 
 /** @brief Set DAC output to gamma-corrected + moon level value for given step. */
@@ -397,11 +391,9 @@ void on_xmode_ui1(void)
 /** @brief Toggle turbo mode (max brightness) with prev-step recall (UI1). */
 void on_turbo_ui1(void)
 {
-    uint8_t start = on_driver();
-
     if (!ps.use_prev)
     {
-        ps.start = start;
+        ps.start = on_driver();
         ps.pr_step = step_user ? step_user : step_default;
         ps.use_prev = true;
         /* Турбо = максимум: если каскад защиты по напряжению уже урезал
@@ -604,20 +596,13 @@ void off_strobe(void)
 void slot_block(void)
 {
 #if USE_BLOCK
-    if (driver_mode == MODE_ON)
-    {
-        driver_mode = MODE_BLOCK_ON;
-        block_ack(true, false);
-    }
-    else
-    {
-        /* Чистая тёмная блокировка: маяк следует глобальной настройке,
-         * вооружение из «Блокировка + маяк» снимается (инвариант:
-         * beacon_lock_armed ⟺ тёмная блокировка пришла из slot_block_beacon). */
-        beacon_lock_armed = false;
-        driver_mode = MODE_BLOCK;
-        block_ack(false, false);
-    }
+    /* Чистая блокировка: маяк следует глобальной настройке,
+     * вооружение из «Блокировка + маяк» снимается (инвариант:
+     * beacon_lock_armed ⟺ тёмная блокировка пришла из slot_block_beacon). */
+    bool was_on = (driver_mode == MODE_ON);
+    beacon_lock_armed = false;
+    driver_mode = was_on ? MODE_BLOCK_ON : MODE_BLOCK;
+    block_ack(was_on, false);
 #endif
 }
 
@@ -1396,25 +1381,26 @@ void on_moon_ui2(void)
     on_mode(mode_current);
 }
 
-/** @brief Go to minimum mode (UI2, voltage-clamped). */
-void on_min_ui2(void)
+static void on_mode_clamped(uint8_t req)
 {
-    uint8_t clamped = get_up_mode(CMODE_MIN);
-    if (clamped < CMODE_MIN)          /* даже MIN урезан по напряжению */
+    uint8_t clamped = get_up_mode(req);
+    if (clamped < req)
         aux_err_now();
     mode_current = clamped;
     on_mode(mode_current);
+}
+
+/** @brief Go to minimum mode (UI2, voltage-clamped). */
+void on_min_ui2(void)
+{
+    on_mode_clamped(CMODE_MIN);
 }
 
 /** @brief Go to memorised/default mode (UI2, voltage-clamped). */
 void on_xmode_ui2(void)
 {
     uint8_t req = UIF_GET_USE_MEMORY(EE.uif) ? mode_default : UIF_GET_UI2(EE.uif);
-    uint8_t clamped = get_up_mode(req);
-    if (clamped < req)                /* запрошенный режим урезан по напряжению */
-        aux_err_now();
-    mode_current = clamped;
-    on_mode(mode_current);
+    on_mode_clamped(req);
 }
 
 /** @brief Cycle up to next mode (UI2). */
@@ -1676,11 +1662,11 @@ void ui_process(void)
     if (!evt) return;
 
     clicks_count = evt->clicks;
+    tick_5s_reset();
 
     switch (evt->type)
     {
         case BTN_EVT_PRESSED:
-            tick_5s_reset();
             /* В режимах блокировки работает только жест разблокировки;
              * каждое нажатие подтверждается красной вспышкой DANG_RED. */
             if (driver_mode == MODE_BLOCK || driver_mode == MODE_BLOCK0 ||
@@ -1699,14 +1685,12 @@ void ui_process(void)
             break;
 
         case BTN_EVT_RELEASED:
-            tick_5s_reset();
             stop_bit = false;
             ui_table_lookup(driver_mode, evt, false);
             break;
 
         case BTN_EVT_HOLD:
         {
-            tick_5s_reset();
             uint8_t prev_mode = driver_mode;
 
             /* Удержание, которым был вызван slot/меню (или вход в меню при
@@ -1735,7 +1719,6 @@ void ui_process(void)
         }
 
         case BTN_EVT_CLICK_SEQ:
-            tick_5s_reset();
             /* UI2 handles long clicks on release.  Do not dispatch the same
              * long gesture again when its click-sequence timeout expires. */
             if (UI_IS_DISCRETE(ui_idx) && evt->long_mask)

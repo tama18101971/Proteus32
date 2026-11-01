@@ -103,13 +103,8 @@ uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
         if (delta_i == 0 && error_fp > 0) {
             delta_i = 1;
         }
-    } else if (t_cur_fp >= t_threshold_fp) {
-        /* Equilibrium hold band: zero drift, holds steady-state output */
-        p_term = 0;
-        delta_i = 0;
-    } else {
+    } else if (t_cur_fp < t_threshold_fp) {
         /* Cool / Recovery zone: gentle proportional decay */
-        p_term = 0;
         int16_t cool_error_fp = (int16_t)(t_threshold_fp - t_cur_fp);
         int16_t cool_error = (int16_t)(cool_error_fp >> THERMAL_TEMP_FP_SHIFT);
         delta_i = (int16_t)(-(cool_error >> config->ki_recov_shift));
@@ -117,6 +112,8 @@ uint16_t ThermalLimiter_Update(const ThermalLimiterConfig_t *config,
             delta_i = -1;
         }
     }
+    /* Equilibrium hold band (t_threshold_fp <= t_cur_fp < t_set_fp):
+     * p_term and delta_i remain 0 (zero drift, holds steady-state output) */
 
     /* e) Fixed-point integral update with anti-windup clamping */
     int32_t total_fp = ((int32_t)state->integral << THERMAL_FP_SHIFT) + (int32_t)state->sub_integral;

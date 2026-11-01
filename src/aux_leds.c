@@ -453,20 +453,15 @@ static void start_aux_cmd(uint32_t command, IDM_Type_t idm_mode, awu_tick_t dela
  */
 static __attribute__((noinline)) void SetBrightness(LED_Bits_t device, uint8_t brightness)
 {
-	if (device & RED_LED) {
-		if (brightness) on_red_h();
-		else smart_off_leds(RED_LED);
-	}
-	if (device & GRN_LED) {
-		if (brightness) on_grn_h();
-		else smart_off_leds(GRN_LED);
-	}
+	if (brightness) {
+		if (device & RED_LED) on_red_h();
+		if (device & GRN_LED) on_grn_h();
 #if USE_IND_RGB
-	if (device & BLUE_LED) {
-		if (brightness) on_blue_h();
-		else smart_off_leds(BLUE_LED);
-	}
+		if (device & BLUE_LED) on_blue_h();
 #endif
+	} else {
+		smart_off_leds(device);
+	}
 	if (device & HBL_LED) {
 		/* HBL uses the same discrete brightness index as UI2.  Do not call
 		 * set_current(): it changes step_user and can power down the DAC. */
