@@ -1,12 +1,16 @@
 # Code conventions
-- C99; stdint.h fixed-width only (uint8_t/int16_t/...); never bare int/short/long
-- snake_case locals/fields; PascalCase public API prefixed per module (ThermalLimiter_*, etc.)
-- Doxygen `/** @brief ... */` above EVERY function; update it whenever signature/behavior changes
-- #ifndef guards on headers; timeout counters on every while loop
-- Bare metal > SDK: direct register writes (port->CFGLR, USART1->DATAR); mini_gpio.h allowed for new GPIO; do not rewrite existing bare-metal inline funcs
-- No 32-bit mul/div in hot paths (RV32EC) — bit shifts + fixed point (established scales: temp EMA ×32, PI integral ×64, DAC gamma (step^3)>>15)
-- Feature flags USE_* gate only function BODIES in include/proteus_config.h (USE_STROBE, USE_BLOCK, USE_BATTIND, USE_MENU, USE_AUX_ERR, USE_EX_AUX, USE_MAGIC_SLOTS; UART_DEBUG, PRINT_ADC for debug output) — as of 2026-09-04 all 7 USE_* flags are enabled; dispatch tables are always compiled — never #ifdef them out
-- ui_table_idx valid only: 1 (UI1), 2/3 (UI2), 5/6 (menus) — 5/6 assigned only at boot (enter_menu_at_boot); clamp to 1..3 otherwise, else dead UI (reboot-only)
-- Data: EE.fieldname = (*WL_DATA_AS(app_cfg_t)) via include/app_data.h (WL_FLASH v2.0.1, payload struct app_cfg_t); hardware calibration via ob.c Option Bytes (calibration() writes OB, never WL_FLASH)
-- Serialized 32-bit formats (Flash-stored command words, e.g. AUX commands — see mem:aux_cmd_bit_layout) must NEVER be decoded via C bitfields: use explicit AUX_*_MASK/AUX_*_SHIFT macros + AUX_xxx() accessors, guarded by _Static_assert (overlap/gap/round-trip/golden-value). Bitfields are OK only for internal never-serialised state structs.
-- Style reference: root AGENTS.md is canonical and mirrors these rules
+- C99; stdint.h fixed-width only (uint8_t/int16_t/...); never bare int/short/long.
+- snake_case locals/fields; PascalCase public API prefixed per module (ThermalLimiter_*, etc.).
+- Doxygen `/** @brief ... */` above EVERY function; update it whenever signature/behavior changes.
+- #ifndef guards on headers; timeout counters on every while loop.
+- Bare metal > SDK: direct register writes (port->CFGLR, USART1->DATAR); GPIO_PinConfig() from mini_gpio.h for new GPIO (masks Mode with &0x0F); do not rewrite existing bare-metal inline funcs.
+- No 32-bit mul/div in hot paths (RV32EC) — bit shifts + fixed point (established scales: temp EMA ×32, PI integral ×64, DAC gamma (step^3)>>15).
+- Feature flags USE_* gate only function BODIES in include/proteus_config.h; dispatch tables are always compiled — never #ifdef them out.
+- ui_table_idx valid only: 1 (UI1), 2/3 (UI2), 5/6 (menus) — 5/6 assigned only at boot (enter_menu_at_boot); clamp to 1..3 otherwise, else dead UI (reboot-only).
+- Dispatch table consistency: main_op[] size is MAIN_OP_LAST (42 entries, 43 with USE_EX_AUX=1). Indices 0..12 are frozen (0..11 FUN_Index_t slot content, 12 SLOT_UI_SELECT). Menu sub-modes (menu_clickX) called directly from ui_table_lookup, not table rows.
+- Lockout modes are NOT contiguous: {0, 1, 6, 7}, tested strictly via BLOCK_MODE_MASK. Never test via `mode <= MODE_BLOCK_LIGHT` (which swallows normal modes 3..5).
+- Dual semantics of mode_current: user mode in UI2/UI3 vs protection ceiling latch in UI1/tactical. Voltage cascade must only decrement mode_current/volt_stop_mode and clamp brightness down; never unconditionally call set_current() on cascade step-down.
+- Voltage protection latches: ADC measurement failure resets confirmation streaks only (reset_voltage_streaks), keeping volt_stop_mode intact. Full reset to CMODE_TURBO via reset_voltage_latches() occurs only on driver off/reactivation.
+- Data: `EE.fieldname = (*WL_DATA_AS(app_cfg_t))` via include/app_data.h (WL_FLASH v2.4.0, 9 B payload, -DWL_FORMAT_VERSION=4). Hardware calibration via Option Bytes overlay include/ob.h (`OB_CFG->field = x; wl_ob_mark_dirty()`; calibration() writes OB, never WL_FLASH).
+- Serialized 32-bit formats (Flash-stored command words, e.g. AUX commands — see `mem:aux_cmd_bit_layout`) must NEVER be decoded via C bitfields: use explicit AUX_*_MASK/AUX_*_SHIFT macros + AUX_xxx() accessors, guarded by _Static_assert (overlap/gap/round-trip/golden-value). Bitfields are OK only for internal never-serialised state structs.
+- Style reference: root AGENTS.md is canonical and mirrors these rules.

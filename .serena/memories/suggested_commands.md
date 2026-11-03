@@ -1,14 +1,21 @@
 # Commands (Windows / PowerShell environment)
-- `pio run` — build; ALWAYS inspect flash size in output (cap 16128 B, near 100% is normal here)
-- `pio run -t clean; pio run` — clean rebuild (run sequentially)
-- `pio run -t upload` — flash via WCH-Link
-- `pio device monitor` — serial 460800 8N1 (2 Hz debug line is the health check)
+- `pio run` — build all default environments; ALWAYS inspect flash size in output (cap 16128 B, near 100% is normal here).
+  - Note: if `pio` is not in PowerShell PATH, invoke via `& "$HOME\.platformio\penv\Scripts\pio.exe" run`.
+- `pio run -e <env>` — build specific target:
+  - `Proteus32`: baseline build (DAC7571)
+  - `Proteus32-RGB`: RGB indicator build (-DUSE_IND_RGB=1)
+  - `Proteus32-MCP4725`: MCP4725 DAC build (-DUSE_DAC_MCP4725=1)
+  - `Proteus32-RGB-MCP4725`: RGB indicator + MCP4725 DAC
+  - `mcp4725-init`: standalone utility to flash 0 V into MCP4725 EEPROM
+- `pio run -t clean; pio run` — clean rebuild (run sequentially).
+- `pio run -t upload` — flash via WCH-Link.
+- `pio device monitor` — serial 460800 8N1 (2 Hz debug line is the health check).
+- `pytest test/test_protocol_v2.py -v` — verify bootloader v2 protocol byte vectors.
 - `python tools/gen_compile_db.py` — regenerate compile_commands.json for clangd/Serena (project root); run after every clone and after any build_flags change. Adds `-e <env>` (default `Proteus32`) and verifies the result (src/*.c entries, expected -D, no RGB leak, every -I dir exists, no UTF-8 BOM).
-  - WHY a script, not a committed file (verified on clangd 19.1.2): the DB needs an absolute `directory` plus absolute PlatformIO package dirs, and clangd expands neither `$VAR`/`%VAR%` nor `~` in it, and a relative `directory` does not match the opened file. So the DB is inherently per-machine and stays gitignored. Consequence: WITHOUT the DB clangd loses every -I and reports "file not found" cascades — the fallback command's working directory is the *source file's* directory, so the relative `-I include` in `.clangd` resolve as `src/include`. `.clangd`'s `Add` block is NOT a safety net for includes; it only carries `-target riscv32`, `-D*`, `-Oz` and project-relative `-I include` / `-I src` (those work as long as the DB exists, incl. for new files/headers, where clangd infers a command from the nearest DB entry).
-  - ALWAYS pass exactly one env: plain `pio run -t compiledb` walks both envs and the last one wins, leaving `-DUSE_IND_RGB=1` in the DB (changes `app_cfg_t`/`aux_leds.h` layout and ~44 `#if USE_IND_RGB` sites). The script refuses to leave that unnoticed.
-  - Stale-entry cleanup (2026-09-28): `.clangd` used to carry `-I libs/WL_FLASH/src`, dead since WL_FLASH moved to the `lib_deps` remote pin (commit d242824) — the live path is `.pio/libdeps/<env>/WL_FLASH/src`, which only the DB supplies. Also: compile_commands.json MUST be written WITHOUT UTF-8 BOM (PS 5.1 `Set-Content -Encoding UTF8` adds one — clangd's JSON parser fails → flagless fallback cascade); clangd rejects gcc-only flags (-march=rv32ecxw, -msmall-data-limit, -fmessage-length, -msave-restore, -flto), hence the `Remove:` list. After editing `.clangd` or the DB, restart the LSP (re-activate project). Freshness check: if `board_build.f_cpu` or CH32V* defines change, re-run the script AND update SYSCLK_FREQ_* in `.clangd` to match — a stale 24↔48 MHz define misparses SDK `SetSysClockTo_*` branches but produces no app-code diagnostics, so it can drift silently (last caught 2026-09-04).
+  - WHY a script, not a committed file (verified on clangd 19.1.2): the DB needs an absolute `directory` plus absolute PlatformIO package dirs, and clangd expands neither `$VAR`/`%VAR%` nor `~` in it, and a relative `directory` does not match the opened file. So the DB is inherently per-machine and stays gitignored. Consequence: WITHOUT the DB clangd loses every -I and reports "file not found" cascades — the fallback command's working directory is the *source file's* directory, so the relative `-I include` in `.clangd` resolve as `src/include`. `.clangd`'s `Add` block is NOT a safety net for includes; it only carries `-target riscv32`, `-D*`, `-Oz` and project-relative `-I include` / `-I src`.
+  - ALWAYS pass exactly one env: plain `pio run -t compiledb` walks multiple envs and the last one wins, leaving `-DUSE_IND_RGB=1` in the DB (changes `app_cfg_t`/`aux_leds.h` layout and ~44 `#if USE_IND_RGB` sites). The script refuses to leave that unnoticed.
+  - Compile DB details: MUST be written WITHOUT UTF-8 BOM (clangd JSON parser fails on BOM); clangd rejects gcc-only flags (-march=rv32ecxw, -msmall-data-limit, -fmessage-length, -msave-restore, -flto), hence the `Remove:` list in gen_compile_db.py.
   - clangd `--check` noise to ignore: `tweak: DefineInline/DefineOutline ==> FAIL` are --check-mode refactoring tests on `static inline` header functions, not source diagnostics; serena's `get_diagnostics_for_file` is the authoritative check.
-- `build_exe.cmd` — rebuild PC flasher (PyInstaller) → dist/Proteus32Flasher.exe
-- `flash_tool.cmd` — flash firmware.bin via Proteus32Flasher.exe; portable already (`%~dp0`-relative, checked 2026-09-28). Its default BIN path was stale: `.pio\build\genericCH32V003F4U6\firmware.bin` (the old board-named dir) → fixed to `.pio\build\Proteus32\firmware.bin` (env-named build dir). Override with `%2` for the RGB build.
-- Agent note: shell is PowerShell (run_commands tool) — use Get-ChildItem/Select-String instead of ls/grep; avoid `>` redirection for file writes, prefer Set-Content or [System.IO.File]::WriteAllText; batch stateful read-modify-write into a SINGLE command (parallel command batches have raced before)
-- When editing files outside the workspace (e.g. Cline config in %USERPROFILE%\.cline), filesystem MCP is restricted to C:\Sonet5 — use run_commands instead
+- `build_exe.cmd` — rebuild PC flasher (PyInstaller) → dist/Proteus32Flasher.exe.
+- `flash_tool.cmd` — flash firmware.bin via Proteus32Flasher.exe (%~dp0-relative, default BIN `.pio\build\Proteus32\firmware.bin`).
+- Agent note: shell is PowerShell (run_commands tool) — use Get-ChildItem/Select-String instead of ls/grep; avoid `>` redirection for file writes, prefer Set-Content or [System.IO.File]::WriteAllText; batch stateful read-modify-write into a SINGLE command.

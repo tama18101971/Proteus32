@@ -23,14 +23,17 @@ so it is NEVER decoded through C bitfields — bitfield layout is implementation
 - Build: MAKE_SYS_CMD(op, steps); test: AUX_IS_SYS_CMD(word) == ((word & 0xFFFFFFE0) == 0)
 - Plain array elements like `AC_REP_ATSTART` are valid system commands as-is.
 
+## RGB indicator variant (USE_IND_RGB=1, env Proteus32-RGB)
+- Hardware: PC7=Red, PC4=Green, PC6=Blue direct drive.
+- In `app_data.h`, `beacon_type` in `EE.aux` is stored as a 2-bit index (`BT_RED..BT_HBL`), freeing 1 bit for the 2-bit backlight color.
+- In `aux_leds.c`, strobe profiles table is an array of pointers (all profiles are arrays, no cycle bit → no discriminator needed), saving flash compared to the dual-format baseline.
+
 ## Compile-time guards in aux_leds.h (do not remove)
 - sizeof(union AUX_Cmd_u) == 4; sizeof(AUX_Ctr_t) == 4
 - Pairwise mask non-overlap asserts + masks tile 0xFFFFFFFF exactly
 - Golden round-trip: MAKE_CMD(0x7,1,15,7,63,7,63,7,7) == 0xFFFFFFFF and decodes back
 - Regression freeze: INFO_RED == 0x0789C311, INFO_GRN == 0x0783C222,
   ERRO_RED == 0x07C07831, DANG_RED == 0x07C07811
-  (asserts fold to constants — zero Flash cost; verified 2026-08-31:
-  Flash 15928/16128 vs 15936 baseline, LSP clangd include-path errors in IDE are pre-existing noise)
 
 ## AUX_Ctr_t
 Internal (never serialised) state — bitfields allowed there; only size is pinned.
