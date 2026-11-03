@@ -162,7 +162,7 @@ extern uint8_t mode_default;
  *  UI timing constants (recalculated for 160 Hz)
  ******************************************************************************/
 
-#define LONG_HOLD_RAMP_PAUSE_UI1    80
+#define LONG_HOLD_RAMP_PAUSE_UI1    120
 #define FASTEST_RAMP_REPEAT_UI1     2
 #define DIRECTION_TIMEOUT_UI1       80
 

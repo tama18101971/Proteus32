@@ -245,6 +245,7 @@ void off_driver(uint8_t reset_step, SoftStartSpeed_t ss_speed)
     /* Свежий каскад защиты по напряжению на следующее включение:
      * scan_voltage() стартует с потолка get_stepi(CMODE_TURBO) = MAX_STEP. */
     mode_current = CMODE_TURBO;
+    reset_voltage_latches();
 
     set_current(0, ss_speed);
     if ((ss_speed != SS_NO) && !step_tc)

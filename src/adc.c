@@ -699,18 +699,27 @@ __attribute__((noinline, noreturn)) void down_forever(void)
  * при затяжном сбое обеспечивает scan_limiters_fault() (гашение луча).
  */
 /**
- * @brief Сбросить все латчи потолка режимов и серии подтверждений.
+ * @brief Сбросить серии подтверждений защиты по напряжению.
  *
- * Вызывается при сбое АЦП (невалидная выборка) и при неактивном драйвере
- * (выкл/вкл фонаря): монотонный латч volt_stop_mode возвращается
- * в CMODE_TURBO, все счётчики серий обнуляются.
- * Используется вместо дублирующегося кода в двух местах scan_voltage().
+ * Сбой/таймаут АЦП рвёт серии подтверждений, но сохраняет текущий
+ * защитный потолок volt_stop_mode.
  */
-static void reset_voltage_latches(void)
+static void reset_voltage_streaks(void)
 {
     voff_count = 0;
     voff_count_off = 0;
     vdeep_count = 0;
+}
+
+/**
+ * @brief Сбросить все латчи потолка режимов и серии подтверждений.
+ *
+ * Вызывается при неактивном драйвере (выкл/вкл фонаря): монотонный латч
+ * volt_stop_mode возвращается в CMODE_TURBO, все счётчики серий обнуляются.
+ */
+void reset_voltage_latches(void)
+{
+    reset_voltage_streaks();
     volt_stop_mode = CMODE_TURBO;
 }
 
@@ -728,8 +737,9 @@ void scan_voltage(void)
     {
         /* Сбой — не отсчёт: невалидная выборка рвёт ВСЕ серии подтверждений
          * (UNDERVOLT_CONFIRM_COUNT / UV_DEEP_CONFIRM), как это делает и
-         * low_count в strobe_voltage_low(). */
-        reset_voltage_latches();
+         * low_count в strobe_voltage_low(). Текущий потолок volt_stop_mode
+         * сохраняется. */
+        reset_voltage_streaks();
         return;
     }
 

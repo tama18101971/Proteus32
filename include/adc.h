@@ -247,6 +247,11 @@ bool beacon_low_voltage_update(void);
 void scan_voltage(void);
 
 /**
+ * @brief Reset voltage protection confirmation streaks and mode ceiling latch.
+ */
+void reset_voltage_latches(void);
+
+/**
  * @brief Voltage latch — monotonic latch, only decreases during a sag
  * (подтверждённый каскад mode_current, все UI). NOT restored on voltage
  * recovery (ТЗ). Reset to CMODE_TURBO only on driver off/on
