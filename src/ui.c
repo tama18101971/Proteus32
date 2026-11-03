@@ -97,8 +97,8 @@ void ON_POWER(void)
     //EE_PRINTF("[UI] ON PWR.\r\n");
     reset_limiters();
     dac_pwrpin_on();
+    wait_ms(10);  // DAC power-on reset / wake-up
     i2c_init(400000);
-    wait_ms(5);  // DAC7571 power-on reset / wake-up
 }
 
 /** @brief Power-off sequence: deinit I2C, disable DAC. */
