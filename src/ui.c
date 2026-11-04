@@ -246,6 +246,7 @@ void off_driver(uint8_t reset_step, SoftStartSpeed_t ss_speed)
      * scan_voltage() стартует с потолка get_stepi(CMODE_TURBO) = MAX_STEP. */
     mode_current = CMODE_TURBO;
     reset_voltage_latches();
+    max_step = MAX_STEP;
 
     set_current(0, ss_speed);
     if ((ss_speed != SS_NO) && !step_tc)
@@ -403,7 +404,7 @@ void on_turbo_ui1(void)
          * драйвера (фикс «индикация работает через раз»). */
         if (mode_current < CMODE_TURBO)
             aux_err_now();
-        set_current(max_step, SS_FAST);
+        set_current(get_stepi(mode_current), SS_FAST);
     }
     else
     {
