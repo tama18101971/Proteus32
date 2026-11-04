@@ -264,9 +264,23 @@ static void start_aux_array(const uint32_t *pArray, awu_tick_t delay) {
  *   - Если цвет подсветки совпадает с каналом — включает слабый режим (on_*_l)
  *   - Иначе — полное выключение (off_*)
  * Если подсветка выключена — полное выключение.
+ *
+ * При выключенном exaux (UIF_EAUX_ONOFF) слабый режим дополнительно
+ * подавляется, пока светит основной диод (MODE_ON..MODE_BLOCK_LIGHT):
+ * подсветка гаснет при включении света и возвращается при выключении.
+ * Вычисляется на каждом вызове, EE.aux не изменяется.
  */
 void smart_off_leds(LED_Bits_t channel) {
 	uint8_t bck_on = (AUXF_GET_BCKLIGHT_TYPE(EE.aux) == BCK_TYPE_ON);
+	/* Exaux выключен: слабая подсветка не показывается, пока светит основной
+	 * диод — MODE_ON..MODE_BLOCK_LIGHT (обычный свет, строб, блокировка со
+	 * светом, мини-свет); EE.aux не трогаем. Беззнаковый диапазонный тест
+	 * дешевле вызова driver_is_active() + проверки MODE_STROB; при
+	 * driver_mode < MODE_ON разница уходит в старшие биты unsigned, что
+	 * корректно отсекает тёмные режимы (BLOCK, BLOCK0, BLOCK_C, OFF). */
+	if (!(EE.uif & UIF_EAUX_ONOFF_MASK) &&
+			(unsigned)(driver_mode - MODE_ON) <= (unsigned)(MODE_BLOCK_LIGHT - MODE_ON))
+		bck_on = 0;
 	if (channel & RED_LED) {
 		(bck_on && AUXF_GET_BCKLIGHT_COLOR(EE.aux) == BCK_COLOR_RED) ? on_red_l() : off_red();
 	}

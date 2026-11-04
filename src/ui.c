@@ -201,6 +201,9 @@ void out_set_stc(uint16_t step)
 /**
  * @brief Turn on driver (power, direction, vwarning).
  * @return 1 if power was applied, 0 if already on or blocked.
+ *
+ * При включении гасит слабую подсветку кнопки (при выключенном exaux):
+ * aux_refresh_backlight() пересчитывает её по новому driver_mode.
  */
 uint8_t on_driver(void)
 {
@@ -224,6 +227,7 @@ uint8_t on_driver(void)
         vwarning = VWARNING_NONE;
         direction = DIR_UP;
         driver_mode = MODE_ON;
+        aux_refresh_backlight();
         return 1;
     }
 
@@ -234,6 +238,9 @@ uint8_t on_driver(void)
  * @brief Turn off driver with optional soft-start ramp-down.
  * @param reset_step If true, clear step_tc.
  * @param ss_speed   Soft-start speed for ramp-down.
+ *
+ * Возвращает слабую подсветку кнопки (при выключенном exaux):
+ * aux_refresh_backlight() пересчитывает её по driver_mode = MODE_OFF.
  */
 void off_driver(uint8_t reset_step, SoftStartSpeed_t ss_speed)
 {
@@ -275,6 +282,7 @@ void off_driver(uint8_t reset_step, SoftStartSpeed_t ss_speed)
 
     stop_aux_if(IDM_VWARNING, false);
     stop_aux_if(IDM_BEACON, false);
+    aux_refresh_backlight();    /* свет погас — вернуть слабую подсветку (exaux off) */
 
     /* Memory mode: сессионная яркость/режим (step_default/mode_default)
      * хранится только в SRAM — Standby сохраняет её во время сна, во
@@ -648,7 +656,11 @@ void unblock_drv(void)
 #endif
 }
 
-/** @brief Turn on temporary CMODE_MIN light in lockout mode. */
+/** @brief Turn on temporary CMODE_MIN light in lockout mode.
+ *
+ * Свет включается в обход on_driver(), поэтому гашение слабой подсветки
+ * (при выключенном exaux) делается здесь отдельным aux_refresh_backlight().
+ */
 void lock_light_on(DRIVER_Mode_t prev_mode)
 {
 #if USE_BLOCK
@@ -662,6 +674,7 @@ void lock_light_on(DRIVER_Mode_t prev_mode)
     direction = DIR_UP;
     mode_current = CMODE_MIN;
     set_curri(CMODE_MIN);
+    aux_refresh_backlight();    /* мини-свет горит — погасить слабую подсветку */
     lock_light_ticks = (uint16_t)(((uint16_t)(USRF_GET_LOCK_MIN_TIME(EE.usr) & 0x03u) + 1u) * 2400u);
 #endif
 }
